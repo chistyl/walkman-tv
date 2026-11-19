@@ -3,6 +3,7 @@ package com.walkman.tv.source
 import android.util.Log
 import com.walkman.tv.data.model.Quality
 import com.walkman.tv.data.model.ScriptCapabilities
+import com.walkman.tv.data.model.ScriptSourceKey
 import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.data.model.Track
 import com.walkman.tv.data.model.UserScript
@@ -56,19 +57,19 @@ class SourceManager(
         _loaded.value = _loaded.value.filter { it.script.id != scriptId }
     }
 
-    private fun scriptsFor(source: SourceID, action: String): List<LoadedScript> =
+    private fun scriptsFor(source: ScriptSourceKey, action: String): List<LoadedScript> =
         _loaded.value.filter { it.capabilities.sources[source]?.actions?.contains(action) == true }
 
-    private fun scriptFor(source: SourceID, action: String): LoadedScript? =
+    private fun scriptFor(source: ScriptSourceKey, action: String): LoadedScript? =
         scriptsFor(source, action).firstOrNull()
 
     /** Resolve a play URL — mirrors `resolveMusicURL`. */
     suspend fun resolveMusicURL(track: Track, quality: Quality? = null): ResolvedTrack {
         val preferred = quality ?: Quality.K320
 
-        val scripts = scriptsFor(track.source, "musicUrl")
+        val scripts = scriptsFor(ScriptSourceKey(track.source.key), "musicUrl")
         scripts.forEachIndexed { scriptIdx, ls ->
-            val scriptQs = ls.capabilities.sources[track.source]?.qualities?.toSet() ?: emptySet()
+            val scriptQs = ls.capabilities.sources[ScriptSourceKey(track.source.key)]?.qualities?.toSet() ?: emptySet()
             val first = pickPlayQuality(preferred, track.qualities.toSet(), scriptQs)
             val cascade = qualityCascade(first, track.qualities.toSet(), scriptQs)
             for ((idx, q) in cascade.withIndex()) {
@@ -101,7 +102,7 @@ class SourceManager(
             }
         }
 
-        if (scriptFor(track.source, "musicUrl") == null) {
+        if (scriptFor(ScriptSourceKey(track.source.key), "musicUrl") == null) {
             throw SourceException("没有脚本提供 ${track.source.displayName} 源，请到设置 → 自定义音源 导入脚本")
         }
         throw SourceException("这首 ${track.source.displayName} 歌曲无法获取播放地址，换一首或换个能用的脚本")
@@ -111,7 +112,7 @@ class SourceManager(
         val alternatives = otherSourceFinder.findMatches(track)
         if (alternatives.isEmpty()) return null
         for (alt in alternatives.take(5)) {
-            val altLS = scriptFor(alt.source, "musicUrl") ?: continue
+            val altLS = scriptFor(ScriptSourceKey(alt.source.key), "musicUrl") ?: continue
             val q = pickPlayQuality(
                 preferred,
                 alt.qualities.toSet(),
@@ -129,7 +130,7 @@ class SourceManager(
         val info = JSONObject()
             .put("type", quality.key)
             .put("musicInfo", makeOldMusicInfo(track))
-        val result = ls.runtime.requestAction(track.source, "musicUrl", info)
+        val result = ls.runtime.requestAction(ScriptSourceKey(track.source.key), "musicUrl", info)
         val obj = result as? JSONObject
         val url = obj?.optJSONObject("data")?.optString("url")?.ifEmpty { null }
             ?: obj?.optString("url")?.ifEmpty { null }
@@ -140,7 +141,7 @@ class SourceManager(
     suspend fun requestLyric(track: Track): JSONObject? {
         val ls = scriptFor(track.source, "lyric") ?: throw SourceException("没有脚本提供 ${track.source.displayName} 歌词")
         val info = JSONObject().put("type", "").put("musicInfo", makeOldMusicInfo(track))
-        return ls.runtime.requestAction(track.source, "lyric", info) as? JSONObject
+        return ls.runtime.requestAction(ScriptSourceKey(track.source.key), "lyric", info) as? JSONObject
     }
 
     fun availableQualities(source: SourceID): List<Quality> {
