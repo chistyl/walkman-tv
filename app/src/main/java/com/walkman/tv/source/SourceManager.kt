@@ -194,6 +194,36 @@ class SourceManager(
         return url ?: throw SourceException("脚本返回了无效结果")
     }
 
+    /**
+     * Whether a loaded script explicitly opts into the TV songlist extension.
+     *
+     * Contract: the provider declares the `songlist` action in its source capability.
+     * Requests use { action: "search" | "detail", data: { ... } }. The action response
+     * is returned untouched so the catalog/import layer can validate provider-specific data.
+     */
+    fun supportsSonglists(source: ScriptSourceKey): Boolean =
+        scriptFor(source, "songlist") != null
+
+    /**
+     * Invoke the opt-in TV songlist extension. Search requests should include keyword/page;
+     * detail requests should include playlist id and any provider-specific metadata.
+     * This deliberately does not guess or normalize the response schema.
+     */
+    suspend fun requestSonglistAction(
+        source: ScriptSourceKey,
+        operation: String,
+        data: JSONObject,
+    ): Any? {
+        require(operation == "search" || operation == "detail") {
+            "Unsupported songlist operation: $operation"
+        }
+        val ls = scriptFor(source, "songlist") ?: return null
+        val request = JSONObject()
+            .put("action", operation)
+            .put("data", data)
+        return ls.runtime.requestAction(source, "songlist", request)
+    }
+
     /** Invoke an optional script action only when the track provider explicitly declares it. */
     suspend fun requestOptionalAction(track: Track, action: String, info: JSONObject): Any? {
         val source = ScriptSourceKey(track.providerKey)
