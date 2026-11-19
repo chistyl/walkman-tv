@@ -77,11 +77,11 @@ class SourceManager(
             val cascade = qualityCascade(first, track.qualities.toSet(), scriptQs)
             for ((idx, q) in cascade.withIndex()) {
                 var timedOut = false
-                runCatching { resolveViaScript(track, q, ls) }
+                runCatching { resolveViaScript(track, q.key, ls) }
                     .onSuccess { url ->
                         val warn = when {
-                            scriptIdx > 0 -> "已切换到音源「${ls.script.name}」"
-                            idx > 0 -> "${first.displayName} 远程不支持，已降级到 ${q.displayName}"
+                            scriptIdx > 0 -> "已切換到音源「${ls.script.name}」"
+                            idx > 0 -> "${first.displayName} 遠程不支援，已降級到 ${q.displayName}"
                             else -> null
                         }
                         return ResolvedTrack(url, ResolveOrigin.Script(ls.script.name), q, warn)
@@ -90,8 +90,29 @@ class SourceManager(
                         Log.d(TAG, "script '${ls.script.name}' @${q.key} failed: ${it.message}")
                         timedOut = it is JsScriptRuntime.ScriptTimeoutException
                     }
-                // An unresponsive script won't answer at a lower tier either; don't wait out the
-                // timeout once per tier (that was up to a minute of silence per song).
+                if (timedOut) break
+            }
+
+            // Try provider-defined tiers unknown to this app only after all standard tiers.
+            // Search metadata must advertise the key and the script must declare it.
+            val rawScriptKeys = ls.capabilities.sources[ScriptSourceKey(track.providerKey)]?.qualityKeys.orEmpty()
+            val rawTrackKeys = track.qualityKeys.toSet()
+            for (rawKey in rawScriptKeys.distinct().filter { it !in Quality.entries.map(Quality::key) && it in rawTrackKeys }) {
+                var timedOut = false
+                runCatching { resolveViaScript(track, rawKey, ls) }
+                    .onSuccess { url ->
+                        return ResolvedTrack(
+                            url = url,
+                            origin = ResolveOrigin.Script(ls.script.name),
+                            quality = Quality.K128,
+                            warning = "已使用音源自訂音質：$rawKey",
+                            qualityKey = rawKey,
+                        )
+                    }
+                    .onFailure { error ->
+                        Log.d(TAG, "script '${ls.script.name}' @$rawKey failed: ${error.message}")
+                        timedOut = error is JsScriptRuntime.ScriptTimeoutException
+                    }
                 if (timedOut) break
             }
         }
@@ -140,9 +161,9 @@ class SourceManager(
         return null
     }
 
-    private suspend fun resolveViaScript(track: Track, quality: Quality, ls: LoadedScript): String {
+    private suspend fun resolveViaScript(track: Track, qualityKey: String, ls: LoadedScript): String {
         val info = JSONObject()
-            .put("type", quality.key)
+            .put("type", qualityKey)
             .put("musicInfo", makeOldMusicInfo(track))
         val result = ls.runtime.requestAction(ScriptSourceKey(track.providerKey), "musicUrl", info)
         val obj = result as? JSONObject
@@ -260,6 +281,7 @@ class SourceManager(
                 extras = extras,
                 sourceKey = source.value,
                 sourceDisplayName = loaded.script.name,
+                qualityKeys = qualityKeys,
             )
         }
     }
@@ -279,9 +301,11 @@ class SourceManager(
     fun makeOldMusicInfo(track: Track): JSONObject {
         val types = JSONArray()
         val typesObj = JSONObject()
-        Quality.orderedHighToLow.filter { track.qualities.contains(it) }.forEach { q ->
-            types.put(JSONObject().put("type", q.key).put("size", ""))
-            typesObj.put(q.key, JSONObject().put("size", ""))
+        val allKeys = (Quality.orderedHighToLow.filter { track.qualities.contains(it) }.map { it.key } +
+            track.qualityKeys).distinct()
+        allKeys.forEach { key ->
+            types.put(JSONObject().put("type", key).put("size", ""))
+            typesObj.put(key, JSONObject().put("size", ""))
         }
         val info = JSONObject()
             .put("name", track.name)
