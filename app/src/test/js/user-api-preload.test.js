@@ -9,7 +9,7 @@ const preload = fs.readFileSync(
   'utf8',
 )
 
-function loadPreloadWithoutNativeUrlSearchParams() {
+function loadPreloadWithoutNativeUrlSearchParams(nativeOverrides = {}) {
   const nativeCalls = []
   const context = vm.createContext({
     URLSearchParams: undefined,
@@ -23,6 +23,7 @@ function loadPreloadWithoutNativeUrlSearchParams() {
     __lx_native_call__utils_rsa_encrypt: () => '',
     console: { log() {}, info() {}, warn() {}, error() {} },
   })
+  Object.assign(context, nativeOverrides)
   vm.runInContext(preload, context)
   vm.runInContext("lx_setup('key', 'id', 'name', '', '1', '', '', '')", context)
   return { context, nativeCalls }
@@ -254,4 +255,31 @@ test('crypto randomBytes uses the native secure random bridge and validates size
     fractionalRejected: true,
     oversizedRejected: true,
   })
+})
+
+
+test('crypto helpers preserve legacy MD5, AES mode and RSA key contracts', () => {
+  const nativeCalls = []
+  const { context } = loadPreloadWithoutNativeUrlSearchParams({
+    __lx_native_call__utils_str2md5: value => { nativeCalls.push(['md5', value]); return 'md5-result' },
+    __lx_native_call__utils_aes_encrypt: (...args) => { nativeCalls.push(['aes', ...args]); return 'AQID' },
+    __lx_native_call__utils_rsa_encrypt: (...args) => { nativeCalls.push(['rsa', ...args]); return 'BAUG' },
+  })
+  const result = vm.runInContext(`(() => {
+    const aesCbc = Array.from(lx.utils.crypto.aesEncrypt(new Uint8Array([1, 2]), 'aes-128-cbc', new Uint8Array(16), new Uint8Array(16)))
+    const aesEcb = Array.from(lx.utils.crypto.aesEncrypt(new Uint8Array([3]), 'aes-128-ecb', new Uint8Array(16)))
+    const rsa = Array.from(lx.utils.crypto.rsaEncrypt(new Uint8Array([4]), '-----BEGIN PUBLIC KEY-----\\nQUJD\\n-----END PUBLIC KEY-----'))
+    const md5 = lx.utils.crypto.md5('a+b c')
+    return JSON.stringify({ aesCbc, aesEcb, rsa, md5 })
+  })()`, context)
+
+  assert.deepEqual(JSON.parse(result), {
+    aesCbc: [1, 2, 3], aesEcb: [1, 2, 3], rsa: [4, 5, 6], md5: 'md5-result',
+  })
+  assert.deepEqual(nativeCalls, [
+    ['aes', 'AQI=', 'AAAAAAAAAAAAAAAAAAAAAA==', 'AAAAAAAAAAAAAAAAAAAAAA==', 'AES/CBC/PKCS7Padding'],
+    ['aes', 'Aw==', 'AAAAAAAAAAAAAAAAAAAAAA==', '', 'AES'],
+    ['rsa', 'BA==', '\\nQUJD\\n', 'RSA/ECB/NoPadding'],
+    ['md5', 'a%2Bb%20c'],
+  ])
 })
