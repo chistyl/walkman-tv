@@ -153,7 +153,7 @@ class ScriptHttpClient(private val client: OkHttpClient) {
             val partContentType = partOptions?.optString("contentType")?.takeIf { it.isNotBlank() }
             val safeName = fieldName.replace("\\", "\\\\").replace("\"", "\\\"")
                 .replace("\r", "").replace("\n", "")
-            output.write("--$boundary\\r\\n".toByteArray(Charsets.UTF_8))
+            output.write("--$boundary\r\n".toByteArray(Charsets.UTF_8))
             val disposition = buildString {
                 append("Content-Disposition: form-data; name=\"").append(safeName).append('"')
                 if (filename != null) {
@@ -161,15 +161,15 @@ class ScriptHttpClient(private val client: OkHttpClient) {
                         .replace("\r", "").replace("\n", "")
                     append("; filename=\"").append(safeFilename).append('"')
                 }
-                append("\\r\\n")
+                append("\r\n")
             }
             output.write(disposition.toByteArray(Charsets.UTF_8))
             if (partContentType != null) {
-                output.write("Content-Type: $partContentType\\r\\n".toByteArray(Charsets.UTF_8))
+                output.write("Content-Type: $partContentType\r\n".toByteArray(Charsets.UTF_8))
             } else if (filename != null) {
-                output.write("Content-Type: application/octet-stream\\r\\n".toByteArray(Charsets.UTF_8))
+                output.write("Content-Type: application/octet-stream\r\n".toByteArray(Charsets.UTF_8))
             }
-            output.write("\\r\\n".toByteArray(Charsets.UTF_8))
+            output.write("\r\n".toByteArray(Charsets.UTF_8))
             val bytes = when (value) {
                 is JSONArray -> bytesFromIntArray(value)
                 is JSONObject -> value.toString().toByteArray(Charsets.UTF_8)
@@ -177,14 +177,14 @@ class ScriptHttpClient(private val client: OkHttpClient) {
                 else -> value.toString().toByteArray(Charsets.UTF_8)
             }
             output.write(bytes)
-            output.write("\\r\\n".toByteArray(Charsets.UTF_8))
+            output.write("\r\n".toByteArray(Charsets.UTF_8))
         }
-        output.write("--$boundary--\\r\\n".toByteArray(Charsets.UTF_8))
+        output.write("--$boundary--\r\n".toByteArray(Charsets.UTF_8))
         return output.toByteArray()
     }
 
     private fun multipartBoundary(contentType: String?): String? =
-        contentType?.let { Regex("""(?:^|;)\\s*boundary=(?:\"([^\"]+)\"|([^;\\s]+))""", RegexOption.IGNORE_CASE)
+        contentType?.let { Regex("""(?:^|;)\s*boundary=(?:\"([^\"]+)\"|([^;\s]+))""", RegexOption.IGNORE_CASE)
             .find(it)?.let { match -> match.groupValues[1].ifEmpty { match.groupValues[2] } } }
 
     private fun putHeaderCI(headers: MutableMap<String, String>, name: String, value: String) {
