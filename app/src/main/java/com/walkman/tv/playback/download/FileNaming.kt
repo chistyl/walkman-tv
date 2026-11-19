@@ -78,9 +78,14 @@ internal fun uniquify(
  *    Hi-Res but the server gave me 320k MP3" downgrade case),
  *  - else infer from the quality tier — `K128` / `K320` → mp3, anything else → flac.
  */
-internal fun pickExtension(url: String, quality: Quality): String {
+internal fun pickExtension(url: String, quality: Quality, qualityKey: String = quality.key): String {
     val candidate = url.substringBefore('?').substringAfterLast('.').lowercase()
     if (candidate in audioExtWhitelist) return candidate
+
+    // A provider-specific tier does not imply a particular container. Keep an explicit
+    // generic extension rather than silently naming unknown formats as MP3/FLAC.
+    if (Quality.fromKey(qualityKey) == null) return "audio"
+
     return when (quality) {
         Quality.K128, Quality.K320 -> "mp3"
         else -> "flac"
