@@ -426,12 +426,10 @@ globalThis.lx_setup = (key, id, name, description, version, author, homepage, ra
     }
     nativeCall(NATIVE_EVENTS_NAMES.init, { info: sourceInfo, status: true })
   }
-  const handleShowUpdateAlert = (data, resolve, reject) => {
-    if (!data || typeof data != 'object') return reject(new Error('parameter format error.'))
-    if (!data.log || typeof data.log != 'string') return reject(new Error('log is required.'))
-    if (data.updateUrl && !/^https?:\/\/[^\s$.?#].[^\s]*$/.test(data.updateUrl) && data.updateUrl.length > 1024) delete data.updateUrl
-    if (data.log.length > 1024) data.log = data.log.substring(0, 1024) + '...'
-    nativeCall(NATIVE_EVENTS_NAMES.showUpdateAlert, { log: data.log, updateUrl: data.updateUrl, name })
+  // App-level self-updating is intentionally disabled in the TV build.
+  // Keep the lx-music API callable so imported community scripts do not fail,
+  // but silently acknowledge update notices without opening an installer flow.
+  const handleShowUpdateAlert = (_data, resolve) => {
     resolve()
   }
 
