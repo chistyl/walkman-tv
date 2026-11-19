@@ -126,6 +126,44 @@ test('buffer codec preserves four-byte UTF-8 and arbitrary binary Base64', () =>
   })
 })
 
+test('TextEncoder and TextDecoder polyfills support UTF-8 and binary views', () => {
+  const { context } = loadPreloadWithoutNativeUrlSearchParams()
+  const result = vm.runInContext(`(() => {
+    const text = '繁體中文🎵𠜎'
+    const encoder = new TextEncoder()
+    const encoded = encoder.encode(text)
+    const backing = new Uint8Array([99, ...encoded, 88])
+    const decoder = new TextDecoder('utf-8')
+    const decoded = decoder.decode(new DataView(backing.buffer, 1, encoded.length))
+    const target = new Uint8Array(7)
+    const progress = encoder.encodeInto('A🎵B', target)
+    const bom = decoder.decode(new Uint8Array([0xef, 0xbb, 0xbf, 0x41]))
+    let fatalRejected = false
+    try {
+      new TextDecoder('utf-8', { fatal: true }).decode(new Uint8Array([0xc3, 0x28]))
+    } catch (_) { fatalRejected = true }
+    return JSON.stringify({
+      encoding: encoder.encoding,
+      decoded,
+      encodedMatches: Array.from(encoded).join(',') === Array.from(lx.utils.buffer.from(text)).join(','),
+      progress,
+      target: Array.from(target),
+      bom,
+      fatalRejected,
+    })
+  })()`, context)
+
+  assert.deepEqual(JSON.parse(result), {
+    encoding: 'utf-8',
+    decoded: '繁體中文🎵𠜎',
+    encodedMatches: true,
+    progress: { read: 4, written: 6 },
+    target: [65, 240, 159, 142, 181, 66, 0],
+    bom: 'A',
+    fatalRejected: true,
+  })
+})
+
 test('preload preserves supported search and songlist actions and long custom quality keys', async () => {
   const { context, nativeCalls } = loadPreloadWithoutNativeUrlSearchParams()
   await vm.runInContext(`lx.send('inited', { sources: {
