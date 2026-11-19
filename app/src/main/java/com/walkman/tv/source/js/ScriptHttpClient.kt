@@ -13,6 +13,9 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
 import java.io.IOException
+import java.io.ByteArrayInputStream
+import java.util.zip.GZIPInputStream
+import java.util.zip.InflaterInputStream
 import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -68,7 +71,7 @@ class ScriptHttpClient(private val client: OkHttpClient) {
                         val headers = mutableMapOf<String, String>()
                         resp.headers.forEach { (k, v) -> headers[k.lowercase()] = v }
                         val bytes = resp.body?.bytes()
-                        val bodyValue = decodeBody(bytes, binary)
+                        val bodyValue = decodeBody(decodeContentEncoding(bytes, resp.header("Content-Encoding")), binary)
                         completion(
                             null,
                             ScriptResponse(
@@ -120,13 +123,17 @@ class ScriptHttpClient(private val client: OkHttpClient) {
             val raw = options.get("body")
             val effectiveCt = contentType ?: if (method == "POST") "application/json" else null
             val ctLower = (effectiveCt ?: "").lowercase()
-            val text: String = when {
-                ctLower.contains("application/json") && raw is JSONObject -> raw.toString()
-                raw is JSONObject -> raw.toString()
-                raw is JSONArray -> bytesFromIntArray(raw).let { String(it, Charsets.ISO_8859_1) }
-                else -> raw.toString()
+            body = if (raw is JSONArray) {
+                // lx.request accepts byte arrays for raw binary request bodies.
+                bytesFromIntArray(raw).toRequestBody(effectiveCt?.toMediaTypeOrNull())
+            } else {
+                val text = when {
+                    ctLower.contains("application/json") && raw is JSONObject -> raw.toString()
+                    raw is JSONObject -> raw.toString()
+                    else -> raw.toString()
+                }
+                text.toRequestBody(effectiveCt?.toMediaTypeOrNull())
             }
-            body = text.toRequestBody(effectiveCt?.toMediaTypeOrNull())
         }
 
         // Method + body
@@ -173,17 +180,33 @@ class ScriptHttpClient(private val client: OkHttpClient) {
                 output.write("Content-Type: application/octet-stream\r\n".toByteArray(Charsets.UTF_8))
             }
             output.write("\r\n".toByteArray(Charsets.UTF_8))
-            val bytes = when (value) {
-                is JSONArray -> bytesFromIntArray(value)
-                is JSONObject -> value.toString().toByteArray(Charsets.UTF_8)
-                null, JSONObject.NULL -> ByteArray(0)
-                else -> value.toString().toByteArray(Charsets.UTF_8)
-            }
+            val bytes = multipartValueBytes(value)
             output.write(bytes)
             output.write("\r\n".toByteArray(Charsets.UTF_8))
         }
         output.write("--$boundary--\r\n".toByteArray(Charsets.UTF_8))
         return output.toByteArray()
+    }
+
+    private fun multipartValueBytes(value: Any?): ByteArray = when (value) {
+        is JSONArray -> bytesFromIntArray(value)
+        is JSONObject -> {
+            // Buffer JSON ({ type: "Buffer", data: [...] }) and numeric-keyed
+            // Uint8Array JSON are common after crossing the JS/native bridge.
+            val bufferData = if (value.optString("type") == "Buffer") value.opt("data") else null
+            when {
+                bufferData is JSONArray -> bytesFromIntArray(bufferData)
+                value.length() > 0 && value.keys().asSequence().all { it.toIntOrNull() != null } -> {
+                    val indexed = value.keys().asSequence().mapNotNull { it.toIntOrNull() }.sorted()
+                    if (indexed.toList() == (0 until value.length()).toList()) {
+                        ByteArray(value.length()) { index -> (value.optInt(index.toString()) and 0xFF).toByte() }
+                    } else value.toString().toByteArray(Charsets.UTF_8)
+                }
+                else -> value.toString().toByteArray(Charsets.UTF_8)
+            }
+        }
+        null, JSONObject.NULL -> ByteArray(0)
+        else -> value.toString().toByteArray(Charsets.UTF_8)
     }
 
     private fun multipartBoundary(contentType: String?): String? =
@@ -210,6 +233,25 @@ class ScriptHttpClient(private val client: OkHttpClient) {
     private fun headerCI(headers: Map<String, String>, name: String): String? {
         val target = name.lowercase()
         return headers.entries.firstOrNull { it.key.lowercase() == target }?.value
+    }
+
+    private fun decodeContentEncoding(data: ByteArray?, encoding: String?): ByteArray? {
+        if (data == null || data.isEmpty() || encoding.isNullOrBlank()) return data
+        var decoded = data
+        try {
+            encoding.split(",").map { it.trim().lowercase() }.asReversed().forEach { item ->
+                decoded = when (item) {
+                    "gzip", "x-gzip" -> GZIPInputStream(ByteArrayInputStream(decoded)).use { it.readBytes() }
+                    "deflate" -> InflaterInputStream(ByteArrayInputStream(decoded)).use { it.readBytes() }
+                    else -> decoded
+                }
+            }
+        } catch (_: IOException) {
+            // Preserve the original payload if a server sends a malformed or unsupported
+            // content-encoding; script-level parsing can still report the response.
+            return data
+        }
+        return decoded
     }
 
     companion object {
