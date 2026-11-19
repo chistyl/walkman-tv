@@ -439,6 +439,7 @@ class PlaybackController(
     private fun playResolvedOrFail(track: Track, resolved: Result<ResolvedTrack>) {
         resolved.onSuccess { r ->
                 val item = MediaItem.Builder()
+                    .setMediaId(track.id)
                     .setUri(r.url)
                     .setMediaMetadata(
                         MediaMetadata.Builder()
@@ -479,6 +480,37 @@ class PlaybackController(
                 // path. Re-enable once a proper MediaNotification.Provider is in place.
                 // ensureService()
                 player.playWhenReady = true
+                // Keep system MediaSession metadata in sync with the same optional script
+                // artwork used by the in-app player. Resolve only when the track has no
+                // preferred cover, and ignore late results after the user switches tracks.
+                if (track.picURL.isNullOrBlank()) {
+                    scope.launch {
+                        val artworkUrl = runCatching {
+                            sources.resolveOptionalPicture(track)
+                        }.getOrNull()
+                        if (!artworkUrl.isNullOrBlank() &&
+                            _state.value.currentTrack?.id == track.id &&
+                            player.currentMediaItem?.mediaId == track.id
+                        ) {
+                            val currentIndex = player.currentMediaItemIndex
+                            if (currentIndex != C.INDEX_UNSET) {
+                                val updatedMetadata = MediaMetadata.Builder()
+                                    .setTitle(track.name)
+                                    .setArtist(track.singer)
+                                    .setAlbumTitle(track.albumName)
+                                    .setArtworkUri(android.net.Uri.parse(artworkUrl))
+                                    .build()
+                                val updatedItem = player.currentMediaItem
+                                    ?.buildUpon()
+                                    ?.setMediaMetadata(updatedMetadata)
+                                    ?.build()
+                                if (updatedItem != null) {
+                                    player.replaceMediaItem(currentIndex, updatedItem)
+                                }
+                            }
+                        }
+                    }
+                }
                 _state.value = _state.value.copy(
                     resolving = false,
                     warning = r.warning,
