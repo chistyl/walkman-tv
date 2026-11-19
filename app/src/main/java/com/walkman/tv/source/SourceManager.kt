@@ -20,6 +20,16 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /** Accept common script resolver response shapes while returning only a non-empty URL string. */
+/** Custom tiers are attempted only when both the track and provider advertise the exact key. */
+internal fun matchingCustomQualityKeys(trackKeys: Collection<String>, scriptKeys: Collection<String>): List<String> {
+    val standardKeys = Quality.entries.map(Quality::key).toSet()
+    val availableOnTrack = trackKeys.toSet()
+    return scriptKeys.distinct().filter { key ->
+        key !in standardKeys && key in availableOnTrack &&
+            key.matches(Regex("[a-zA-Z0-9_-]{1,64}"))
+    }
+}
+
 internal fun extractPlayableUrl(raw: Any?, depth: Int = 0): String? {
     if (depth > 4) return null
     return when (raw) {
@@ -114,8 +124,8 @@ class SourceManager(
             // Try provider-defined tiers unknown to this app only after all standard tiers.
             // Search metadata must advertise the key and the script must declare it.
             val rawScriptKeys = ls.capabilities.sources[ScriptSourceKey(track.providerKey)]?.qualityKeys.orEmpty()
-            val rawTrackKeys = track.qualityKeys.toSet()
-            for (rawKey in rawScriptKeys.distinct().filter { it !in Quality.entries.map(Quality::key) && it in rawTrackKeys }) {
+            val customKeys = matchingCustomQualityKeys(track.qualityKeys, rawScriptKeys)
+            for (rawKey in customKeys) {
                 var timedOut = false
                 runCatching { resolveViaScript(track, rawKey, ls) }
                     .onSuccess { url ->
@@ -179,11 +189,7 @@ class SourceManager(
             // After standard tiers fail, try only custom tiers advertised by BOTH
             // the alternative track metadata and the destination script capability.
             val scriptCustomKeys = altLS.capabilities.sources[altKey]?.qualityKeys.orEmpty()
-            val trackCustomKeys = alt.qualityKeys.toSet()
-            val standardKeys = Quality.entries.map(Quality::key).toSet()
-            val sharedCustomKeys = scriptCustomKeys.distinct().filter { key ->
-                key !in standardKeys && key in trackCustomKeys
-            }
+            val sharedCustomKeys = matchingCustomQualityKeys(alt.qualityKeys, scriptCustomKeys)
             for (rawKey in sharedCustomKeys) {
                 val customUrl = runCatching { resolveViaScript(alt, rawKey, altLS) }.getOrNull()
                 if (!customUrl.isNullOrBlank()) {
