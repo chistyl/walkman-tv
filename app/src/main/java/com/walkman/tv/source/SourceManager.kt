@@ -66,7 +66,7 @@ class SourceManager(
     suspend fun resolveMusicURL(track: Track, quality: Quality? = null): ResolvedTrack {
         val preferred = quality ?: Quality.K320
 
-        val scripts = scriptsFor(ScriptSourceKey(track.source.key), "musicUrl")
+        val scripts = scriptsFor(ScriptSourceKey(track.providerKey), "musicUrl")
         scripts.forEachIndexed { scriptIdx, ls ->
             val scriptQs = ls.capabilities.sources[ScriptSourceKey(track.source.key)]?.qualities?.toSet() ?: emptySet()
             val first = pickPlayQuality(preferred, track.qualities.toSet(), scriptQs)
@@ -111,7 +111,7 @@ class SourceManager(
         val alternatives = otherSourceFinder.findMatches(track)
         if (alternatives.isEmpty()) return null
         for (alt in alternatives.take(5)) {
-            val altLS = scriptFor(ScriptSourceKey(alt.source.key), "musicUrl") ?: continue
+            val altLS = scriptFor(ScriptSourceKey(alt.providerKey), "musicUrl") ?: continue
             val q = pickPlayQuality(
                 preferred,
                 alt.qualities.toSet(),
@@ -168,7 +168,7 @@ class SourceManager(
         val info = JSONObject()
             .put("name", track.name)
             .put("singer", track.singer)
-            .put("source", track.source.key)
+            .put("source", track.providerKey)
             .put("songmid", track.songmid)
             .put("interval", track.intervalText)
             .put("albumName", track.albumName ?: "")
