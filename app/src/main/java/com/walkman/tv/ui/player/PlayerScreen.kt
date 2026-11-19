@@ -72,6 +72,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
+import com.walkman.tv.data.model.Quality
 import com.walkman.tv.data.model.Track
 import com.walkman.tv.playback.LyricParser
 import com.walkman.tv.playback.RepeatMode
@@ -596,7 +597,8 @@ private fun TransportBar(
   // 播放页盖在主界面上，主界面的控件仍在下面参与焦点查找。交给系统按位置找的话，会找到被盖住的
   // 控件（比如推荐页迷你播放条的上一曲，#24），所以控制栏每个方向都写死。
   // 音质标签只在成功播放过后才有（第一首就失败时没有），两侧的跳转按有无标签切换。
-  val hasQuality = state.quality != null
+  val customQuality = com.walkman.tv.playback.customQualityLabel(state.qualityKey)
+  val hasQuality = state.quality != null || customQuality != null
 
   // 向下拦住（控制栏在最底部），向上统一回进度条。
   Box(
@@ -620,7 +622,7 @@ private fun TransportBar(
         },
       )
       val displayed = com.walkman.tv.playback.displayQuality(state.quality, audioSpec)
-      displayed?.let { q ->
+      if (customQuality != null || displayed != null) {
         TvPill(
           onClick = { },
           selected = true,
@@ -631,7 +633,7 @@ private fun TransportBar(
           },
           contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 8.dp),
         ) {
-          Text(q.badgeLabel, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+          Text(customQuality ?: displayed!!.badgeLabel, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
         audioSpec?.let { spec ->
           Text(
