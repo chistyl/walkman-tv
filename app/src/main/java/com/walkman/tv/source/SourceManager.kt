@@ -112,18 +112,29 @@ class SourceManager(
     }
 
     private suspend fun tryOtherSources(track: Track, preferred: Quality): ResolvedTrack? {
-        val alternatives = otherSourceFinder.findMatches(track)
+        // Keep the original ranked built-in fallback, then extend it with results from every
+        // loaded script that declares a search action. This also covers arbitrary provider keys
+        // that cannot be represented by the legacy SourceID enum.
+        val builtInAlternatives = otherSourceFinder.findMatches(track)
+        val dynamicAlternatives = runCatching {
+            searchAll("${track.name} ${track.singer}", 1)
+        }.getOrDefault(emptyList())
+            .filter { it.providerKey != track.providerKey }
+        val alternatives = (builtInAlternatives + dynamicAlternatives)
+            .distinctBy { it.id }
         if (alternatives.isEmpty()) return null
-        for (alt in alternatives.take(5)) {
-            val altLS = scriptFor(ScriptSourceKey(alt.providerKey), "musicUrl") ?: continue
+
+        for (alt in alternatives.take(10)) {
+            val altKey = ScriptSourceKey(alt.providerKey)
+            val altLS = scriptFor(altKey, "musicUrl") ?: continue
             val q = pickPlayQuality(
                 preferred,
                 alt.qualities.toSet(),
-                altLS.capabilities.sources[ScriptSourceKey(alt.providerKey)]?.qualities?.toSet() ?: emptySet(),
+                altLS.capabilities.sources[altKey]?.qualities?.toSet() ?: emptySet(),
             )
             runCatching { resolveViaScript(alt, q, altLS) }.getOrNull()?.let { url ->
                 val warn = "原 ${track.providerDisplayName} 源无法获取播放地址，已换到 ${alt.providerDisplayName}"
-                return ResolvedTrack(url, ResolveOrigin.OtherSource(ScriptSourceKey(alt.providerKey)), q, warn)
+                return ResolvedTrack(url, ResolveOrigin.OtherSource(altKey), q, warn)
             }
         }
         return null
