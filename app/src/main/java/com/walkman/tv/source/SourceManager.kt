@@ -153,7 +153,7 @@ class SourceManager(
                 alt.qualities.toSet(),
                 altLS.capabilities.sources[altKey]?.qualities?.toSet() ?: emptySet(),
             )
-            runCatching { resolveViaScript(alt, q, altLS) }.getOrNull()?.let { url ->
+            runCatching { resolveViaScript(alt, q.key, altLS) }.getOrNull()?.let { url ->
                 val warn = "原 ${track.providerDisplayName} 源无法获取播放地址，已换到 ${alt.providerDisplayName}"
                 return ResolvedTrack(url, ResolveOrigin.OtherSource(altKey), q, warn)
             }
