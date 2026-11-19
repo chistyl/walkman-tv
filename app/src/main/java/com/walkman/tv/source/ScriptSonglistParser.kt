@@ -100,7 +100,7 @@ object ScriptSonglistParser {
         val songId = firstText(item, "songmid", "id", "mid", "musicId", "hash") ?: return null
         val name = firstText(item, "name", "songName", "title") ?: return null
         val singer = firstText(item, "singer", "artist", "artists", "author")
-            ?: item.optJSONArray("singers")?.let(::joinNames)
+            ?: (item.optJSONArray("artists") ?: item.optJSONArray("singers"))?.let(::joinNames)
             ?: "未知歌手"
         val album = firstText(item, "albumName", "album", "albumname")
         val albumId = firstText(item, "albumId", "albumid")
