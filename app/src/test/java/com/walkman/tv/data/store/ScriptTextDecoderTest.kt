@@ -34,6 +34,14 @@ class ScriptTextDecoderTest {
     }
 
     @Test
+    fun normalizesPastedOrDownloadedTextToo() {
+        assertEquals(
+            "/* @name Test */\nconst value = 1;",
+            ScriptTextDecoder.normalize("\uFEFF/* @name Test */\r\nconst value = 1;"),
+        )
+    }
+
+    @Test
     fun rejectsEmptyAndBinaryLikeInput() {
         assertNull(ScriptTextDecoder.decode(byteArrayOf()))
         assertNull(ScriptTextDecoder.decode(byteArrayOf(0x00, 0x01, 0x02)))
