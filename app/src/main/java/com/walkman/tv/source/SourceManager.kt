@@ -194,6 +194,12 @@ class SourceManager(
         return url ?: throw SourceException("脚本返回了无效结果")
     }
 
+    /** Invoke an optional script action only when the track provider explicitly declares it. */
+    suspend fun requestOptionalAction(track: Track, action: String, info: JSONObject): Any? {
+        val source = ScriptSourceKey(track.providerKey)
+        val ls = scriptFor(source, action) ?: return null
+        return ls.runtime.requestAction(source, action, info)
+    }
     /** Ask a user script for lyric data — raw `{lyric, tlyric, rlyric, lxlyric}` (iOS `requestLyric`). */
     suspend fun requestLyric(track: Track): JSONObject? {
         val ls = scriptFor(ScriptSourceKey(track.providerKey), "lyric") ?: throw SourceException("没有脚本提供 ${track.providerDisplayName} 歌词")
