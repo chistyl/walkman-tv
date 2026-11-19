@@ -474,11 +474,11 @@ class PlaybackController(
                         }
                     }
                 }
-                // NOTE: MediaSessionService startup is currently disabled — Android 12+ kills
-                // the process via ForegroundServiceDidNotStartInTimeException if the service
-                // doesn't post a media notification within 5s, which races with our URL-resolve
-                // path. Re-enable once a proper MediaNotification.Provider is in place.
-                // ensureService()
+                // Start the MediaSessionService immediately before playback. Media3's
+                // built-in DefaultMediaNotificationProvider publishes the media notification
+                // when this shared player enters the playing state; starting here keeps the
+                // service lifecycle tied to a user-initiated, successfully-resolved track.
+                ensureService()
                 player.playWhenReady = true
                 // Keep system MediaSession metadata in sync with the same optional script
                 // artwork used by the in-app player. Resolve only when the track has no
@@ -674,9 +674,13 @@ class PlaybackController(
     /** Start the MediaSessionService once, so background audio + remote controls work. */
     private fun ensureService() {
         if (serviceStarted) return
-        serviceStarted = true
         runCatching {
             ContextCompat.startForegroundService(appContext, Intent(appContext, PlaybackService::class.java))
+            serviceStarted = true
+        }.onFailure { error ->
+            // Keep the flag clear so a later user-initiated playback can retry startup.
+            serviceStarted = false
+            android.util.Log.e("PlaybackController", "MediaSessionService start failed", error)
         }
     }
 
