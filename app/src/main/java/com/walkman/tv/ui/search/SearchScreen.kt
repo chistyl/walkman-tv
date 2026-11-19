@@ -196,8 +196,10 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                 onPickSonglist = { info ->
                     scope.launch {
                         val detail = if (info.builtInSource != null) {
-                            appContainer.songlists.serviceFor(info.builtInSource)?.let { svc ->
-                                runCatching { svc.fetchDetail(info) }.getOrNull()
+                            info.builtInSource?.let { builtIn ->
+                                appContainer.songlists.serviceFor(builtIn)?.let { svc ->
+                                    runCatching { svc.fetchDetail(info) }.getOrNull()
+                                }
                             }
                         } else {
                             runCatching { appContainer.sourceManager.fetchScriptSonglistDetail(info) }.getOrNull()
