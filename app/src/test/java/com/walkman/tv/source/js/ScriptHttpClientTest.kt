@@ -57,7 +57,7 @@ class ScriptHttpClientTest {
         val contentType = request.getHeader("Content-Type")!!
         val boundary = Regex("""boundary=([^;]+)""").find(contentType)!!.groupValues[1]
         val payloadBytes = request.body.readByteArray()
-        val payload = String(payloadBytes, Charsets.ISO_8859_1)
+        val payload = String(payloadBytes, Charsets.UTF_8)
         assertTrue(contentType.startsWith("multipart/form-data"))
         assertTrue(payload.startsWith("--$boundary\r\n"))
         assertTrue(payload.contains("""name="title"""" ))
