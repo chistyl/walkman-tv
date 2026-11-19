@@ -10,7 +10,9 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.CountDownLatch
+import java.util.zip.GZIPOutputStream
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
@@ -96,6 +98,56 @@ class ScriptHttpClientTest {
     fun `binary response is returned as unsigned byte values`() {
         val decoded = ScriptHttpClient.decodeBody(byteArrayOf(0, 127, -1), binary = true)
         assertEquals(org.json.JSONArray(listOf(0, 127, 255)).toString(), decoded.toString())
+    }
+
+
+    @Test
+    fun `raw byte array request bodies preserve unsigned bytes`() {
+        server.enqueue(MockResponse().setBody("ok"))
+        val completion = CountDownLatch(1)
+        val raw = org.json.JSONArray(listOf(0, 1, 127, 255))
+
+        ScriptHttpClient(OkHttpClient()).send(
+            requestKey = "raw-binary",
+            url = server.url("/binary").toString(),
+            options = JSONObject()
+                .put("method", "POST")
+                .put("headers", JSONObject().put("Content-Type", "application/octet-stream"))
+                .put("body", raw),
+        ) { _, _ -> completion.countDown() }
+
+        assertTrue("request did not finish", completion.await(2, TimeUnit.SECONDS))
+        val bytes = server.takeRequest(1, TimeUnit.SECONDS)!!.body.readByteArray()
+        assertEquals(byteArrayOf(0, 1, 127, -1).toList(), bytes.toList())
+    }
+
+    @Test
+    fun `explicit gzip response encoding is decompressed before JSON parsing`() {
+        val compressed = ByteArrayOutputStream().also { output ->
+            GZIPOutputStream(output).use { it.write("""{"ok":true}""".toByteArray(Charsets.UTF_8)) }
+        }.toByteArray()
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Encoding", "gzip")
+                .setBody(okio.Buffer().write(compressed)),
+        )
+        val completion = CountDownLatch(1)
+        val response = AtomicReference<ScriptHttpClient.ScriptResponse?>()
+        val error = AtomicReference<String?>()
+
+        ScriptHttpClient(OkHttpClient()).send(
+            requestKey = "gzip",
+            url = server.url("/gzip").toString(),
+            options = JSONObject().put("headers", JSONObject().put("Accept-Encoding", "gzip")),
+        ) { message, result ->
+            error.set(message)
+            response.set(result)
+            completion.countDown()
+        }
+
+        assertTrue("request did not finish", completion.await(2, TimeUnit.SECONDS))
+        assertEquals(null, error.get())
+        assertEquals(true, (response.get()?.body as JSONObject).optBoolean("ok"))
     }
 
     @Test
