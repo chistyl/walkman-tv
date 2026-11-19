@@ -143,6 +143,33 @@ test('preload preserves supported search and songlist actions and long custom qu
   assert.deepEqual(init.data.info.sources.local.qualitys, [])
 })
 
+test('buffer.from accepts ArrayBuffer, typed arrays and common Node encodings', () => {
+  const { context } = loadPreloadWithoutNativeUrlSearchParams()
+  const result = vm.runInContext(`(() => {
+    const source = new Uint8Array([0, 127, 128, 255])
+    const arrayBuffer = lx.utils.buffer.from(source.buffer)
+    const typedArray = lx.utils.buffer.from(new Uint16Array([1, 255, 256]))
+    const latin = lx.utils.buffer.from('Aÿ', 'latin1')
+    const utf16 = lx.utils.buffer.from('A🎵', 'utf16le')
+    const urlSafe = lx.utils.buffer.from('-_8', 'base64url')
+    return JSON.stringify({
+      arrayBuffer: Array.from(arrayBuffer),
+      typedArray: Array.from(typedArray),
+      latin: Array.from(latin),
+      utf16: Array.from(utf16),
+      urlSafe: Array.from(urlSafe),
+    })
+  })()`, context)
+
+  assert.deepEqual(JSON.parse(result), {
+    arrayBuffer: [0, 127, 128, 255],
+    typedArray: [1, 255, 0],
+    latin: [65, 255],
+    utf16: [65, 0, 61, 216, 84, 220],
+    urlSafe: [251, 255],
+  })
+})
+
 test('preload returns structured search and songlist results without URL wrapping', async () => {
   const { context, nativeCalls } = loadPreloadWithoutNativeUrlSearchParams()
   vm.runInContext(`lx.on('request', async ({ action }) => ({
