@@ -6,12 +6,25 @@ import com.walkman.tv.crypto.RSA
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+import java.security.SecureRandom
 
 /**
  * Native crypto/util callbacks the v4 preload expects, ported 1:1 from `userApi/QuickJS.java`.
  * Reuses the kept [AES] / [RSA] Java helpers so behaviour matches the old RN app exactly.
  */
 object CryptoBridge {
+
+    private val secureRandom = SecureRandom()
+
+    /** Cryptographically secure random bytes, serialized as an unsigned JSON byte array. */
+    fun randomBytesJson(size: Int): String {
+        require(size in 0..MAX_RANDOM_BYTES) { "Random byte count must be between 0 and $MAX_RANDOM_BYTES" }
+        val bytes = ByteArray(size)
+        secureRandom.nextBytes(bytes)
+        return bytes.joinToString(prefix = "[", postfix = "]", separator = ",") { (it.toInt() and 0xff).toString() }
+    }
+
+    private const val MAX_RANDOM_BYTES = 65_536
 
     fun str2b64(s: String): String =
         try {
