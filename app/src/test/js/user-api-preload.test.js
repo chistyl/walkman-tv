@@ -91,3 +91,46 @@ test('QuickJS preload supplies a compatible URLSearchParams implementation', () 
     query: 'source=kw&rid=MUSIC_123',
   })
 })
+
+
+test('preload preserves supported search and songlist actions and long custom quality keys', async () => {
+  const { context, nativeCalls } = loadPreloadWithoutNativeUrlSearchParams()
+  await vm.runInContext(`lx.send('inited', { sources: {
+    custom: { type: 'music', actions: ['search', 'songlist', 'musicUrl', 'unknown'], qualitys: ['320k', 'lossless_custom_tier_1234567890123456789012345678901234567890'] },
+    local: { type: 'music', actions: ['musicUrl'], qualitys: ['320k'] }
+  } })`, context)
+
+  const init = nativeCalls.find(call => call.action === 'init')
+  assert.ok(init)
+  assert.deepEqual(init.data.info.sources.custom.actions, ['search', 'songlist', 'musicUrl'])
+  assert.deepEqual(init.data.info.sources.custom.qualitys, [
+    '320k',
+    'lossless_custom_tier_1234567890123456789012345678901234567890',
+  ])
+  assert.deepEqual(init.data.info.sources.local.qualitys, [])
+})
+
+test('preload returns structured search and songlist results without URL wrapping', async () => {
+  const { context, nativeCalls } = loadPreloadWithoutNativeUrlSearchParams()
+  vm.runInContext(`lx.on('request', async ({ action }) => ({
+    action,
+    data: [{ id: 'song-1', name: 'Song' }]
+  }))`, context)
+
+  for (const action of ['search', 'songlist']) {
+    vm.runInContext(`__lx_native__('key', 'request', JSON.stringify({
+      requestKey: 'req-${action}',
+      data: { source: 'custom', action, info: {} }
+    }))`, context)
+    await new Promise(resolve => setImmediate(resolve))
+    const response = nativeCalls.find(call =>
+      call.action === 'response' && call.data.requestKey === `req-${action}`,
+    )
+    assert.ok(response)
+    assert.equal(response.data.status, true)
+    assert.deepEqual(response.data.result, {
+      action,
+      data: [{ id: 'song-1', name: 'Song' }],
+    })
+  }
+})
