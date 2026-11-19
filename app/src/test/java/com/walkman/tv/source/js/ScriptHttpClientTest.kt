@@ -215,6 +215,47 @@ class ScriptHttpClientTest {
         assertEquals("redirected=yes", redirected.getHeader("Cookie"))
     }
 
+
+    @Test
+    fun `cross host redirect follows destination without leaking host cookie`() {
+        val destination = MockWebServer()
+        destination.start()
+        try {
+            server.enqueue(
+                MockResponse()
+                    .setResponseCode(302)
+                    .addHeader("Location", destination.url("/target").toString())
+                    .addHeader("Set-Cookie", "source-only=secret; Path=/; HttpOnly"),
+            )
+            destination.enqueue(MockResponse().setBody("cross-host-ok"))
+            val completion = CountDownLatch(1)
+            val response = AtomicReference<ScriptHttpClient.ScriptResponse?>()
+            val error = AtomicReference<String?>()
+
+            ScriptHttpClient(OkHttpClient()).send(
+                requestKey = "cross-host-redirect",
+                url = server.url("/start").toString(),
+                options = JSONObject(),
+                cookieNamespace = "cross-host-script",
+            ) { message, result ->
+                error.set(message)
+                response.set(result)
+                completion.countDown()
+            }
+
+            assertTrue("cross-host redirect did not finish", completion.await(2, TimeUnit.SECONDS))
+            assertEquals(null, error.get())
+            assertEquals(200, response.get()?.statusCode)
+            assertEquals("/start", server.takeRequest(1, TimeUnit.SECONDS)!!.path)
+            val redirected = destination.takeRequest(1, TimeUnit.SECONDS)!!
+            assertEquals("/target", redirected.path)
+            assertEquals(null, redirected.getHeader("Cookie"))
+        } finally {
+            destination.shutdown()
+        }
+    }
+
+
     @Test
     fun `request honors the script timeout option`() {
         server.enqueue(
