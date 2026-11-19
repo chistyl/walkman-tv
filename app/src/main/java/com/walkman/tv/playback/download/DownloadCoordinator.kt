@@ -206,7 +206,7 @@ class DownloadCoordinator(
                 // Target: a user-picked SAF folder, or a File root. Snapshot the tree here so a
                 // mid-flight settings change is consistent.
                 val treeUri = store.downloadTreeUri
-                val ext = pickExtension(resolved.url, quality)
+                val ext = pickExtension(resolved.url, resolved.quality, resolved.qualityKey)
 
                 if (treeUri != null) {
                     // ── SAF target ── Download into memory, tag in memory, write once to the
