@@ -247,18 +247,23 @@ globalThis.lx_setup = (key, id, name, description, version, author, homepage, ra
   // platform defaults for old lx-music v4 scripts, but accept additional safe keys.
   // Source identifiers are passed through unchanged to the native resolver.
   const legacyQualitys = ['128k', '320k', 'flac', 'flac24bit', 'hires', 'atmos', 'atmos_plus', 'master']
-  const legacyActions = ['musicUrl', 'lyric', 'pic']
+  // Keep the legacy actions and explicitly supported TV extensions. Action names
+  // are still allow-listed so arbitrary script declarations cannot create host actions.
+  const legacyActions = ['musicUrl', 'lyric', 'pic', 'search', 'songlist']
   const validSourceKey = key => typeof key === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(key)
   const normalizeSourceCapability = (key, value) => {
     if (!validSourceKey(key) || !value || value.type !== 'music') return null
     if (!Array.isArray(value.actions) || !Array.isArray(value.qualitys)) return null
-    const actions = value.actions.filter(action => legacyActions.includes(action))
-    // Known local source remains metadata-only. Every other platform can advertise the
-    // quality identifiers it actually implements; unknown tiers are retained by the host
-    // adapter in a later compatibility layer, while legacy tiers remain validated here.
+    const actions = [...new Set(value.actions.filter(action =>
+      typeof action === 'string' && legacyActions.includes(action),
+    ))]
+    // Known local source remains metadata-only. Custom quality identifiers share the
+    // host's 1..64 character contract so they are not silently truncated at this bridge.
     const qualitys = key === 'local'
       ? []
-      : value.qualitys.filter(q => typeof q === 'string' && /^[a-zA-Z0-9_-]{1,32}$/.test(q))
+      : [...new Set(value.qualitys.filter(q =>
+        typeof q === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(q),
+      ))]
     return { type: 'music', actions, qualitys }
   }
 
@@ -340,6 +345,11 @@ globalThis.lx_setup = (key, id, name, description, version, author, homepage, ra
               action: data.action,
               data: response,
             }
+            break
+          default:
+            // Search and songlist are structured provider APIs, not URL/lyric payloads.
+            // Return their data unchanged for Kotlin's compatibility parsers.
+            result = response
             break
         }
         nativeCall(NATIVE_EVENTS_NAMES.response, { requestKey, status: true, result })
