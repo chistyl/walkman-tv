@@ -45,6 +45,8 @@ data class PlaybackState(
     val warning: String? = null,
     val originLabel: String? = null,
     val quality: Quality? = null,
+    /** Exact provider quality key; null on legacy/native quality state. */
+    val qualityKey: String? = null,
     val error: String? = null,
     val repeatMode: RepeatMode = RepeatMode.ALL,
     val shuffle: Boolean = false,
@@ -473,6 +475,7 @@ class PlaybackController(
                     warning = r.warning,
                     originLabel = r.origin.label,
                     quality = r.quality,
+                    qualityKey = r.qualityKey,
                 )
                 onTrackStarted?.invoke(track)
                 // (lyrics already loaded in playAt when the track switched)
