@@ -84,7 +84,11 @@ fun Artwork(
 }
 
 @Composable
-fun SourceChip(source: SourceID, modifier: Modifier = Modifier) {
+fun SourceChip(
+    source: SourceID,
+    modifier: Modifier = Modifier,
+    displayName: String = source.displayName,
+) {
     val tint = source.tint()
     Box(
         modifier = modifier
@@ -92,7 +96,7 @@ fun SourceChip(source: SourceID, modifier: Modifier = Modifier) {
             .background(tint.copy(alpha = 0.16f))
             .padding(horizontal = 7.dp, vertical = 2.dp),
     ) {
-        Text(source.displayName, color = tint, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+        Text(displayName, color = tint, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
