@@ -366,59 +366,7 @@ class SourceManager(
     ): List<Track> {
         val info = JSONObject().put("name", keyword).put("keyword", keyword).put("page", page)
         val raw = loaded.runtime.requestAction(source, "search", info)
-        val root = raw as? JSONObject
-        val rows = when (raw) {
-            is JSONArray -> raw
-            is JSONObject -> sequenceOf("list", "songs", "data", "result")
-                .mapNotNull { key -> raw.optJSONArray(key) }
-                .firstOrNull()
-                ?: root?.optJSONObject("data")?.optJSONArray("list")
-            else -> null
-        } ?: return emptyList()
-
-        return (0 until rows.length()).mapNotNull { index ->
-            val item = rows.optJSONObject(index) ?: return@mapNotNull null
-            val songmid = item.optString("songmid").ifEmpty { item.optString("id") }
-                .ifEmpty { item.optString("mid") }.ifEmpty { return@mapNotNull null }
-            val name = item.optString("name").ifEmpty { item.optString("songName") }
-                .ifEmpty { return@mapNotNull null }
-            val singer = item.optString("singer").ifEmpty { item.optString("artist") }
-                .ifEmpty { item.optString("artists") }.ifEmpty { "未知歌手" }
-            val album = item.optString("albumName").ifEmpty { item.optString("album") }.ifEmpty { null }
-            val image = item.optString("img").ifEmpty { item.optString("picURL") }
-                .ifEmpty { item.optString("cover") }.ifEmpty { null }
-            val duration = item.optInt("interval").takeIf { it > 0 }
-                ?: item.optInt("duration").takeIf { it > 0 }
-            val rawTypes = item.optJSONArray("types") ?: item.optJSONArray("qualitys")
-            val qualityKeys = buildList {
-                if (rawTypes != null) for (i in 0 until rawTypes.length()) {
-                    val entry = rawTypes.opt(i)
-                    val key = if (entry is JSONObject) entry.optString("type") else entry?.toString().orEmpty()
-                    if (key.matches(Regex("[a-zA-Z0-9_-]{1,64}"))) add(key)
-                }
-            }.distinct()
-            val extras = mutableMapOf<String, String>()
-            val extrasObj = item.optJSONObject("extras")
-            extrasObj?.keys()?.forEach { key -> extrasObj.optString(key).takeIf { it.isNotEmpty() }?.let { extras[key] = it } }
-            item.optString("hash").ifEmpty { null }?.let { extras["hash"] = it }
-            item.optString("mvId").ifEmpty { null }?.let { extras["mvId"] = it }
-            Track(
-                id = Track.makeID(source.value, songmid),
-                name = name,
-                singer = singer,
-                albumName = album,
-                albumId = item.optString("albumId").ifEmpty { null },
-                source = source.builtIn ?: SourceID.LOCAL,
-                songmid = songmid,
-                duration = duration,
-                picURL = image,
-                qualities = qualityKeys.mapNotNull(Quality::fromKey),
-                extras = extras,
-                sourceKey = source.value,
-                sourceDisplayName = loaded.script.name,
-                qualityKeys = qualityKeys,
-            )
-        }
+        return ScriptTrackParser.parseSearch(raw, source, loaded.script.name)
     }
 
     /** Every platform key declared by loaded scripts, including third-party identifiers. */
