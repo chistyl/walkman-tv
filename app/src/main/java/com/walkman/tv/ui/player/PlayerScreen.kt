@@ -74,6 +74,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.walkman.tv.data.model.Quality
 import com.walkman.tv.data.model.Track
+import org.json.JSONObject
 import com.walkman.tv.playback.LyricParser
 import com.walkman.tv.playback.RepeatMode
 import com.walkman.tv.ui.appContainer
@@ -100,6 +101,15 @@ fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
   val progressFocus = remember { FocusRequester() }
 
   val track = state.currentTrack
+  var playbackPicURL by remember { mutableStateOf<String?>(null) }
+
+  LaunchedEffect(track?.id, track?.picURL) {
+    playbackPicURL = track?.picURL
+    val current = track ?: return@LaunchedEffect
+    if (current.picURL.isNullOrBlank()) {
+      playbackPicURL = runCatching { appContainer.sourceManager.resolveOptionalPicture(current) }.getOrNull()
+    }
+  }
 
   var showEqDialog by remember { mutableStateOf(false) }
   var showPicker by remember { mutableStateOf(false) }
@@ -186,7 +196,7 @@ fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
   }
 
   Box(modifier = modifier.fillMaxSize().background(AppColors.BgDeep)) {
-    CoverBackdrop(picURL = track?.picURL)
+    CoverBackdrop(picURL = playbackPicURL ?: track?.picURL)
 
     if (track == null) {
       Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -245,7 +255,7 @@ fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
           contentAlignment = Alignment.Center,
         ) {
           VinylDisc(
-            picURL = track.picURL,
+            picURL = playbackPicURL ?: track.picURL,
             isPlaying = state.isPlaying,
             palette = vinylPalette(settings.vinylColor),
             modifier = Modifier.fillMaxSize()
