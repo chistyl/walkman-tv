@@ -30,7 +30,12 @@ data class Playlist(
  *  can tell them apart from songs the user added by hand (kept). Null for lists imported by 1.4.0. */
 @Serializable
 data class PlaylistOrigin(
+    /** Legacy built-in enum retained so existing library.json files remain readable. */
     val source: SourceID,
     val id: String,
     val platformTrackIds: List<String>? = null,
-)
+    /** Actual platform key; custom providers can use this while source remains LOCAL as a legacy placeholder. */
+    val sourceKey: String? = null,
+) {
+    val providerKey: String get() = sourceKey ?: source.key
+}
