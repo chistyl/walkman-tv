@@ -157,6 +157,28 @@ class SourceManager(
                 val warn = "原 ${track.providerDisplayName} 源无法获取播放地址，已换到 ${alt.providerDisplayName}"
                 return ResolvedTrack(url, ResolveOrigin.OtherSource(altKey), q, warn)
             }
+
+            // After standard tiers fail, try only custom tiers advertised by BOTH
+            // the alternative track metadata and the destination script capability.
+            val scriptCustomKeys = altLS.capabilities.sources[altKey]?.qualityKeys.orEmpty()
+            val trackCustomKeys = alt.qualityKeys.toSet()
+            val standardKeys = Quality.entries.map(Quality::key).toSet()
+            val sharedCustomKeys = scriptCustomKeys.distinct().filter { key ->
+                key !in standardKeys && key in trackCustomKeys
+            }
+            for (rawKey in sharedCustomKeys) {
+                val customUrl = runCatching { resolveViaScript(alt, rawKey, altLS) }.getOrNull()
+                if (!customUrl.isNullOrBlank()) {
+                    val warn = "原 ${track.providerDisplayName} 源无法获取播放地址，已换到 ${alt.providerDisplayName}（自訂音質：$rawKey）"
+                    return ResolvedTrack(
+                        url = customUrl,
+                        origin = ResolveOrigin.OtherSource(altKey),
+                        quality = Quality.K128,
+                        warning = warn,
+                        qualityKey = rawKey,
+                    )
+                }
+            }
         }
         return null
     }
