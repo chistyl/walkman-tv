@@ -37,7 +37,11 @@ data class Track(
     val providerKey: String get() = sourceKey ?: source.key
 
     /** Actual built-in provider, null for custom script platforms even when legacy source is LOCAL. */
-    val builtInSource: SourceID? get() = sourceKey?.let { ScriptSourceKey.from(it)?.builtIn } ?: source
+    val builtInSource: SourceID? get() = if (sourceKey != null) {
+        ScriptSourceKey.from(sourceKey)?.builtIn
+    } else {
+        source
+    }
 
     /** Human-readable provider label; custom providers fall back to their declared key. */
     val providerDisplayName: String get() = sourceDisplayName?.takeIf { it.isNotBlank() }
