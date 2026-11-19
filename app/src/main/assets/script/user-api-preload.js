@@ -243,27 +243,23 @@ globalThis.lx_setup = (key, id, name, description, version, author, homepage, ra
   const events = {
     request: null,
   }
-  const allSources = ['kw', 'kg', 'tx', 'wy', 'mg', 'local']
-  // Whitelist that gates the script's declared `qualitys` at init time. Spec §2: the old
-  // whitelist topped out at flac24bit, which silently truncated scripts that advertised hires
-  // / atmos / atmos_plus / master so the host could never request those tiers. Extended per
-  // the new lx-music-mobile release.
-  const supportQualitys = {
-    kw: ['128k', '320k', 'flac', 'flac24bit', 'hires', 'atmos', 'atmos_plus', 'master'],
-    kg: ['128k', '320k', 'flac', 'flac24bit', 'hires', 'atmos', 'atmos_plus', 'master'],
-    tx: ['128k', '320k', 'flac', 'flac24bit', 'hires', 'atmos', 'atmos_plus', 'master'],
-    wy: ['128k', '320k', 'flac', 'flac24bit', 'hires', 'atmos', 'atmos_plus', 'master'],
-    mg: ['128k', '320k', 'flac', 'flac24bit', 'hires', 'atmos', 'atmos_plus', 'master'],
-    local: [],
-  }
-  const supportActions = {
-    kw: ['musicUrl'],
-    kg: ['musicUrl'],
-    tx: ['musicUrl'],
-    wy: ['musicUrl'],
-    mg: ['musicUrl'],
-    xm: ['musicUrl'],
-    local: ['musicUrl', 'lyric', 'pic'],
+  // The script, not the client, declares platform identifiers. Keep the legacy
+  // platform defaults for old lx-music v4 scripts, but accept additional safe keys.
+  // Source identifiers are passed through unchanged to the native resolver.
+  const legacyQualitys = ['128k', '320k', 'flac', 'flac24bit', 'hires', 'atmos', 'atmos_plus', 'master']
+  const legacyActions = ['musicUrl', 'lyric', 'pic']
+  const validSourceKey = key => typeof key === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(key)
+  const normalizeSourceCapability = (key, value) => {
+    if (!validSourceKey(key) || !value || value.type !== 'music') return null
+    if (!Array.isArray(value.actions) || !Array.isArray(value.qualitys)) return null
+    const actions = value.actions.filter(action => legacyActions.includes(action))
+    // Known local source remains metadata-only. Every other platform can advertise the
+    // quality identifiers it actually implements; unknown tiers are retained by the host
+    // adapter in a later compatibility layer, while legacy tiers remain validated here.
+    const qualitys = key === 'local'
+      ? []
+      : value.qualitys.filter(q => typeof q === 'string' && /^[a-zA-Z0-9_-]{1,32}$/.test(q))
+    return { type: 'music', actions, qualitys }
   }
 
   const verifyLyricInfo = (info) => {
@@ -414,15 +410,13 @@ globalThis.lx_setup = (key, id, name, description, version, author, homepage, ra
       sources: {},
     }
     try {
-      for (const source of allSources) {
-        const userSource = info.sources[source]
-        if (!userSource || userSource.type !== 'music') continue
-        const qualitys = supportQualitys[source]
-        const actions = supportActions[source]
-        sourceInfo.sources[source] = {
-          type: 'music',
-          actions: actions.filter(a => userSource.actions.includes(a)),
-          qualitys: qualitys.filter(q => userSource.qualitys.includes(q)),
+      if (typeof info.sources !== 'object' || Array.isArray(info.sources)) {
+        throw new Error('sources must be an object')
+      }
+      for (const source of Object.keys(info.sources)) {
+        const capability = normalizeSourceCapability(source, info.sources[source])
+        if (capability && (capability.actions.length || capability.qualitys.length)) {
+          sourceInfo.sources[source] = capability
         }
       }
     } catch (error) {
