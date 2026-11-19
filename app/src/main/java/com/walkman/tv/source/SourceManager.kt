@@ -19,6 +19,44 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 
+/**
+ * Builds the legacy LX-style musicInfo payload while preserving provider-specific fields.
+ * Canonical fields are written last so extras cannot corrupt the song identity or quality list.
+ */
+internal fun buildScriptMusicInfo(track: Track): JSONObject {
+    val info = JSONObject()
+    track.extras.forEach { (key, value) ->
+        if (key !in SCRIPT_MUSIC_INFO_RESERVED_KEYS) info.put(key, value)
+    }
+
+    val types = JSONArray()
+    val typesObj = JSONObject()
+    val allKeys = (Quality.orderedHighToLow.filter { track.qualities.contains(it) }.map { it.key } +
+        track.qualityKeys).distinct()
+    allKeys.forEach { key ->
+        types.put(JSONObject().put("type", key).put("size", ""))
+        typesObj.put(key, JSONObject().put("size", ""))
+    }
+
+    return info
+        .put("name", track.name)
+        .put("singer", track.singer)
+        .put("source", track.providerKey)
+        .put("songmid", track.songmid)
+        .put("interval", track.intervalText)
+        .put("albumName", track.albumName ?: "")
+        .put("img", track.picURL ?: "")
+        .put("typeUrl", JSONObject())
+        .put("albumId", track.albumId ?: "")
+        .put("types", types)
+        .put("_types", typesObj)
+}
+
+private val SCRIPT_MUSIC_INFO_RESERVED_KEYS = setOf(
+    "name", "singer", "source", "songmid", "interval", "albumName",
+    "img", "typeUrl", "albumId", "types", "_types",
+)
+
 /** Accept common script resolver response shapes while returning only a non-empty URL string. */
 /** Custom tiers are attempted only when both the track and provider advertise the exact key. */
 internal fun matchingCustomQualityKeys(trackKeys: Collection<String>, scriptKeys: Collection<String>): List<String> {
@@ -387,30 +425,7 @@ class SourceManager(
         supportedSourceKeys().mapNotNull { it.builtIn }.distinct()
 
     /** Build the v4 "old format" musicInfo a script expects (iOS `makeOldMusicInfo`). */
-    fun makeOldMusicInfo(track: Track): JSONObject {
-        val types = JSONArray()
-        val typesObj = JSONObject()
-        val allKeys = (Quality.orderedHighToLow.filter { track.qualities.contains(it) }.map { it.key } +
-            track.qualityKeys).distinct()
-        allKeys.forEach { key ->
-            types.put(JSONObject().put("type", key).put("size", ""))
-            typesObj.put(key, JSONObject().put("size", ""))
-        }
-        val info = JSONObject()
-            .put("name", track.name)
-            .put("singer", track.singer)
-            .put("source", track.providerKey)
-            .put("songmid", track.songmid)
-            .put("interval", track.intervalText)
-            .put("albumName", track.albumName ?: "")
-            .put("img", track.picURL ?: "")
-            .put("typeUrl", JSONObject())
-            .put("albumId", track.albumId ?: "")
-            .put("types", types)
-            .put("_types", typesObj)
-        track.extras.forEach { (k, v) -> info.put(k, v) }
-        return info
-    }
+    fun makeOldMusicInfo(track: Track): JSONObject = buildScriptMusicInfo(track)
 
     companion object {
         private const val TAG = "SourceManager"
