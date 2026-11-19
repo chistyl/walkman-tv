@@ -31,6 +31,39 @@ data class ImportResult(val playlistId: String, val count: Int)
 
 data class RefreshResult(val total: Int, val added: Int, val removed: Int, val kept: Int)
 
+/** Pure refresh merge result; kept tracks are user-added tracks absent from the new provider list. */
+internal data class RefreshMerge(
+    val tracks: List<com.walkman.tv.data.model.Track>,
+    val platformIds: List<String>,
+    val result: RefreshResult,
+)
+
+internal fun mergeRefreshedTracks(
+    existing: List<com.walkman.tv.data.model.Track>,
+    previousPlatformIds: Set<String>?,
+    fallbackSource: SourceID,
+    incoming: List<com.walkman.tv.data.model.Track>,
+): RefreshMerge {
+    val incomingUnique = incoming.distinctBy { it.id }
+    val (previousPlatform, manuallyAdded) = existing.partition { track ->
+        if (previousPlatformIds != null) track.id in previousPlatformIds
+        else track.source == fallbackSource
+    }
+    val incomingIds = incomingUnique.mapTo(HashSet()) { it.id }
+    val kept = manuallyAdded.filter { it.id !in incomingIds }.distinctBy { it.id }
+    val previousIds = previousPlatform.mapTo(HashSet()) { it.id }
+    return RefreshMerge(
+        tracks = incomingUnique + kept,
+        platformIds = incomingUnique.map { it.id },
+        result = RefreshResult(
+            total = incomingIds.size + kept.size,
+            added = incomingIds.count { it !in previousIds },
+            removed = previousIds.count { it !in incomingIds },
+            kept = kept.size,
+        ),
+    )
+}
+
 /**
  * URL → SonglistRef parser + import orchestrator. Spec docs/songlist-import-spec-android-tv.md.
  *
@@ -220,24 +253,18 @@ object SonglistImporter {
         // Re-read after the (slow) fetch so edits made meanwhile aren't lost.
         val live = library.userLists.value.firstOrNull { it.id == playlist.id }
             ?: throw IllegalStateException("歌单已被删除")
-        val snapshot = origin.platformTrackIds?.toHashSet()
-        val (fromPlatform, byHand) = live.tracks.partition { t ->
-            if (snapshot != null) t.id in snapshot else t.source == origin.source
-        }
-        val newIds = detail.tracks.mapTo(HashSet()) { it.id }
-        val kept = byHand.filter { it.id !in newIds }
-        val oldIds = fromPlatform.mapTo(HashSet()) { it.id }
+        val merged = mergeRefreshedTracks(
+            existing = live.tracks,
+            previousPlatformIds = origin.platformTrackIds?.toSet(),
+            fallbackSource = origin.source,
+            incoming = detail.tracks,
+        )
         library.replaceTracks(
             playlist.id,
-            detail.tracks + kept,
-            origin.copy(platformTrackIds = detail.tracks.map { it.id }),
+            merged.tracks,
+            origin.copy(platformTrackIds = merged.platformIds),
         )
-        return RefreshResult(
-            total = newIds.size + kept.size,
-            added = newIds.count { it !in oldIds },
-            removed = oldIds.count { it !in newIds },
-            kept = kept.size,
-        )
+        return merged.result
     }
 
     private suspend fun fetch
