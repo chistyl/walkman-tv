@@ -209,10 +209,18 @@ class JsScriptRuntime(
                 val actions = v.optJSONArray("actions")?.let { arr ->
                     List(arr.length()) { arr.optString(it) }
                 } ?: emptyList()
-                val qualities = v.optJSONArray("qualitys")?.let { arr ->
-                    (0 until arr.length()).mapNotNull { Quality.fromKey(arr.optString(it)) }
+                val qualityKeys = v.optJSONArray("qualitys")?.let { arr ->
+                    (0 until arr.length()).map { arr.optString(it) }
+                        .filter { it.matches(Regex("[a-zA-Z0-9_-]{1,64}")) }
+                        .distinct()
                 } ?: emptyList()
-                sources[src] = SourceCapability(v.optString("type", "music"), actions, qualities)
+                val qualities = qualityKeys.mapNotNull(Quality::fromKey)
+                sources[src] = SourceCapability(
+                    type = v.optString("type", "music"),
+                    actions = actions,
+                    qualities = qualities,
+                    qualityKeys = qualityKeys,
+                )
             }
         }
         capabilities = ScriptCapabilities(sources)
