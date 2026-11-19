@@ -68,7 +68,7 @@ class SourceManager(
 
         val scripts = scriptsFor(ScriptSourceKey(track.providerKey), "musicUrl")
         scripts.forEachIndexed { scriptIdx, ls ->
-            val scriptQs = ls.capabilities.sources[ScriptSourceKey(track.source.key)]?.qualities?.toSet() ?: emptySet()
+            val scriptQs = ls.capabilities.sources[ScriptSourceKey(track.providerKey)]?.qualities?.toSet() ?: emptySet()
             val first = pickPlayQuality(preferred, track.qualities.toSet(), scriptQs)
             val cascade = qualityCascade(first, track.qualities.toSet(), scriptQs)
             for ((idx, q) in cascade.withIndex()) {
@@ -101,7 +101,7 @@ class SourceManager(
             }
         }
 
-        if (scriptFor(ScriptSourceKey(track.source.key), "musicUrl") == null) {
+        if (scriptFor(ScriptSourceKey(track.providerKey), "musicUrl") == null) {
             throw SourceException("没有脚本提供 ${track.source.displayName} 源，请到设置 → 自定义音源 导入脚本")
         }
         throw SourceException("这首 ${track.source.displayName} 歌曲无法获取播放地址，换一首或换个能用的脚本")
@@ -115,11 +115,11 @@ class SourceManager(
             val q = pickPlayQuality(
                 preferred,
                 alt.qualities.toSet(),
-                altLS.capabilities.sources[ScriptSourceKey(alt.source.key)]?.qualities?.toSet() ?: emptySet(),
+                altLS.capabilities.sources[ScriptSourceKey(alt.providerKey)]?.qualities?.toSet() ?: emptySet(),
             )
             runCatching { resolveViaScript(alt, q, altLS) }.getOrNull()?.let { url ->
                 val warn = "原 ${track.source.displayName} 源无法获取播放地址，已换到 ${alt.source.displayName}"
-                return ResolvedTrack(url, ResolveOrigin.OtherSource(alt.source), q, warn)
+                return ResolvedTrack(url, ResolveOrigin.OtherSource(ScriptSourceKey(alt.providerKey)), q, warn)
             }
         }
         return null
@@ -129,7 +129,7 @@ class SourceManager(
         val info = JSONObject()
             .put("type", quality.key)
             .put("musicInfo", makeOldMusicInfo(track))
-        val result = ls.runtime.requestAction(ScriptSourceKey(track.source.key), "musicUrl", info)
+        val result = ls.runtime.requestAction(ScriptSourceKey(track.providerKey), "musicUrl", info)
         val obj = result as? JSONObject
         val url = obj?.optJSONObject("data")?.optString("url")?.ifEmpty { null }
             ?: obj?.optString("url")?.ifEmpty { null }
@@ -154,7 +154,7 @@ class SourceManager(
         _loaded.value.forEach { ls ->
             ls.capabilities.sources.forEach { (src, cap) -> if (cap.actions.contains("musicUrl")) set.add(src) }
         }
-        return set.mapNotNull { key -> key.builtIn }.distinct()
+        return set.map { it.displayName }.mapNotNull { name -> SourceID.entries.firstOrNull { it.displayName == name } }.distinct()
     }
 
     /** Build the v4 "old format" musicInfo a script expects (iOS `makeOldMusicInfo`). */
