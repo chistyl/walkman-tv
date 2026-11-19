@@ -1,5 +1,6 @@
 package com.walkman.tv.data.model
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
