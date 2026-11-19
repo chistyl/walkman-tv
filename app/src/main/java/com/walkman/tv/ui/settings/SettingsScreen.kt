@@ -82,24 +82,35 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
     var showQr by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<com.walkman.tv.data.model.UserScript?>(null) }
 
-    // System file picker (SAF) for .js scripts.
-    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        if (uri != null) {
+    // System file picker (SAF) supports selecting several source scripts at once.
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
             scope.launch {
-                status = "正在读取文件…"
-                val raw = withContext(Dispatchers.IO) {
-                    runCatching {
-                        context.contentResolver.openInputStream(uri)?.use {
-                            it.readBytes().toString(Charsets.UTF_8)
-                        }
-                    }.getOrNull()
+                var imported = 0
+                val failures = mutableListOf<String>()
+                uris.forEachIndexed { index, uri ->
+                    status = "正在读取音源文件 ${index + 1}/${uris.size}…"
+                    val raw = withContext(Dispatchers.IO) {
+                        runCatching {
+                            context.contentResolver.openInputStream(uri)?.use { stream ->
+                                com.walkman.tv.data.store.ScriptTextDecoder.decode(stream.readBytes())
+                            }
+                        }.getOrNull()
+                    }
+                    if (raw.isNullOrBlank()) {
+                        failures += "第 ${index + 1} 個檔案讀取失敗或編碼不支援"
+                    } else {
+                        status = "正在匯入音源 ${index + 1}/${uris.size}…"
+                        val result = appContainer.scriptStore.import(raw)
+                        result.fold(
+                            onSuccess = { imported++ },
+                            onFailure = { failures += "第 ${index + 1} 個檔案：${it.message ?: "匯入失敗"}" },
+                        )
+                    }
                 }
-                if (raw.isNullOrEmpty()) {
-                    status = "读取文件失败"
-                } else {
-                    status = "正在导入文件…"
-                    val r = appContainer.scriptStore.import(raw)
-                    status = r.fold({ it.message }, { "导入失败：${it.message}" })
+                status = buildString {
+                    append("完成：成功匯入 $imported/${uris.size} 個音源")
+                    if (failures.isNotEmpty()) append("；").append(failures.joinToString("；"))
                 }
             }
         }
