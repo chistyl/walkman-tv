@@ -207,7 +207,6 @@ class SourceManager(
      * Accepted script results: URL string, {url}, or {data:{url}}.
      */
     suspend fun resolveOptionalPicture(track: Track): String? {
-        track.picURL?.takeIf(::isHttpImageUrl)?.let { return it }
         val info = JSONObject().put("musicInfo", makeOldMusicInfo(track))
         val raw = runCatching { requestOptionalAction(track, "pic", info) }.getOrNull()
         val obj = raw as? JSONObject
@@ -218,6 +217,7 @@ class SourceManager(
             else -> null
         }
         return candidate?.takeIf(::isHttpImageUrl)
+            ?: track.picURL?.takeIf(::isHttpImageUrl)
     }
 
     private fun isHttpImageUrl(value: String): Boolean {
