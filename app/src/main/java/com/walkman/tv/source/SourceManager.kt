@@ -4,7 +4,6 @@ import android.util.Log
 import com.walkman.tv.data.model.Quality
 import com.walkman.tv.data.model.ScriptCapabilities
 import com.walkman.tv.data.model.ScriptSourceKey
-import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.data.model.Track
 import com.walkman.tv.data.model.UserScript
 import com.walkman.tv.source.builtin.BuiltInResolver
