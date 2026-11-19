@@ -511,19 +511,39 @@ globalThis.lx_setup = (key, id, name, description, version, author, homepage, ra
       from(input, encoding) {
         // console.log('buffer.from', input, encoding)
         if (typeof input === 'string') {
-          switch (encoding) {
-            case 'binary':
-              throw new Error('Binary encoding is not supported for input strings')
+          switch ((encoding || 'utf8').toLowerCase()) {
             case 'base64':
               return new Uint8Array(JSON.parse(nativeFuncs.utils_b642buf(input)))
+            case 'base64url': {
+              const normalized = input.replace(/-/g, '+').replace(/_/g, '/')
+              return new Uint8Array(JSON.parse(nativeFuncs.utils_b642buf(normalized)))
+            }
             case 'hex':
               if (input.length % 2 !== 0 || !/^[0-9a-f]*$/i.test(input)) throw new Error('Invalid hex string')
               return new Uint8Array(input.match(/.{2}/g)?.map(byte => parseInt(byte, 16)) || [])
+            case 'binary':
+            case 'latin1':
+              return new Uint8Array(Array.from(input, char => char.charCodeAt(0) & 0xff))
+            case 'ascii':
+              return new Uint8Array(Array.from(input, char => char.charCodeAt(0) & 0x7f))
+            case 'ucs2':
+            case 'ucs-2':
+            case 'utf16le':
+            case 'utf-16le': {
+              const bytes = []
+              for (let i = 0; i < input.length; i++) {
+                const code = input.charCodeAt(i)
+                bytes.push(code & 0xff, code >> 8)
+              }
+              return new Uint8Array(bytes)
+            }
             default:
               return new Uint8Array(stringToBytes(input))
           }
-        } else if (Array.isArray(input)) {
-          return new Uint8Array(input)
+        } else if (Array.isArray(input) || ArrayBuffer.isView(input)) {
+          return new Uint8Array(Array.from(input, value => Number(value) & 0xff))
+        } else if (input instanceof ArrayBuffer) {
+          return new Uint8Array(input.slice(0))
         } else {
           throw new Error('Unsupported input type: ' + input + ' encoding: ' + encoding)
         }
