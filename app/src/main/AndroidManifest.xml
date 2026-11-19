@@ -11,8 +11,6 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <!-- In-app update: install the downloaded APK via the system package installer -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Local music import via the built-in File browser (TVs often lack a SAF picker).
          READ_EXTERNAL_STORAGE (API ≤ 32) / READ_MEDIA_AUDIO (33+) is enough to list folders and read
          audio files; MANAGE_EXTERNAL_STORAGE (All-files access) is only a fallback. -->
