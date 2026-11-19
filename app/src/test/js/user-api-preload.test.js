@@ -279,7 +279,7 @@ test('crypto helpers preserve legacy MD5, AES mode and RSA key contracts', () =>
   assert.deepEqual(nativeCalls, [
     ['aes', 'AQI=', 'AAAAAAAAAAAAAAAAAAAAAA==', 'AAAAAAAAAAAAAAAAAAAAAA==', 'AES/CBC/PKCS7Padding'],
     ['aes', 'Aw==', 'AAAAAAAAAAAAAAAAAAAAAA==', '', 'AES'],
-    ['rsa', 'BA==', '\\nQUJD\\n', 'RSA/ECB/NoPadding'],
+    ['rsa', 'BA==', '\nQUJD\n', 'RSA/ECB/NoPadding'],
     ['md5', 'a%2Bb%20c'],
   ])
 })
