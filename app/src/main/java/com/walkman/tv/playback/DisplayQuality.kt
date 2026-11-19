@@ -37,3 +37,7 @@ private fun computeCeiling(claimed: Quality, spec: AudioSpec): Quality? = when (
     }
     else -> null
 }
+
+/** Return the raw provider label only when the tier is unknown to this app version. */
+fun customQualityLabel(qualityKey: String?): String? =
+    qualityKey?.takeIf { Quality.fromKey(it) == null && it.isNotBlank() }
