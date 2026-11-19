@@ -107,8 +107,12 @@ class ScriptHttpClient(private val client: OkHttpClient) {
             body = encodeForm(options.getJSONObject("form"))
                 .toRequestBody((contentType ?: "application/x-www-form-urlencoded").toMediaTypeOrNull())
         } else if (method == "POST" && options.has("formData") && options.opt("formData") is JSONObject) {
-            body = options.getJSONObject("formData").toString()
-                .toRequestBody((contentType ?: "multipart/form-data").toMediaTypeOrNull())
+            // Needle/form-data semantics used by lx-music scripts: formData is a
+            // multipart field map. A boundary must be present in both body and header.
+            val boundary = multipartBoundary(contentType) ?: "----WalkmanTV${java.util.UUID.randomUUID().toString().replace("-", "")}"
+            body = encodeMultipart(options.getJSONObject("formData"), boundary)
+                .toRequestBody("multipart/form-data; boundary=$boundary".toMediaTypeOrNull())
+            putHeaderCI(callerHeaders, "Content-Type", "multipart/form-data; boundary=$boundary")
         } else if (options.has("body") && !options.isNull("body")) {
             val raw = options.get("body")
             val effectiveCt = contentType ?: if (method == "POST") "application/json" else null
@@ -136,6 +140,57 @@ class ScriptHttpClient(private val client: OkHttpClient) {
         if (headerCI(callerHeaders, "Accept") == null) hb.add("Accept", "application/json")
         builder.headers(hb.build())
         return builder.build()
+    }
+
+    private fun encodeMultipart(formData: JSONObject, boundary: String): ByteArray {
+        val output = java.io.ByteArrayOutputStream()
+        formData.keys().forEach { fieldName ->
+            val raw = formData.get(fieldName)
+            val wrapper = raw as? JSONObject
+            val value = if (wrapper != null && wrapper.has("value")) wrapper.opt("value") else raw
+            val partOptions = wrapper?.optJSONObject("options")
+            val filename = partOptions?.optString("filename")?.takeIf { it.isNotBlank() }
+            val partContentType = partOptions?.optString("contentType")?.takeIf { it.isNotBlank() }
+            val safeName = fieldName.replace("\\", "\\\\").replace("\"", "\\\"")
+                .replace("\r", "").replace("\n", "")
+            output.write("--$boundary\\r\\n".toByteArray(Charsets.UTF_8))
+            val disposition = buildString {
+                append("Content-Disposition: form-data; name=\"").append(safeName).append('"')
+                if (filename != null) {
+                    val safeFilename = filename.replace("\\", "\\\\").replace("\"", "\\\"")
+                        .replace("\r", "").replace("\n", "")
+                    append("; filename=\"").append(safeFilename).append('"')
+                }
+                append("\\r\\n")
+            }
+            output.write(disposition.toByteArray(Charsets.UTF_8))
+            if (partContentType != null) {
+                output.write("Content-Type: $partContentType\\r\\n".toByteArray(Charsets.UTF_8))
+            } else if (filename != null) {
+                output.write("Content-Type: application/octet-stream\\r\\n".toByteArray(Charsets.UTF_8))
+            }
+            output.write("\\r\\n".toByteArray(Charsets.UTF_8))
+            val bytes = when (value) {
+                is JSONArray -> bytesFromIntArray(value)
+                is JSONObject -> value.toString().toByteArray(Charsets.UTF_8)
+                null, JSONObject.NULL -> ByteArray(0)
+                else -> value.toString().toByteArray(Charsets.UTF_8)
+            }
+            output.write(bytes)
+            output.write("\\r\\n".toByteArray(Charsets.UTF_8))
+        }
+        output.write("--$boundary--\\r\\n".toByteArray(Charsets.UTF_8))
+        return output.toByteArray()
+    }
+
+    private fun multipartBoundary(contentType: String?): String? =
+        contentType?.let { Regex("""(?:^|;)\\s*boundary=(?:\"([^\"]+)\"|([^;\\s]+))""", RegexOption.IGNORE_CASE)
+            .find(it)?.let { match -> match.groupValues[1].ifEmpty { match.groupValues[2] } } }
+
+    private fun putHeaderCI(headers: MutableMap<String, String>, name: String, value: String) {
+        val existing = headers.keys.firstOrNull { it.equals(name, ignoreCase = true) }
+        if (existing != null) headers.remove(existing)
+        headers[name] = value
     }
 
     private fun encodeForm(form: JSONObject): String =
