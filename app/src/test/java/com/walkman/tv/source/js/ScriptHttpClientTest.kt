@@ -150,6 +150,71 @@ class ScriptHttpClientTest {
         assertEquals(true, (response.get()?.body as JSONObject).optBoolean("ok"))
     }
 
+
+    @Test
+    fun `cookies persist within one script and are isolated from other scripts`() {
+        server.enqueue(MockResponse().addHeader("Set-Cookie", "session=alpha; Path=/; HttpOnly").setBody("ok"))
+        server.enqueue(MockResponse().setBody("ok"))
+        server.enqueue(MockResponse().setBody("ok"))
+        val client = ScriptHttpClient(OkHttpClient())
+
+        fun send(key: String, namespace: String): okhttp3.mockwebserver.RecordedRequest {
+            val done = CountDownLatch(1)
+            val error = AtomicReference<String?>()
+            client.send(
+                requestKey = key,
+                url = server.url("/").toString(),
+                options = JSONObject(),
+                cookieNamespace = namespace,
+            ) { message, _ ->
+                error.set(message)
+                done.countDown()
+            }
+            assertTrue("request did not finish", done.await(2, TimeUnit.SECONDS))
+            assertEquals(null, error.get())
+            return server.takeRequest(1, TimeUnit.SECONDS)!!
+        }
+
+        send("cookie-set", "script-alpha")
+        val sameScript = send("cookie-same", "script-alpha")
+        val otherScript = send("cookie-other", "script-beta")
+        assertEquals("session=alpha", sameScript.getHeader("Cookie"))
+        assertEquals(null, otherScript.getHeader("Cookie"))
+    }
+
+    @Test
+    fun `redirect follows location and forwards cookie to redirected endpoint`() {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(302)
+                .addHeader("Location", "/final")
+                .addHeader("Set-Cookie", "redirected=yes; Path=/; HttpOnly"),
+        )
+        server.enqueue(MockResponse().setBody("complete"))
+        val completion = CountDownLatch(1)
+        val response = AtomicReference<ScriptHttpClient.ScriptResponse?>()
+        val error = AtomicReference<String?>()
+
+        ScriptHttpClient(OkHttpClient()).send(
+            requestKey = "redirect",
+            url = server.url("/start").toString(),
+            options = JSONObject(),
+            cookieNamespace = "redirect-script",
+        ) { message, result ->
+            error.set(message)
+            response.set(result)
+            completion.countDown()
+        }
+
+        assertTrue("redirect request did not finish", completion.await(2, TimeUnit.SECONDS))
+        assertEquals(null, error.get())
+        assertEquals(200, response.get()?.statusCode)
+        assertEquals("/start", server.takeRequest(1, TimeUnit.SECONDS)!!.path)
+        val redirected = server.takeRequest(1, TimeUnit.SECONDS)!!
+        assertEquals("/final", redirected.path)
+        assertEquals("redirected=yes", redirected.getHeader("Cookie"))
+    }
+
     @Test
     fun `request honors the script timeout option`() {
         server.enqueue(
