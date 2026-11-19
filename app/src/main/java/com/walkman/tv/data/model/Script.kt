@@ -20,7 +20,7 @@ data class UserScript(
 /** Capabilities a script reports via `lx.send('inited', { sources })`. */
 @Serializable
 data class ScriptCapabilities(
-    val sources: Map<SourceID, SourceCapability> = emptyMap(),
+    val sources: Map<ScriptSourceKey, SourceCapability> = emptyMap(),
 )
 
 @Serializable
