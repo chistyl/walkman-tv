@@ -1,6 +1,9 @@
 package com.walkman.tv.source.js
 
 import okhttp3.Call
+import okhttp3.Cookie
+import okhttp3.CookieJar
+import okhttp3.HttpUrl
 import okhttp3.Callback
 import okhttp3.Headers
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -35,11 +38,37 @@ class ScriptHttpClient(private val client: OkHttpClient) {
     )
 
     private val calls = ConcurrentHashMap<String, Call>()
+    private val cookieJars = ConcurrentHashMap<String, CookieJar>()
+
+    /** Cookie state is isolated per imported script, but shared across that script's requests. */
+    private class ScriptCookieJar : CookieJar {
+        private val cookies = ConcurrentHashMap<String, Cookie>()
+
+        override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
+            val now = System.currentTimeMillis()
+            cookies.forEach { cookie ->
+                val key = "${cookie.domain}|${cookie.path}|${cookie.name}"
+                if (cookie.expiresAt <= now || cookie.value.isEmpty()) this.cookies.remove(key)
+                else this.cookies[key] = cookie
+            }
+        }
+
+        override fun loadForRequest(url: HttpUrl): List<Cookie> {
+            val now = System.currentTimeMillis()
+            val matched = mutableListOf<Cookie>()
+            cookies.entries.removeIf { it.value.expiresAt <= now }
+            cookies.values.forEach { cookie ->
+                if (cookie.matches(url)) matched += cookie
+            }
+            return matched
+        }
+    }
 
     fun send(
         requestKey: String,
         url: String,
         options: JSONObject,
+        cookieNamespace: String = "default",
         completion: (error: String?, response: ScriptResponse?) -> Unit,
     ) {
         val req = try {
@@ -48,7 +77,8 @@ class ScriptHttpClient(private val client: OkHttpClient) {
             completion(e.message ?: "Invalid request", null); return
         }
         val binary = options.optBoolean("binary", false)
-        val call = client.newCall(req)
+        val cookieJar = cookieJars.getOrPut(cookieNamespace) { ScriptCookieJar() }
+        val call = client.newBuilder().cookieJar(cookieJar).build().newCall(req)
         // lx-music's Needle-based request API defaults to 60 seconds and caps
         // caller-provided timeouts at the same limit.
         val requestedTimeoutMs = options.optLong("timeout", 60_000L)
