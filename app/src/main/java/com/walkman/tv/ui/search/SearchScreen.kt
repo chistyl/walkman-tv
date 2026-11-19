@@ -41,6 +41,7 @@ import com.walkman.tv.data.model.SonglistInfo
 import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.data.model.ScriptSourceKey
 import com.walkman.tv.data.model.Track
+import com.walkman.tv.playback.imports.SonglistImporter
 import com.walkman.tv.di.getLanIp
 import com.walkman.tv.ui.appContainer
 import com.walkman.tv.ui.components.EmptyHint
@@ -349,13 +350,48 @@ private fun ResultsPane(
                     contentPadding = PaddingValues(vertical = 4.dp),
                 ) {
                     items(uniqueSonglists, key = { it.providerKey + "_" + it.id }) { sl ->
-                        Box(modifier = Modifier.width(140.dp)) {
+                        Column(
+                            modifier = Modifier.width(140.dp),
+                            verticalArrangement = Arrangement.spacedBy(5.dp),
+                        ) {
                             MediaCard(
                                 title = sl.name,
                                 picURL = sl.picURL,
-                                subtitle = sl.playCount?.let { "▶ $it" },
+                                subtitle = sl.playCount?.let { "▶ $it" }
+                                    ?: sl.providerDisplayName.takeIf { sl.builtInSource == null },
                                 onClick = { onPickSonglist(sl) },
                             )
+                            if (sl.builtInSource == null) {
+                                TvPill(
+                                    onClick = {
+                                        scope.launch {
+                                            val result = runCatching {
+                                                SonglistImporter.importScriptPlaylist(
+                                                    info = sl,
+                                                    sourceManager = appContainer.sourceManager,
+                                                    library = appContainer.libraryStore,
+                                                )
+                                            }
+                                            result.onSuccess {
+                                                android.widget.Toast.makeText(
+                                                    appContainer.appContext,
+                                                    "已匯入「${sl.name}」，共 ${it.count} 首",
+                                                    android.widget.Toast.LENGTH_SHORT,
+                                                ).show()
+                                            }.onFailure { error ->
+                                                android.widget.Toast.makeText(
+                                                    appContainer.appContext,
+                                                    "匯入失敗：${error.localizedMessage ?: error}",
+                                                    android.widget.Toast.LENGTH_LONG,
+                                                ).show()
+                                            }
+                                        }
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                ) {
+                                    Text("匯入歌單", fontSize = 11.sp)
+                                }
+                            }
                         }
                     }
                 }
