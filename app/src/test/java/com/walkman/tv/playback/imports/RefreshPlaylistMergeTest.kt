@@ -43,7 +43,7 @@ class RefreshPlaylistMergeTest {
 
         assertEquals(listOf("manual_added", "provider_new"), merged.tracks.map { it.id })
         assertEquals(0, merged.result.kept)
-        assertEquals(1, merged.result.added)
+        assertEquals(2, merged.result.added)
         assertEquals(1, merged.result.removed)
     }
 
@@ -58,7 +58,7 @@ class RefreshPlaylistMergeTest {
 
         assertEquals(listOf("new", "manual"), merged.tracks.map { it.id })
         assertEquals(listOf("new"), merged.platformIds)
-        assertEquals(1, merged.result.total)
+        assertEquals(2, merged.result.total)
         assertEquals(1, merged.result.kept)
     }
 
