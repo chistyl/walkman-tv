@@ -397,7 +397,16 @@ class PlaybackController(
             _state.value = _state.value.copy(positionMs = 0)
         }
         val effectivePreferred = qualityCap ?: preferredQuality
-        _state.value = _state.value.copy(index = index, resolving = true, error = null, warning = null, isMv = false)
+        _state.value = _state.value.copy(
+            index = index,
+            resolving = true,
+            error = null,
+            warning = null,
+            isMv = false,
+            quality = if (qualityCap == null) null else _state.value.quality,
+            qualityKey = if (qualityCap == null) null else _state.value.qualityKey,
+            originLabel = if (qualityCap == null) null else _state.value.originLabel,
+        )
         // Switch lyrics immediately with the metadata — lyrics depend only on the track, not the
         // resolved play URL, so don't make them wait for (or hinge on) a successful audio resolve.
         // Guarded to fresh attempts so a quality-cascade retry of the same track doesn't refetch.
