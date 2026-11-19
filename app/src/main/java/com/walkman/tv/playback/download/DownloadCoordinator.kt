@@ -81,6 +81,7 @@ class DownloadCoordinator(
             val record = DownloadRecord(
                 track = track,
                 quality = quality,
+                qualityKey = quality.key,
                 fileName = "",
                 status = DownloadStatus.DOWNLOADING,
                 folderID = folderID,
@@ -231,7 +232,7 @@ class DownloadCoordinator(
                             val uri = store.writeBytesToTree(treeUri, fileName, mimeForExtension(ext), finalBytes)
                             if (uri != null) {
                                 store.updateRecord(track.id) {
-                                    it.copy(status = DownloadStatus.COMPLETED, quality = resolved.quality, safUri = uri)
+                                    it.copy(status = DownloadStatus.COMPLETED, quality = resolved.quality, qualityKey = resolved.qualityKey, safUri = uri)
                                 }
                                 store.markPresent(track.id)
                             } else {
@@ -262,7 +263,7 @@ class DownloadCoordinator(
                             // Record the quality that actually resolved (may have degraded from the
                             // requested target), so the UI shows the true tier on disk.
                             store.updateRecord(track.id) {
-                                it.copy(status = DownloadStatus.COMPLETED, quality = resolved.quality)
+                                it.copy(status = DownloadStatus.COMPLETED, quality = resolved.quality, qualityKey = resolved.qualityKey)
                             }
                             store.markPresent(track.id) // clear any stale "文件缺失" flag
                             scope.launch { embedTags(track, dest, details) }
