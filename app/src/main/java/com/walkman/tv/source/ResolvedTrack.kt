@@ -1,6 +1,7 @@
 package com.walkman.tv.source
 
 import com.walkman.tv.data.model.Quality
+import com.walkman.tv.data.model.ScriptSourceKey
 import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.data.model.Track
 
@@ -14,7 +15,7 @@ sealed interface ResolveOrigin {
     data object DirectFallback : ResolveOrigin {
         override val label get() = "内置直连"
     }
-    data class OtherSource(val source: SourceID) : ResolveOrigin {
+    data class OtherSource(val source: ScriptSourceKey) : ResolveOrigin {
         override val label get() = "换源: ${source.displayName}"
     }
     data object LocalFile : ResolveOrigin {
