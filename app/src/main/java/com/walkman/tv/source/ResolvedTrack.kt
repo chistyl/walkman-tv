@@ -29,6 +29,8 @@ data class ResolvedTrack(
     val origin: ResolveOrigin,
     val quality: Quality,
     val warning: String? = null,
+    /** Exact provider quality key; differs from [quality.key] for custom tiers. */
+    val qualityKey: String = quality.key,
 )
 
 /** Implemented by the catalog layer so [OtherSourceFinder] can search other platforms. */
