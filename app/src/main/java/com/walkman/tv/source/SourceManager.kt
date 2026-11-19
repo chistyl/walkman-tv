@@ -224,6 +224,42 @@ class SourceManager(
         return ls.runtime.requestAction(source, "songlist", request)
     }
 
+    /** Search songlists from one script provider using the shared normalized payload parser. */
+    suspend fun searchScriptSonglists(
+        source: ScriptSourceKey,
+        keyword: String,
+        page: Int = 1,
+    ): List<com.walkman.tv.data.model.SonglistInfo> {
+        if (keyword.isBlank() || page < 1) return emptyList()
+        val ls = scriptFor(source, "songlist") ?: return emptyList()
+        val raw = requestSonglistAction(
+            source,
+            "search",
+            JSONObject().put("keyword", keyword).put("name", keyword).put("page", page),
+        )
+        return ScriptSonglistParser.parseLists(raw, source, ls.script.name)
+    }
+
+    /** Fetch one script songlist's detail and normalize its returned tracks. */
+    suspend fun fetchScriptSonglistDetail(
+        info: com.walkman.tv.data.model.SonglistInfo,
+    ): com.walkman.tv.data.model.SonglistDetail? {
+        val source = ScriptSourceKey.from(info.providerKey) ?: return null
+        val ls = scriptFor(source, "songlist") ?: return null
+        val raw = requestSonglistAction(
+            source,
+            "detail",
+            JSONObject()
+                .put("id", info.id)
+                .put("playlistId", info.id)
+                .put("songlist", JSONObject()
+                    .put("id", info.id)
+                    .put("name", info.name)
+                    .put("source", source.value)),
+        )
+        return ScriptSonglistParser.parseDetail(raw, info, source, ls.script.name)
+    }
+
     /** Invoke an optional script action only when the track provider explicitly declares it. */
     suspend fun requestOptionalAction(track: Track, action: String, info: JSONObject): Any? {
         val source = ScriptSourceKey(track.providerKey)
