@@ -4,6 +4,7 @@ import android.util.Log
 import com.walkman.tv.data.model.Quality
 import com.walkman.tv.data.model.ScriptCapabilities
 import com.walkman.tv.data.model.ScriptSourceKey
+import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.data.model.Track
 import com.walkman.tv.data.model.UserScript
 import com.walkman.tv.source.builtin.BuiltInResolver
@@ -138,9 +139,9 @@ class SourceManager(
 
     /** Ask a user script for lyric data — raw `{lyric, tlyric, rlyric, lxlyric}` (iOS `requestLyric`). */
     suspend fun requestLyric(track: Track): JSONObject? {
-        val ls = scriptFor(ScriptSourceKey(track.source.key), "lyric") ?: throw SourceException("没有脚本提供 ${track.source.displayName} 歌词")
+        val ls = scriptFor(ScriptSourceKey(track.providerKey), "lyric") ?: throw SourceException("没有脚本提供 ${track.source.displayName} 歌词")
         val info = JSONObject().put("type", "").put("musicInfo", makeOldMusicInfo(track))
-        return ls.runtime.requestAction(ScriptSourceKey(track.source.key), "lyric", info) as? JSONObject
+        return ls.runtime.requestAction(ScriptSourceKey(track.providerKey), "lyric", info) as? JSONObject
     }
 
     fun availableQualities(source: SourceID): List<Quality> {
