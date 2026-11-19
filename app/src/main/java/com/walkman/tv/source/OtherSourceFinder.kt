@@ -17,7 +17,7 @@ class OtherSourceFinder(private val searcher: MusicSearcher) {
         val query = "${track.name} ${track.singer}".trim()
         val groups: Map<SourceID, List<Track>> = coroutineScope {
             SourceID.onlineSources
-                .filter { it != track.source }
+                .filter { it != track.builtInSource }
                 .map { src ->
                     async {
                         src to (runCatching { searcher.search(src, query, 1) }.getOrDefault(emptyList()))
