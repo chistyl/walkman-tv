@@ -161,6 +161,19 @@ class SourceManager(
     fun availableQualityKeys(source: ScriptSourceKey): List<String> =
         _loaded.value.flatMap { it.capabilities.sources[source]?.qualityKeys.orEmpty() }.distinct()
 
+    /** Search one exact script platform key, including non-built-in providers. */
+    suspend fun search(source: ScriptSourceKey, keyword: String, page: Int = 1): List<Track> {
+        if (keyword.isBlank()) return emptyList()
+        val providers = scriptsFor(source, "search")
+        return coroutineScope {
+            providers.map { loaded ->
+                async {
+                    runCatching { searchWithScript(loaded, source, keyword, page) }.getOrDefault(emptyList())
+                }
+            }.awaitAll().flatten()
+        }
+    }
+
     /** Search every loaded script platform that explicitly declares the search action. */
     suspend fun searchAll(keyword: String, page: Int = 1): List<Track> {
         if (keyword.isBlank()) return emptyList()
