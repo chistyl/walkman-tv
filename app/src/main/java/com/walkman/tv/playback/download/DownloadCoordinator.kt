@@ -354,10 +354,29 @@ class DownloadCoordinator(
     /** Fetch the cover (hi-res URL if available, else track.picURL), store it in the cover cache,
      *  and return the bytes (or null). */
     private suspend fun fetchAndCacheCover(track: Track, details: com.walkman.tv.data.model.TrackDetails?): ByteArray? {
-        val coverUrl = details?.hiResCoverURL?.takeIf { it.isNotBlank() } ?: track.picURL
-        val coverBytes = fetchCover(coverUrl)
-        if (coverBytes != null && coverBytes.isNotEmpty()) coverCache.put(track.id, coverBytes)
-        return coverBytes
+        // Preserve the provider's hi-res/detail cover first, then the search-result cover.
+        // Only ask the script's optional pic action when both existing URLs fail or are absent.
+        val directUrls = listOfNotNull(
+            details?.hiResCoverURL?.takeIf { it.isNotBlank() },
+            track.picURL?.takeIf { it.isNotBlank() },
+        ).distinct()
+        for (url in directUrls) {
+            val bytes = fetchCover(url)
+            if (!bytes.isNullOrEmpty()) {
+                coverCache.put(track.id, bytes)
+                return bytes
+            }
+        }
+
+        val scriptUrl = runCatching { sources.resolveOptionalPicture(track) }.getOrNull()
+        if (!scriptUrl.isNullOrBlank() && scriptUrl !in directUrls) {
+            val bytes = fetchCover(scriptUrl)
+            if (!bytes.isNullOrEmpty()) {
+                coverCache.put(track.id, bytes)
+                return bytes
+            }
+        }
+        return null
     }
 
     private suspend fun fetchLyrics(track: Track): String? = try {
