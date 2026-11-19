@@ -38,4 +38,8 @@ data class PlaylistOrigin(
     val sourceKey: String? = null,
 ) {
     val providerKey: String get() = sourceKey ?: source.key
+
+    /** True when this origin belongs to a dynamic script provider, not a built-in catalog. */
+    val isCustomProvider: Boolean
+        get() = sourceKey != null && ScriptSourceKey.from(sourceKey)?.builtIn == null
 }
