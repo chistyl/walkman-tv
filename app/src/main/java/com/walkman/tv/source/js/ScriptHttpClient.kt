@@ -46,8 +46,11 @@ class ScriptHttpClient(private val client: OkHttpClient) {
         }
         val binary = options.optBoolean("binary", false)
         val call = client.newCall(req)
-        val timeoutMs = options.optLong("timeout", 0L)
-        if (timeoutMs > 0L) call.timeout().timeout(timeoutMs, TimeUnit.MILLISECONDS)
+        // lx-music's Needle-based request API defaults to 60 seconds and caps
+        // caller-provided timeouts at the same limit.
+        val requestedTimeoutMs = options.optLong("timeout", 60_000L)
+        val timeoutMs = if (requestedTimeoutMs > 0L) minOf(requestedTimeoutMs, 60_000L) else 60_000L
+        call.timeout().timeout(timeoutMs, TimeUnit.MILLISECONDS)
         calls[requestKey] = call
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
