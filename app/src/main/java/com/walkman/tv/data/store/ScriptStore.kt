@@ -46,14 +46,18 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
      * are kept side by side instead of silently overwriting each other.
      */
     suspend fun import(raw: String): Result<Imported> {
-        val meta = parseHeader(raw)
+        val normalizedRaw = ScriptTextDecoder.normalize(raw)
+        if (normalizedRaw.isBlank() || '\u0000' in normalizedRaw) {
+            return Result.failure(IllegalArgumentException("音源腳本內容為空或不是有效文字檔"))
+        }
+        val meta = parseHeader(normalizedRaw)
         val script = UserScript(
-            name = meta["name"] ?: "未命名脚本",
+            name = meta["name"] ?: "未命名腳本",
             description = meta["description"] ?: "",
             version = meta["version"] ?: "",
             author = meta["author"] ?: "",
             homepage = meta["homepage"] ?: "",
-            rawScript = raw,
+            rawScript = normalizedRaw,
             enabled = true,
         )
         val old = _scripts.value.firstOrNull { it.name == script.name && it.author == script.author }
