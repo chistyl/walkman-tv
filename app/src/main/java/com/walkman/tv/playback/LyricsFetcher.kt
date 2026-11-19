@@ -31,9 +31,18 @@ class LyricsFetcher(
     }
 
     private suspend fun tryOtherSources(track: Track): List<LyricLine>? {
-        val candidates = otherSourceFinder.findMatches(track, maxIntervalDiff = 10)
-        for (alt in candidates.take(4)) {
-            val d1 = track.duration; val d2 = alt.duration
+        // Keep native catalog matching, and also search every loaded custom provider that
+        // explicitly declares "search". Custom providers cannot be represented by SourceID.
+        val nativeCandidates = otherSourceFinder.findMatches(track, maxIntervalDiff = 10)
+        val customCandidates = runCatching {
+            sources.searchAll("${track.name} ${track.singer}", 1)
+        }.getOrDefault(emptyList())
+            .filter { it.providerKey != track.providerKey }
+        val candidates = (nativeCandidates + customCandidates).distinctBy { it.id }
+
+        for (alt in candidates.take(10)) {
+            val d1 = track.duration
+            val d2 = alt.duration
             if (d1 != null && d2 != null && d1 > 0 && d2 > 0 && abs(d1 - d2) > 10) continue
             builtIn.fetch(alt)?.let { return it }
             tryScript(alt)?.let { return it }
