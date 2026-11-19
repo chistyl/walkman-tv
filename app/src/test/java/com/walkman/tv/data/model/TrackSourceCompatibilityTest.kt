@@ -2,7 +2,11 @@ package com.walkman.tv.data.model
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 class TrackSourceCompatibilityTest {
 
@@ -59,4 +63,46 @@ class TrackSourceCompatibilityTest {
         assertNull(ScriptSourceKey.from(""))
         assertNull(ScriptSourceKey.from(null))
     }
+    @Test
+    fun customProviderIdentityAndUnknownQualitiesSurviveJsonRoundTrip() {
+        val track = Track(
+            id = "custom_provider_song_1",
+            name = "測試歌曲",
+            singer = "測試歌手",
+            source = SourceID.LOCAL,
+            songmid = "song_1",
+            sourceKey = "custom_provider",
+            sourceDisplayName = "自訂平台",
+            qualityKeys = listOf("320k", "lossless_plus"),
+        )
+        val json = Json { encodeDefaults = true }
+        val restored = json.decodeFromString<Track>(json.encodeToString(track))
+
+        assertEquals(track.id, restored.id)
+        assertEquals("custom_provider", restored.providerKey)
+        assertEquals("自訂平台", restored.providerDisplayName)
+        assertEquals(listOf("320k", "lossless_plus"), restored.qualityKeys)
+        assertNull(restored.builtInSource)
+    }
+
+    @Test
+    fun legacyTrackJsonWithoutCustomFieldsStillLoads() {
+        val legacyJson = """
+            {
+              "id": "local_old_1",
+              "name": "舊歌曲",
+              "singer": "舊歌手",
+              "source": "local",
+              "songmid": "old_1"
+            }
+        """.trimIndent()
+        val restored = Json { ignoreUnknownKeys = true }
+            .decodeFromString<Track>(legacyJson)
+
+        assertEquals("local", restored.providerKey)
+        assertEquals(SourceID.LOCAL, restored.builtInSource)
+        assertTrue(restored.qualityKeys.isEmpty())
+        assertNull(restored.sourceKey)
+    }
+
 }
