@@ -28,4 +28,6 @@ data class SourceCapability(
     val type: String = "music",
     val actions: List<String> = emptyList(),
     val qualities: List<Quality> = emptyList(),
+    /** Raw quality identifiers declared by the script, including future/custom tiers. */
+    val qualityKeys: List<String> = emptyList(),
 )
