@@ -19,6 +19,24 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 
+/** Accept common script resolver response shapes while returning only a non-empty URL string. */
+internal fun extractPlayableUrl(raw: Any?, depth: Int = 0): String? {
+    if (depth > 4) return null
+    return when (raw) {
+        is String -> raw.trim().takeIf { it.isNotEmpty() }
+        is JSONObject -> {
+            val direct = sequenceOf("url", "playUrl", "play_url", "src")
+                .mapNotNull { key -> raw.opt(key) as? String }
+                .firstOrNull { it.isNotBlank() }
+            direct?.trim()
+                ?: sequenceOf("data", "result", "url")
+                    .mapNotNull { key -> raw.opt(key) }
+                    .firstNotNullOfOrNull { extractPlayableUrl(it, depth + 1) }
+        }
+        else -> null
+    }
+}
+
 /**
  * Owns loaded user scripts and resolves play URLs, ported from iOS `SourceManager`.
  * Resolve order: user script (with quality cascade) → other-source search → built-in direct.
@@ -188,10 +206,8 @@ class SourceManager(
             .put("type", qualityKey)
             .put("musicInfo", makeOldMusicInfo(track))
         val result = ls.runtime.requestAction(ScriptSourceKey(track.providerKey), "musicUrl", info)
-        val obj = result as? JSONObject
-        val url = obj?.optJSONObject("data")?.optString("url")?.ifEmpty { null }
-            ?: obj?.optString("url")?.ifEmpty { null }
-        return url ?: throw SourceException("脚本返回了无效结果")
+        return extractPlayableUrl(result)
+            ?: throw SourceException("腳本未回傳有效的播放網址")
     }
 
     /**
