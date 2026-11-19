@@ -23,6 +23,8 @@ data class Track(
     val sourceKey: String? = null,
     /** Display label from the imported script; null keeps legacy built-in naming. */
     val sourceDisplayName: String? = null,
+    /** Raw provider quality identifiers, including tiers unknown to this app version. */
+    val qualityKeys: List<String> = emptyList(),
 ) {
     val subtitle: String
         get() = if (!albumName.isNullOrEmpty()) "$singer · $albumName" else singer
