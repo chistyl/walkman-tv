@@ -4,6 +4,7 @@ import com.walkman.tv.data.model.Playlist
 import com.walkman.tv.data.model.PlaylistOrigin
 import com.walkman.tv.data.model.SonglistDetail
 import com.walkman.tv.data.model.SonglistInfo
+import com.walkman.tv.data.model.ScriptSourceKey
 import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.data.store.LibraryStore
 import com.walkman.tv.source.catalog.Songlists
@@ -22,6 +23,7 @@ sealed class ImportError(message: String) : Throwable(message) {
     object UnrecognizedURL : ImportError("无法识别歌单链接，请粘贴酷我 / 酷狗 / QQ / 网易云的歌单分享链接")
     class FetchFailed(detail: String) : ImportError("获取歌单失败：$detail")
     object EmptyPlaylist : ImportError("歌单为空、私密或暂时无法读取（私密歌单需创建者设为公开后才能导入）")
+    object CustomProviderRefreshUnsupported : ImportError("此自訂音源的歌單更新功能尚未接入，為避免錯誤覆蓋歌單，請保留目前內容")
 }
 
 data class ImportResult(val playlistId: String, val count: Int)
@@ -151,6 +153,9 @@ object SonglistImporter {
         library: LibraryStore,
     ): RefreshResult {
         val origin = playlist.origin ?: throw ImportError.UnrecognizedURL
+        // Never route a dynamic provider through the legacy LOCAL enum placeholder. Until the
+        // script playlist contract is wired end-to-end, fail safely without mutating the list.
+        if (origin.isCustomProvider) throw ImportError.CustomProviderRefreshUnsupported
         val detail = fetch(SonglistRef(origin.source, origin.id), songlists)
         // Re-read after the (slow) fetch so edits made meanwhile aren't lost.
         val live = library.userLists.value.firstOrNull { it.id == playlist.id }
