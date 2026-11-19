@@ -228,6 +228,56 @@ globalThis.lx_setup = (key, id, name, description, version, author, homepage, ra
     return bytes
   }
 
+  // QuickJS builds may omit WHATWG text codecs. Provide the UTF-8 surface used by
+  // community scripts; keep the implementation deliberately limited to UTF-8.
+  if (typeof globalThis.TextEncoder !== 'function') {
+    globalThis.TextEncoder = class TextEncoder {
+      get encoding() { return 'utf-8' }
+      encode(input = '') { return new Uint8Array(stringToBytes(String(input))) }
+      encodeInto(input, destination) {
+        const bytes = stringToBytes(String(input))
+        let read = 0, written = 0
+        while (read < String(input).length) {
+          const codePoint = String(input).codePointAt(read)
+          const charCount = codePoint > 0xffff ? 2 : 1
+          const nextBytes = stringToBytes(String(input).slice(read, read + charCount))
+          if (written + nextBytes.length > destination.length) break
+          destination.set(nextBytes, written)
+          written += nextBytes.length
+          read += charCount
+        }
+        return { read, written }
+      }
+    }
+  }
+
+  if (typeof globalThis.TextDecoder !== 'function') {
+    globalThis.TextDecoder = class TextDecoder {
+      constructor(label = 'utf-8', options = {}) {
+        const normalized = String(label).trim().toLowerCase()
+        if (!['utf-8', 'utf8'].includes(normalized)) throw new RangeError('Only UTF-8 is supported')
+        this.encoding = 'utf-8'
+        this.fatal = options.fatal === true
+        this.ignoreBOM = options.ignoreBOM === true
+      }
+      decode(input = new Uint8Array(), options = {}) {
+        if (options.stream) throw new TypeError('Streaming decode is not supported')
+        let bytes
+        if (input instanceof ArrayBuffer) bytes = new Uint8Array(input)
+        else if (ArrayBuffer.isView(input)) {
+          bytes = new Uint8Array(input.buffer, input.byteOffset, input.byteLength)
+        } else if (input == null) bytes = new Uint8Array()
+        else throw new TypeError('Expected an ArrayBuffer or ArrayBufferView')
+        const decoded = bytesToString(bytes)
+        if (this.fatal && !stringToBytes(decoded).every((value, index) => value === bytes[index]) ||
+          (this.fatal && stringToBytes(decoded).length !== bytes.length)) {
+          throw new TypeError('The encoded data was not valid UTF-8')
+        }
+        return !this.ignoreBOM && decoded.charCodeAt(0) === 0xfeff ? decoded.slice(1) : decoded
+      }
+    }
+  }
+
   const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
   function bytesToBase64(input) {
     const bytes = Array.from(input, value => Number(value) & 0xff)
