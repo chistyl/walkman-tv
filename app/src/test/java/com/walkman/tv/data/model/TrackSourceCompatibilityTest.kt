@@ -122,6 +122,28 @@ class TrackSourceCompatibilityTest {
     }
 
     @Test
+    fun playlistOriginIdentifiesDynamicProviderWithoutMisclassifyingBuiltIns() {
+        val custom = PlaylistOrigin(
+            source = SourceID.LOCAL,
+            id = "custom_list",
+            sourceKey = "custom_provider",
+        )
+        val builtIn = PlaylistOrigin(
+            source = SourceID.WY,
+            id = "wy_list",
+            sourceKey = "wy",
+        )
+        val legacy = PlaylistOrigin(
+            source = SourceID.LOCAL,
+            id = "local_list",
+        )
+
+        assertTrue(custom.isCustomProvider)
+        assertEquals(false, builtIn.isCustomProvider)
+        assertEquals(false, legacy.isCustomProvider)
+    }
+
+    @Test
     fun legacyPlaylistOriginWithoutSourceKeyStillLoads() {
         val legacyJson = """{"source":"wy","id":"playlist_456","platformTrackIds":["song_3"]}"""
         val restored = Json { ignoreUnknownKeys = true }
