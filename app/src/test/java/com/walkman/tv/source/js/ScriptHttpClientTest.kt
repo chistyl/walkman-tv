@@ -224,7 +224,7 @@ class ScriptHttpClientTest {
             server.enqueue(
                 MockResponse()
                     .setResponseCode(302)
-                    .addHeader("Location", destination.url("/target").toString())
+                    .addHeader("Location", destination.url("/target").newBuilder().host("127.0.0.1").build().toString())
                     .addHeader("Set-Cookie", "source-only=secret; Path=/; HttpOnly"),
             )
             destination.enqueue(MockResponse().setBody("cross-host-ok"))
