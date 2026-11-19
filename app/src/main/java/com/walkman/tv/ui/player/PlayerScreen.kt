@@ -74,7 +74,6 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.walkman.tv.data.model.Quality
 import com.walkman.tv.data.model.Track
-import org.json.JSONObject
 import com.walkman.tv.playback.LyricParser
 import com.walkman.tv.playback.RepeatMode
 import com.walkman.tv.ui.appContainer
