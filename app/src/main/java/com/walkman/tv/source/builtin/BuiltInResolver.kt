@@ -24,10 +24,10 @@ class BuiltInResolver(client: OkHttpClient) {
         .build()
 
     suspend fun resolve(track: Track, quality: Quality): ResolvedURL = withContext(Dispatchers.IO) {
-        when (track.source) {
+        when (track.builtInSource) {
             SourceID.KW -> resolveKuwo(track.songmid, quality)
             SourceID.WY -> ResolvedURL(resolveNetEase(track.songmid))
-            else -> throw ResolveException("内置直连暂不支持 ${track.source.displayName}")
+            else -> throw ResolveException("内置直连暂不支持 ${track.providerDisplayName}")
         }
     }
 
