@@ -4,7 +4,7 @@ import android.util.Log
 import com.walkman.tv.data.model.Quality
 import com.walkman.tv.data.model.ScriptCapabilities
 import com.walkman.tv.data.model.SourceCapability
-import com.walkman.tv.data.model.SourceID
+import com.walkman.tv.data.model.ScriptSourceKey
 import com.walkman.tv.data.model.UserScript
 import com.whl.quickjs.wrapper.JSCallFunction
 import com.whl.quickjs.wrapper.QuickJSContext
@@ -89,13 +89,13 @@ class JsScriptRuntime(
     }
 
     /** Ask the script to perform an action (musicUrl / lyric / pic). */
-    suspend fun requestAction(source: SourceID, action: String, info: JSONObject, timeoutMs: Long = 15_000): Any? {
+    suspend fun requestAction(source: ScriptSourceKey, action: String, info: JSONObject, timeoutMs: Long = 15_000): Any? {
         if (!inited) throw ScriptException("脚本尚未初始化")
         val requestKey = UUID.randomUUID().toString()
         val deferred = CompletableDeferred<Any?>()
         pending[requestKey] = deferred
         val data = JSONObject()
-            .put("source", source.key)
+            .put("source", source.value)
             .put("action", action)
             .put("info", info)
         val payload = JSONObject().put("requestKey", requestKey).put("data", data)
@@ -201,10 +201,10 @@ class JsScriptRuntime(
         if (obj.has("status") && !obj.optBoolean("status", true)) {
             failInit(obj.optString("errorMessage", "unknown")); return
         }
-        val sources = mutableMapOf<SourceID, SourceCapability>()
+        val sources = mutableMapOf<ScriptSourceKey, SourceCapability>()
         obj.optJSONObject("info")?.optJSONObject("sources")?.let { srcObj ->
             srcObj.keys().forEach { k ->
-                val src = SourceID.fromKey(k) ?: return@forEach
+                val src = ScriptSourceKey.from(k) ?: return@forEach
                 val v = srcObj.optJSONObject(k) ?: return@forEach
                 val actions = v.optJSONArray("actions")?.let { arr ->
                     List(arr.length()) { arr.optString(it) }
