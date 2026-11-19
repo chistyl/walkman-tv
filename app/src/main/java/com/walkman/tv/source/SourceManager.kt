@@ -103,7 +103,7 @@ class SourceManager(
         }
 
         if (scriptFor(ScriptSourceKey(track.providerKey), "musicUrl") == null) {
-            throw SourceException("没有脚本提供 ${track.source.displayName} 源，请到设置 → 自定义音源 导入脚本")
+            throw SourceException("没有脚本提供 ${track.providerDisplayName} 源，请到设置 → 自定义音源 导入脚本")
         }
         throw SourceException("这首 ${track.source.displayName} 歌曲无法获取播放地址，换一首或换个能用的脚本")
     }
@@ -119,7 +119,7 @@ class SourceManager(
                 altLS.capabilities.sources[ScriptSourceKey(alt.providerKey)]?.qualities?.toSet() ?: emptySet(),
             )
             runCatching { resolveViaScript(alt, q, altLS) }.getOrNull()?.let { url ->
-                val warn = "原 ${track.source.displayName} 源无法获取播放地址，已换到 ${alt.source.displayName}"
+                val warn = "原 ${track.source.displayName} 源无法获取播放地址，已换到 ${alt.providerDisplayName}"
                 return ResolvedTrack(url, ResolveOrigin.OtherSource(ScriptSourceKey(alt.providerKey)), q, warn)
             }
         }
@@ -150,13 +150,16 @@ class SourceManager(
         return Quality.entries.filter { set.contains(it) }
     }
 
-    fun supportedSources(): List<SourceID> {
-        val set = mutableSetOf<ScriptSourceKey>()
-        _loaded.value.forEach { ls ->
-            ls.capabilities.sources.forEach { (src, cap) -> if (cap.actions.contains("musicUrl")) set.add(src) }
-        }
-        return set.map { it.displayName }.mapNotNull { name -> SourceID.entries.firstOrNull { it.displayName == name } }.distinct()
-    }
+    /** Every platform key declared by loaded scripts, including third-party identifiers. */
+    fun supportedSourceKeys(): List<ScriptSourceKey> =
+        _loaded.value.flatMap { it.capabilities.sources.entries }
+            .filter { (_, capability) -> capability.actions.contains("musicUrl") }
+            .map { it.key }
+            .distinct()
+
+    /** Legacy catalog-facing view; dynamic keys are available through [supportedSourceKeys]. */
+    fun supportedSources(): List<SourceID> =
+        supportedSourceKeys().mapNotNull { it.builtIn }.distinct()
 
     /** Build the v4 "old format" musicInfo a script expects (iOS `makeOldMusicInfo`). */
     fun makeOldMusicInfo(track: Track): JSONObject {
