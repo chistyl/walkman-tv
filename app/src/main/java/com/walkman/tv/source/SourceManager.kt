@@ -10,6 +10,7 @@ import com.walkman.tv.data.model.UserScript
 import com.walkman.tv.source.builtin.BuiltInResolver
 import com.walkman.tv.source.js.JsScriptRuntime
 import com.walkman.tv.source.js.ScriptHttpClient
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
