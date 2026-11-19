@@ -48,7 +48,7 @@ class ScriptHttpClient(private val client: OkHttpClient) {
             val now = System.currentTimeMillis()
             cookies.forEach { cookie ->
                 val key = "${cookie.domain}|${cookie.path}|${cookie.name}"
-                if (cookie.expiresAt <= now || cookie.value.isEmpty()) this.cookies.remove(key)
+                if (cookie.expiresAt <= now) this.cookies.remove(key)
                 else this.cookies[key] = cookie
             }
         }
