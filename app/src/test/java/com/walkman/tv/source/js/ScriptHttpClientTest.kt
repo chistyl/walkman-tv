@@ -8,7 +8,6 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
-import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.util.concurrent.CountDownLatch
@@ -57,16 +56,18 @@ class ScriptHttpClientTest {
         val request = server.takeRequest(1, TimeUnit.SECONDS)!!
         val contentType = request.getHeader("Content-Type")!!
         val boundary = Regex("""boundary=([^;]+)""").find(contentType)!!.groupValues[1]
-        val payload = request.body.readUtf8()
+        val payloadBytes = request.body.readByteArray()
+        val payload = String(payloadBytes, Charsets.ISO_8859_1)
         assertTrue(contentType.startsWith("multipart/form-data"))
-        assertTrue(payload.startsWith("--$boundary\\r\\n"))
+        assertTrue(payload.startsWith("--$boundary\r\n"))
         assertTrue(payload.contains("""name="title"""" ))
         assertTrue(payload.contains("測試歌曲"))
         assertTrue(payload.contains("""filename="cover.bin""""))
         assertTrue(payload.contains("Content-Type: application/octet-stream"))
         assertTrue(payload.contains("--$boundary--"))
         // Binary bytes are written as raw octets, not their JSON decimal representation.
-        assertTrue(request.body.size > 4L)
+        val fileBytes = byteArrayOf(0, 1, 127, -1).toList()
+        assertTrue(payloadBytes.toList().windowed(4).any { it == fileBytes })
     }
 
     @Test
