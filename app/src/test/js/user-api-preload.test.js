@@ -18,6 +18,7 @@ function loadPreloadWithoutNativeUrlSearchParams() {
     __lx_native_call__utils_str2b64: value => Buffer.from(value, 'utf8').toString('base64'),
     __lx_native_call__utils_b642buf: value => JSON.stringify(Array.from(Buffer.from(value, 'base64'))),
     __lx_native_call__utils_str2md5: () => '',
+    __lx_native_call__utils_random_bytes: size => JSON.stringify(Array.from({ length: size }, (_, index) => (index * 37 + 11) & 0xff)),
     __lx_native_call__utils_aes_encrypt: () => '',
     __lx_native_call__utils_rsa_encrypt: () => '',
     console: { log() {}, info() {}, warn() {}, error() {} },
@@ -231,4 +232,26 @@ test('preload returns structured search and songlist results without URL wrappin
       data: [{ id: 'song-1', name: 'Song' }],
     })
   }
+})
+
+
+test('crypto randomBytes uses the native secure random bridge and validates sizes', () => {
+  const { context } = loadPreloadWithoutNativeUrlSearchParams()
+  const result = vm.runInContext(`(() => {
+    const bytes = lx.utils.crypto.randomBytes(8)
+    let negativeRejected = false
+    let fractionalRejected = false
+    let oversizedRejected = false
+    try { lx.utils.crypto.randomBytes(-1) } catch (_) { negativeRejected = true }
+    try { lx.utils.crypto.randomBytes(1.5) } catch (_) { fractionalRejected = true }
+    try { lx.utils.crypto.randomBytes(65537) } catch (_) { oversizedRejected = true }
+    return JSON.stringify({ bytes: Array.from(bytes), negativeRejected, fractionalRejected, oversizedRejected })
+  })()`, context)
+
+  assert.deepEqual(JSON.parse(result), {
+    bytes: [11, 48, 85, 122, 159, 196, 233, 14],
+    negativeRejected: true,
+    fractionalRejected: true,
+    oversizedRejected: true,
+  })
 })
