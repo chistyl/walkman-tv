@@ -248,6 +248,7 @@ class SourceManager(
                 qualities = qualityKeys.mapNotNull(Quality::fromKey),
                 extras = extras,
                 sourceKey = source.value,
+                sourceDisplayName = loaded.script.name,
             )
         }
     }
