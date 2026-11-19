@@ -39,6 +39,7 @@ import androidx.tv.material3.Text
 import androidx.tv.material3.Icon
 import com.walkman.tv.data.model.SonglistInfo
 import com.walkman.tv.data.model.SourceID
+import com.walkman.tv.data.model.ScriptSourceKey
 import com.walkman.tv.data.model.Track
 import com.walkman.tv.di.getLanIp
 import com.walkman.tv.ui.appContainer
@@ -58,7 +59,13 @@ import kotlinx.coroutines.launch
 fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
-    var filter by remember { mutableStateOf<SourceID?>(null) }
+    var filterKey by remember { mutableStateOf<String?>(null) }
+    val loadedScripts by appContainer.sourceManager.loaded.collectAsState()
+    val searchableSourceKeys = remember(loadedScripts) {
+        loadedScripts.flatMap { it.capabilities.sources.entries }
+            .filter { (_, capability) -> capability.actions.contains("search") }
+            .map { it.key }.distinct()
+    }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var songlists by remember { mutableStateOf<List<SonglistInfo>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
@@ -76,7 +83,7 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
         scope.launch {
             loading = true
             searched = true
-            val f = filter
+            val f = filterKey
             val q = query
             // Record into history before kicking off the request so it shows up on the next
             // empty-query render even if the result list ends up empty.
@@ -84,17 +91,22 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
             val pair = runCatching {
                 coroutineScope {
                     val tracksJob = async {
-                        val catalogTracks = if (f == null) appContainer.catalogs.searchAll(q)
-                            else appContainer.catalogs.search(f, q)
-                        // User scripts may declare additional platform keys and implement their
-                        // own search action. Merge them with native catalogs without duplicates.
-                        val scriptTracks = if (f == null) appContainer.sourceManager.searchAll(q)
-                            else emptyList()
+                        val builtIn = SourceID.fromKey(f)
+                        val catalogTracks = when {
+                            f == null -> appContainer.catalogs.searchAll(q)
+                            builtIn != null -> appContainer.catalogs.search(builtIn, q)
+                            else -> emptyList()
+                        }
+                        // Search script providers for all and for an exact selected key.
+                        val scriptTracks = when {
+                            f == null -> appContainer.sourceManager.searchAll(q)
+                            else -> ScriptSourceKey.from(f)?.let { appContainer.sourceManager.search(it, q) }.orEmpty()
+                        }
                         (catalogTracks + scriptTracks).distinctBy { it.id }
                     }
                     val songlistsJob = async {
                         if (f == null) appContainer.songlists.searchAll(q)
-                        else appContainer.songlists.serviceFor(f)?.search(q, 1) ?: emptyList()
+                        else SourceID.fromKey(f)?.let { appContainer.songlists.serviceFor(it)?.search(q, 1) }.orEmpty()
                     }
                     tracksJob.await() to songlistsJob.await()
                 }
@@ -106,7 +118,7 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     }
 
     // Re-run search when the platform filter changes (only after the first manual search).
-    LaunchedEffect(filter) {
+    LaunchedEffect(filterKey) {
         if (searched) runSearch()
     }
 
@@ -145,7 +157,7 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
 
         // RIGHT: platform chips + results
         Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-            PlatformChipRow(filter, onSelect = { filter = it })
+            PlatformChipRow(filterKey, searchableSourceKeys, onSelect = { filterKey = it })
             Spacer(Modifier.padding(top = 8.dp))
             ResultsPane(
                 loading = loading,
@@ -233,23 +245,30 @@ private fun SearchInputBox(query: String) {
 
 // MARK: - Right panel --------------------------------------------------------------------------
 
-// Migu intentionally absent — see SearchCatalog.Catalogs.services for the reason. Boards /
-// songlists still surface it; only the search path is opted out.
-private val PLATFORMS_LABELS: List<Pair<SourceID?, String>> = listOf(
-    null to "全部",
-    SourceID.KW to "酷我",
-    SourceID.KG to "酷狗",
-    SourceID.TX to "QQ音乐",
-    SourceID.WY to "网易云",
+// Built-in platforms retain their original order; custom providers are appended dynamically.
+private val BUILT_IN_PLATFORM_LABELS: List<Pair<String, String>> = listOf(
+    "kw" to "酷我",
+    "kg" to "酷狗",
+    "tx" to "QQ音乐",
+    "wy" to "网易云",
 )
 
 @Composable
-private fun PlatformChipRow(filter: SourceID?, onSelect: (SourceID?) -> Unit) {
+private fun PlatformChipRow(
+    filterKey: String?,
+    searchableSourceKeys: List<ScriptSourceKey>,
+    onSelect: (String?) -> Unit,
+) {
+    val custom = searchableSourceKeys
+        .filter { it.builtIn == null }
+        .map { it.value to it.displayName }
+        .distinctBy { it.first }
+    val platforms = listOf(null to "全部") + BUILT_IN_PLATFORM_LABELS + custom
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        PLATFORMS_LABELS.forEach { (src, label) ->
+        platforms.forEach { (key, label) ->
             TvPill(
-                onClick = { onSelect(src) },
-                selected = filter == src,
+                onClick = { onSelect(key) },
+                selected = filterKey == key,
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp),
             ) {
                 Text(label, fontSize = 13.sp)
