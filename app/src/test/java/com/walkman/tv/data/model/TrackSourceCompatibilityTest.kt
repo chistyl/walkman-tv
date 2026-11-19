@@ -105,4 +105,30 @@ class TrackSourceCompatibilityTest {
         assertNull(restored.sourceKey)
     }
 
+    @Test
+    fun playlistOriginPreservesCustomProviderKey() {
+        val origin = PlaylistOrigin(
+            source = SourceID.LOCAL,
+            id = "playlist_123",
+            platformTrackIds = listOf("song_1", "song_2"),
+            sourceKey = "custom_provider",
+        )
+        val json = Json { encodeDefaults = true }
+        val restored = json.decodeFromString<PlaylistOrigin>(json.encodeToString(origin))
+
+        assertEquals("custom_provider", restored.providerKey)
+        assertEquals(SourceID.LOCAL, restored.source)
+        assertEquals(listOf("song_1", "song_2"), restored.platformTrackIds)
+    }
+
+    @Test
+    fun legacyPlaylistOriginWithoutSourceKeyStillLoads() {
+        val legacyJson = """{"source":"wy","id":"playlist_456","platformTrackIds":["song_3"]}"""
+        val restored = Json { ignoreUnknownKeys = true }
+            .decodeFromString<PlaylistOrigin>(legacyJson)
+
+        assertEquals("wy", restored.providerKey)
+        assertEquals(SourceID.WY, restored.source)
+    }
+
 }
