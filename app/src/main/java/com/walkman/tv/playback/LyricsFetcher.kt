@@ -38,6 +38,7 @@ class LyricsFetcher(
             sources.searchAll("${track.name} ${track.singer}", 1)
         }.getOrDefault(emptyList())
             .filter { it.providerKey != track.providerKey }
+            .filter { matchesTrackIdentity(track, it) }
         val candidates = (nativeCandidates + customCandidates).distinctBy { it.id }
 
         for (alt in candidates.take(10)) {
@@ -48,6 +49,24 @@ class LyricsFetcher(
             tryScript(alt)?.let { return it }
         }
         return null
+    }
+
+    private fun matchesTrackIdentity(target: Track, candidate: Track): Boolean {
+        fun normalize(value: String): String =
+            value.lowercase().replace(Regex("[\\s\\p{Punct}、，。！？（）【】《》「」『』]"), "")
+
+        val targetName = normalize(target.name)
+        val candidateName = normalize(candidate.name)
+        if (targetName.isEmpty() || candidateName.isEmpty()) return false
+        val sameName = targetName == candidateName ||
+            targetName.contains(candidateName) || candidateName.contains(targetName)
+        if (!sameName) return false
+
+        val targetSinger = normalize(target.singer)
+        val candidateSinger = normalize(candidate.singer)
+        return targetSinger.isEmpty() || candidateSinger.isEmpty() ||
+            targetSinger == candidateSinger ||
+            targetSinger.contains(candidateSinger) || candidateSinger.contains(targetSinger)
     }
 
     fun clear() = cache.clear()
