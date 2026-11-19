@@ -1,25 +1,41 @@
 package com.walkman.tv.data.model
 
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-/** Music platforms, mirroring iOS `SourceID`. Raw value is the lx-music source key. */
+/**
+ * Stable identifiers for built-in catalog providers. Script platforms may use additional
+ * identifiers; [ScriptSourceKey] carries those without forcing them into this enum.
+ */
 @Serializable
 enum class SourceID(val key: String, val displayName: String) {
-    @SerialName("kw") KW("kw", "酷我"),
-    @SerialName("kg") KG("kg", "酷狗"),
-    @SerialName("tx") TX("tx", "QQ音乐"),
-    @SerialName("wy") WY("wy", "网易云"),
-    @SerialName("mg") MG("mg", "咪咕"),
-    @SerialName("local") LOCAL("local", "本地");
+    KW("kw", "酷我"),
+    KG("kg", "酷狗"),
+    TX("tx", "QQ音乐"),
+    WY("wy", "网易云"),
+    MG("mg", "咪咕"),
+    LOCAL("local", "本地");
 
     companion object {
         fun fromKey(key: String?): SourceID? = entries.firstOrNull { it.key == key }
-        /** Sources usable as online music platforms (exclude local). */
         val onlineSources: List<SourceID> = listOf(KW, KG, TX, WY, MG)
-
-        /** Fixed order for the discover (home) page — spec docs/discover-page-spec-android-tv.md §2. */
         val homePageOrder: List<SourceID> = listOf(KW, WY, KG, TX)
+    }
+}
+
+/** Dynamic script platform identifier. Keys are preserved byte-for-byte after validation. */
+@Serializable
+@JvmInline
+value class ScriptSourceKey(val value: String) {
+    init {
+        require(value.matches(Regex("[a-zA-Z0-9_-]{1,64}"))) { "Invalid source key" }
+    }
+
+    val builtIn: SourceID? get() = SourceID.fromKey(value)
+    val displayName: String get() = builtIn?.displayName ?: value
+
+    companion object {
+        fun from(value: String?): ScriptSourceKey? =
+            value?.takeIf { it.matches(Regex("[a-zA-Z0-9_-]{1,64}")) }?.let(::ScriptSourceKey)
     }
 }
 
