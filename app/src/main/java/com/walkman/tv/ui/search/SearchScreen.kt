@@ -84,8 +84,13 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
             val pair = runCatching {
                 coroutineScope {
                     val tracksJob = async {
-                        if (f == null) appContainer.catalogs.searchAll(q)
-                        else appContainer.catalogs.search(f, q)
+                        val catalogTracks = if (f == null) appContainer.catalogs.searchAll(q)
+                            else appContainer.catalogs.search(f, q)
+                        // User scripts may declare additional platform keys and implement their
+                        // own search action. Merge them with native catalogs without duplicates.
+                        val scriptTracks = if (f == null) appContainer.sourceManager.searchAll(q)
+                            else emptyList()
+                        (catalogTracks + scriptTracks).distinctBy { it.id }
                     }
                     val songlistsJob = async {
                         if (f == null) appContainer.songlists.searchAll(q)
