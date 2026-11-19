@@ -105,7 +105,7 @@ class SourceManager(
         if (scriptFor(ScriptSourceKey(track.providerKey), "musicUrl") == null) {
             throw SourceException("没有脚本提供 ${track.providerDisplayName} 源，请到设置 → 自定义音源 导入脚本")
         }
-        throw SourceException("这首 ${track.source.displayName} 歌曲无法获取播放地址，换一首或换个能用的脚本")
+        throw SourceException("这首 ${track.providerDisplayName} 歌曲无法获取播放地址，换一首或换个能用的脚本")
     }
 
     private suspend fun tryOtherSources(track: Track, preferred: Quality): ResolvedTrack? {
@@ -119,7 +119,7 @@ class SourceManager(
                 altLS.capabilities.sources[ScriptSourceKey(alt.providerKey)]?.qualities?.toSet() ?: emptySet(),
             )
             runCatching { resolveViaScript(alt, q, altLS) }.getOrNull()?.let { url ->
-                val warn = "原 ${track.source.displayName} 源无法获取播放地址，已换到 ${alt.providerDisplayName}"
+                val warn = "原 ${track.providerDisplayName} 源无法获取播放地址，已换到 ${alt.providerDisplayName}"
                 return ResolvedTrack(url, ResolveOrigin.OtherSource(ScriptSourceKey(alt.providerKey)), q, warn)
             }
         }
@@ -139,16 +139,24 @@ class SourceManager(
 
     /** Ask a user script for lyric data — raw `{lyric, tlyric, rlyric, lxlyric}` (iOS `requestLyric`). */
     suspend fun requestLyric(track: Track): JSONObject? {
-        val ls = scriptFor(ScriptSourceKey(track.providerKey), "lyric") ?: throw SourceException("没有脚本提供 ${track.source.displayName} 歌词")
+        val ls = scriptFor(ScriptSourceKey(track.providerKey), "lyric") ?: throw SourceException("没有脚本提供 ${track.providerDisplayName} 歌词")
         val info = JSONObject().put("type", "").put("musicInfo", makeOldMusicInfo(track))
         return ls.runtime.requestAction(ScriptSourceKey(track.providerKey), "lyric", info) as? JSONObject
     }
 
-    fun availableQualities(source: SourceID): List<Quality> {
+    fun availableQualities(source: SourceID): List<Quality> =
+        availableQualities(ScriptSourceKey(source.key))
+
+    /** Known enum qualities declared for any built-in or custom script platform. */
+    fun availableQualities(source: ScriptSourceKey): List<Quality> {
         val set = mutableSetOf<Quality>()
-        _loaded.value.forEach { it.capabilities.sources[ScriptSourceKey(source.key)]?.qualities?.forEach(set::add) }
+        _loaded.value.forEach { it.capabilities.sources[source]?.qualities?.forEach(set::add) }
         return Quality.entries.filter { set.contains(it) }
     }
+
+    /** Raw quality identifiers, including tiers not yet represented by the app's Quality enum. */
+    fun availableQualityKeys(source: ScriptSourceKey): List<String> =
+        _loaded.value.flatMap { it.capabilities.sources[source]?.qualityKeys.orEmpty() }.distinct()
 
     /** Every platform key declared by loaded scripts, including third-party identifiers. */
     fun supportedSourceKeys(): List<ScriptSourceKey> =
