@@ -14,6 +14,8 @@ data class Track(
     val albumName: String? = null,
     val albumId: String? = null,
     val source: SourceID,
+    /** Dynamic custom-provider key; null means this is a legacy built-in track. */
+    val sourceKey: String? = null,
     val songmid: String,
     val duration: Int? = null,
     val picURL: String? = null,
@@ -28,10 +30,13 @@ data class Track(
         get() = duration?.let { String.format("%02d:%02d", it / 60, it % 60) } ?: ""
 
     /** Whether the source carries an MV for this track (set by per-platform search/board builders). */
+    val providerKey: String get() = sourceKey ?: source.key
+
     val hasMv: Boolean
         get() = !extras["mvId"].isNullOrEmpty()
 
     companion object {
         fun makeID(source: SourceID, songmid: String): String = "${source.key}_$songmid"
+        fun makeID(sourceKey: String, songmid: String): String = "${sourceKey}_$songmid"
     }
 }
