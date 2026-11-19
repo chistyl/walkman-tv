@@ -9,12 +9,12 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 enum class SourceID(val key: String, val displayName: String) {
-    KW("kw", "酷我"),
-    KG("kg", "酷狗"),
-    TX("tx", "QQ音乐"),
-    WY("wy", "网易云"),
-    MG("mg", "咪咕"),
-    LOCAL("local", "本地");
+    @SerialName("kw") KW("kw", "酷我"),
+    @SerialName("kg") KG("kg", "酷狗"),
+    @SerialName("tx") TX("tx", "QQ音乐"),
+    @SerialName("wy") WY("wy", "网易云"),
+    @SerialName("mg") MG("mg", "咪咕"),
+    @SerialName("local") LOCAL("local", "本地");
 
     companion object {
         fun fromKey(key: String?): SourceID? = entries.firstOrNull { it.key == key }
