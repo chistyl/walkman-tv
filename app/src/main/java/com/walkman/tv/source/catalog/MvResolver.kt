@@ -4,6 +4,7 @@ import com.walkman.tv.data.model.MusicVideoInfo
 import com.walkman.tv.data.model.MvQuality
 import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.data.model.Track
+import com.walkman.tv.source.SourceManager
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -17,9 +18,13 @@ import org.json.JSONObject
  *   - tx: "mvId" (QQ Music mv.vid; otherwise we look it up via song detail)
  *   - mg: "mvId" (Migu mvCopyrightId returned by the search list)
  */
-class MvResolver(private val http: CatalogHttp) {
+class MvResolver(
+    private val http: CatalogHttp,
+    private val sources: SourceManager,
+) {
 
-    suspend fun getMvUrl(track: Track): MusicVideoInfo? = when (track.builtInSource) {
+    suspend fun getMvUrl(track: Track): MusicVideoInfo? =
+        scriptMv(track) ?: when (track.builtInSource) {
         SourceID.KW -> kuwo(track)
         SourceID.WY -> netease(track)
         SourceID.KG -> kugou(track)
@@ -28,6 +33,38 @@ class MvResolver(private val http: CatalogHttp) {
         else -> null
     }
 
+    /**
+     * Optional TV-host extension: scripts may declare action "mv" and return a URL string or
+     * an object containing url/pageUrl/id/name/qualities. This is not an LX v4 standard action;
+     * scripts without it continue through the built-in resolver below.
+     */
+    private suspend fun scriptMv(track: Track): MusicVideoInfo? {
+        val info = org.json.JSONObject().put("type", "").put("musicInfo", sources.makeOldMusicInfo(track))
+        val result = runCatching { sources.requestOptionalAction(track, "mv", info) }.getOrNull() ?: return null
+        if (result is String) {
+            return result.takeIf { it.startsWith("http", ignoreCase = true) }
+                ?.let { MusicVideoInfo(id = track.extras["mvId"], name = track.name, url = it) }
+        }
+        val obj = result as? org.json.JSONObject ?: return null
+        val data = obj.optJSONObject("data") ?: obj
+        val url = data.optString("url").ifEmpty { data.optString("playUrl") }.ifEmpty { null }
+        val qualities = mutableListOf<MvQuality>()
+        val array = data.optJSONArray("qualities") ?: data.optJSONArray("urls")
+        if (array != null) for (i in 0 until array.length()) {
+            val item = array.optJSONObject(i) ?: continue
+            val itemUrl = item.optString("url").ifEmpty { null } ?: continue
+            val type = item.optString("type").ifEmpty { item.optString("name") }.ifEmpty { "MV-${i + 1}" }
+            qualities.add(MvQuality(type = type, url = itemUrl, size = item.optString("size").ifEmpty { null }))
+        }
+        if (url.isNullOrBlank() && qualities.isEmpty()) return null
+        return MusicVideoInfo(
+            id = data.optString("id").ifEmpty { track.extras["mvId"] },
+            name = data.optString("name").ifEmpty { track.name },
+            url = url,
+            pageUrl = data.optString("pageUrl").ifEmpty { null },
+            qualities = qualities,
+        )
+    }
     // ===================================================================== Kuwo
 
     /** Kuwo's `anti.s?type=convert_url&rid=MV_<mvId>` returns either a real mp4 URL or the
