@@ -32,6 +32,9 @@ data class Track(
     /** Whether the source carries an MV for this track (set by per-platform search/board builders). */
     val providerKey: String get() = sourceKey ?: source.key
 
+    /** Human-readable provider label; custom providers fall back to their declared key. */
+    val providerDisplayName: String get() = sourceKey?.let { ScriptSourceKey.from(it)?.displayName } ?: source.displayName
+
     val hasMv: Boolean
         get() = !extras["mvId"].isNullOrEmpty()
 
