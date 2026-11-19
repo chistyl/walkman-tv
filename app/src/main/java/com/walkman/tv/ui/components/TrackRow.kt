@@ -131,7 +131,7 @@ fun TrackRow(
                 }
                 QualityBadge(track.qualities)
                 Spacer(Modifier.width(8.dp))
-                SourceChip(track.source)
+                SourceChip(track.source, displayName = track.providerDisplayName)
             }
         }
         if (onDownload != null || onAddToPlaylist != null || onRemove != null) {
