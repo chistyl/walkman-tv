@@ -66,6 +66,11 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
             .filter { (_, capability) -> capability.actions.contains("search") }
             .map { it.key }.distinct()
     }
+    val songlistSourceKeys = remember(loadedScripts) {
+        loadedScripts.flatMap { it.capabilities.sources.entries }
+            .filter { (_, capability) -> capability.actions.contains("songlist") }
+            .map { it.key }.distinct()
+    }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var songlists by remember { mutableStateOf<List<SonglistInfo>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
@@ -105,8 +110,22 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                         (catalogTracks + scriptTracks).distinctBy { it.id }
                     }
                     val songlistsJob = async {
-                        if (f == null) appContainer.songlists.searchAll(q)
-                        else SourceID.fromKey(f)?.let { appContainer.songlists.serviceFor(it)?.search(q, 1) }.orEmpty()
+                        val builtInLists = when {
+                            f == null -> appContainer.songlists.searchAll(q)
+                            SourceID.fromKey(f) != null ->
+                                SourceID.fromKey(f)?.let { appContainer.songlists.serviceFor(it)?.search(q, 1) }.orEmpty()
+                            else -> emptyList()
+                        }
+                        val customKeys = when {
+                            f == null -> songlistSourceKeys.filter { it.builtIn == null }
+                            SourceID.fromKey(f) != null -> emptyList()
+                            else -> ScriptSourceKey.from(f)?.takeIf { it.builtIn == null && it in songlistSourceKeys }?.let(::listOf).orEmpty()
+                        }
+                        val customLists = customKeys.flatMap { key ->
+                            runCatching { appContainer.sourceManager.searchScriptSonglists(key, q, 1) }
+                                .getOrDefault(emptyList())
+                        }
+                        (builtInLists + customLists).distinctBy { it.providerKey + ":" + it.id }
                     }
                     tracksJob.await() to songlistsJob.await()
                 }
@@ -176,11 +195,22 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                 },
                 onPickSonglist = { info ->
                     scope.launch {
-                        val svc = appContainer.songlists.serviceFor(info.source) ?: return@launch
-                        val detail = runCatching { svc.fetchDetail(info) }.getOrNull()
+                        val detail = if (info.builtInSource != null) {
+                            appContainer.songlists.serviceFor(info.builtInSource)?.let { svc ->
+                                runCatching { svc.fetchDetail(info) }.getOrNull()
+                            }
+                        } else {
+                            runCatching { appContainer.sourceManager.fetchScriptSonglistDetail(info) }.getOrNull()
+                        }
                         val ts = detail?.tracks.orEmpty()
                         if (ts.isNotEmpty()) {
                             playList(ts, 0); onOpenPlayer()
+                        } else {
+                            android.widget.Toast.makeText(
+                                appContainer.appContext,
+                                "無法讀取此歌單內容，請確認音源歌單解析格式",
+                                android.widget.Toast.LENGTH_SHORT,
+                            ).show()
                         }
                     }
                 },
@@ -311,12 +341,12 @@ private fun ResultsPane(
         else -> Column(modifier = Modifier.fillMaxSize()) {
             if (songlists.isNotEmpty()) {
                 SectionHeader("歌单 (${songlists.size})")
-                val uniqueSonglists = remember(songlists) { songlists.distinctBy { it.id + "_" + it.source.key } }
+                val uniqueSonglists = remember(songlists) { songlists.distinctBy { it.providerKey + "_" + it.id } }
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(vertical = 4.dp),
                 ) {
-                    items(uniqueSonglists, key = { it.id + "_" + it.source.key }) { sl ->
+                    items(uniqueSonglists, key = { it.providerKey + "_" + it.id }) { sl ->
                         Box(modifier = Modifier.width(140.dp)) {
                             MediaCard(
                                 title = sl.name,
