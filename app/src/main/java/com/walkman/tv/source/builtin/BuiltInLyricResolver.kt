@@ -16,7 +16,7 @@ class BuiltInLyricResolver(private val http: CatalogHttp) {
 
     private val ua = mapOf("User-Agent" to "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)")
 
-    suspend fun fetch(track: Track): List<LyricLine>? = when (track.source) {
+    suspend fun fetch(track: Track): List<LyricLine>? = when (track.builtInSource) {
         SourceID.KW -> kuwo(track.songmid)
         SourceID.TX -> qq(track.songmid)
         SourceID.WY -> netease(track.songmid)
