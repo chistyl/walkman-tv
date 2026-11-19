@@ -8,6 +8,8 @@ import com.walkman.tv.data.model.ScriptSourceKey
 import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.data.store.LibraryStore
 import com.walkman.tv.source.catalog.Songlists
+import com.walkman.tv.source.SourceManager
+import com.walkman.tv.data.model.ScriptSourceKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -104,6 +106,46 @@ object SonglistImporter {
         return ImportResult(playlistId = playlist.id, count = detail.tracks.size)
     }
 
+    /** Import a playlist returned by a script provider that explicitly declares songlist support. */
+    suspend fun importScriptPlaylist(
+        info: SonglistInfo,
+        sourceManager: SourceManager,
+        library: LibraryStore,
+        customName: String? = null,
+    ): ImportResult {
+        val key = ScriptSourceKey.from(info.providerKey)
+            ?: throw ImportError.FetchFailed("無效的音源識別碼")
+        if (info.builtInSource != null) {
+            throw ImportError.FetchFailed("此來源應使用內建歌單匯入流程")
+        }
+        if (!sourceManager.supportsSonglists(key)) {
+            throw ImportError.FetchFailed("音源「${info.providerDisplayName}」未宣告歌單功能")
+        }
+        val detail = try {
+            sourceManager.fetchScriptSonglistDetail(info)
+                ?: throw ImportError.FetchFailed("音源未回傳可辨識的歌單內容")
+        } catch (e: ImportError) {
+            throw e
+        } catch (e: Exception) {
+            throw ImportError.FetchFailed(e.localizedMessage ?: e.toString())
+        }
+        if (detail.tracks.isEmpty()) throw ImportError.EmptyPlaylist
+
+        val name = customName?.trim()?.takeIf { it.isNotEmpty() }
+            ?: detail.info.name.takeIf { it.isNotBlank() }
+            ?: info.name.takeIf { it.isNotBlank() }
+            ?: "導入的歌單"
+        val origin = PlaylistOrigin(
+            source = SourceID.LOCAL,
+            id = info.id,
+            platformTrackIds = detail.tracks.map { it.id },
+            sourceKey = key.value,
+        )
+        val playlist = library.createList(name, origin)
+        library.addAllToList(playlist.id, detail.tracks)
+        return ImportResult(playlist.id, detail.tracks.size)
+    }
+
     private val _refreshing = MutableStateFlow<Set<String>>(emptySet())
     /** Ids of playlists with a 更新歌单 in flight — lets the detail page show 更新中… again if the
      *  user leaves and comes back mid-refresh. */
@@ -120,12 +162,13 @@ object SonglistImporter {
         library: LibraryStore,
         scope: CoroutineScope,
         onDone: (String) -> Unit,
+        sourceManager: SourceManager? = null,
     ) {
         if (playlist.id in _refreshing.value) return
         _refreshing.update { it + playlist.id }
         scope.launch {
             val msg = try {
-                val r = refreshPlaylist(playlist, songlists, library)
+                val r = refreshPlaylist(playlist, songlists, library, sourceManager)
                 if (r.added == 0 && r.removed == 0) "「${playlist.name}」已是最新（${r.total} 首）"
                 else "「${playlist.name}」已更新：共 ${r.total} 首，新增 ${r.added}，移除 ${r.removed}" +
                     if (r.kept > 0) "（保留手动添加的 ${r.kept} 首）" else ""
@@ -151,12 +194,30 @@ object SonglistImporter {
         playlist: Playlist,
         songlists: Songlists,
         library: LibraryStore,
+        sourceManager: SourceManager?,
     ): RefreshResult {
         val origin = playlist.origin ?: throw ImportError.UnrecognizedURL
-        // Never route a dynamic provider through the legacy LOCAL enum placeholder. Until the
-        // script playlist contract is wired end-to-end, fail safely without mutating the list.
-        if (origin.isCustomProvider) throw ImportError.CustomProviderRefreshUnsupported
-        val detail = fetch(SonglistRef(origin.source, origin.id), songlists)
+        val detail = if (origin.isCustomProvider) {
+            val manager = sourceManager ?: throw ImportError.CustomProviderRefreshUnsupported
+            val key = ScriptSourceKey.from(origin.providerKey)
+                ?: throw ImportError.FetchFailed("無效的音源識別碼")
+            val stub = SonglistInfo(
+                id = origin.id,
+                source = SourceID.LOCAL,
+                name = playlist.name,
+                sourceKey = key.value,
+            )
+            try {
+                manager.fetchScriptSonglistDetail(stub)
+                    ?: throw ImportError.FetchFailed("音源未回傳可辨識的歌單內容")
+            } catch (e: ImportError) {
+                throw e
+            } catch (e: Exception) {
+                throw ImportError.FetchFailed(e.localizedMessage ?: e.toString())
+            }.also { if (it.tracks.isEmpty()) throw ImportError.EmptyPlaylist }
+        } else {
+            fetch(SonglistRef(origin.source, origin.id), songlists)
+        }
         // Re-read after the (slow) fetch so edits made meanwhile aren't lost.
         val live = library.userLists.value.firstOrNull { it.id == playlist.id }
             ?: throw IllegalStateException("歌单已被删除")
