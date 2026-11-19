@@ -14,13 +14,13 @@ data class Track(
     val albumName: String? = null,
     val albumId: String? = null,
     val source: SourceID,
-    /** Dynamic custom-provider key; null means this is a legacy built-in track. */
-    val sourceKey: String? = null,
     val songmid: String,
     val duration: Int? = null,
     val picURL: String? = null,
     val qualities: List<Quality> = emptyList(),
     val extras: Map<String, String> = emptyMap(),
+    /** Dynamic custom-provider key; null means this is a legacy built-in track. */
+    val sourceKey: String? = null,
 ) {
     val subtitle: String
         get() = if (!albumName.isNullOrEmpty()) "$singer · $albumName" else singer
