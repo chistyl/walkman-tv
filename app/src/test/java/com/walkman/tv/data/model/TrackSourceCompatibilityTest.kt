@@ -144,6 +144,28 @@ class TrackSourceCompatibilityTest {
     }
 
     @Test
+    fun songlistInfoPreservesCustomProviderIdentity() {
+        val custom = SonglistInfo(
+            id = "list_1",
+            source = SourceID.LOCAL,
+            name = "自訂歌單",
+            sourceKey = "custom_provider",
+            sourceDisplayName = "自訂平台",
+        )
+        val builtIn = SonglistInfo(
+            id = "list_2",
+            source = SourceID.WY,
+            name = "內建歌單",
+        )
+
+        assertEquals("custom_provider", custom.providerKey)
+        assertEquals("自訂平台", custom.providerDisplayName)
+        assertNull(custom.builtInSource)
+        assertEquals("wy", builtIn.providerKey)
+        assertEquals(SourceID.WY, builtIn.builtInSource)
+    }
+
+    @Test
     fun legacyPlaylistOriginWithoutSourceKeyStillLoads() {
         val legacyJson = """{"source":"wy","id":"playlist_456","platformTrackIds":["song_3"]}"""
         val restored = Json { ignoreUnknownKeys = true }
