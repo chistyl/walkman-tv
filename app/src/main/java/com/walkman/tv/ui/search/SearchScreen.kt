@@ -323,6 +323,7 @@ private fun ResultsPane(
     onPickHot: (String) -> Unit = {},
 ) {
     val history by appContainer.searchHistoryStore.items.collectAsState()
+    val scope = rememberCoroutineScope()
     when {
         loading -> LoadingState(Modifier.fillMaxSize())
         !searched -> {
