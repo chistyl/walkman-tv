@@ -181,42 +181,67 @@ globalThis.lx_setup = (key, id, name, description, version, author, homepage, ra
     tagret.callback(...tagret.params)
   }
 
-  // 将字节数组解码为字符串（UTF-8）
-  function bytesToString(bytes) {
+  // UTF-8 codec compatible with Node Buffer semantics, including surrogate pairs.
+  // Invalid byte sequences decode to U+FFFD instead of reading beyond the input.
+  function bytesToString(input) {
+    const bytes = Array.from(input, value => Number(value) & 0xff)
     let result = ''
-    let i = 0
-    while (i < bytes.length) {
-      const byte = bytes[i]
-      if (byte < 128) {
-        result += String.fromCharCode(byte)
-        i++
-      } else if (byte >= 192 && byte < 224) {
-        result += String.fromCharCode(((byte & 31) << 6) | (bytes[i + 1] & 63))
-        i += 2
-      } else {
-        result += String.fromCharCode(((byte & 15) << 12) | ((bytes[i + 1] & 63) << 6) | (bytes[i + 2] & 63))
-        i += 3
-      }
+    for (let i = 0; i < bytes.length;) {
+      const a = bytes[i++]
+      let codePoint
+      if (a < 0x80) codePoint = a
+      else if (a >= 0xc2 && a <= 0xdf && i < bytes.length &&
+        (bytes[i] & 0xc0) === 0x80) {
+        codePoint = ((a & 0x1f) << 6) | (bytes[i++] & 0x3f)
+      } else if (a >= 0xe0 && a <= 0xef && i + 1 < bytes.length &&
+        (bytes[i] & 0xc0) === 0x80 && (bytes[i + 1] & 0xc0) === 0x80 &&
+        !(a === 0xe0 && bytes[i] < 0xa0) && !(a === 0xed && bytes[i] >= 0xa0)) {
+        codePoint = ((a & 0x0f) << 12) | ((bytes[i++] & 0x3f) << 6) | (bytes[i++] & 0x3f)
+      } else if (a >= 0xf0 && a <= 0xf4 && i + 2 < bytes.length &&
+        (bytes[i] & 0xc0) === 0x80 && (bytes[i + 1] & 0xc0) === 0x80 &&
+        (bytes[i + 2] & 0xc0) === 0x80 &&
+        !(a === 0xf0 && bytes[i] < 0x90) && !(a === 0xf4 && bytes[i] > 0x8f)) {
+        codePoint = ((a & 0x07) << 18) | ((bytes[i++] & 0x3f) << 12) |
+          ((bytes[i++] & 0x3f) << 6) | (bytes[i++] & 0x3f)
+      } else codePoint = 0xfffd
+      result += String.fromCodePoint(codePoint)
     }
     return result
   }
-  // 将字符串编码为字节数组（UTF-8）
+
   function stringToBytes(inputString) {
     const bytes = []
     for (let i = 0; i < inputString.length; i++) {
-      const charCode = inputString.charCodeAt(i)
-      if (charCode < 128) {
-        bytes.push(charCode)
-      } else if (charCode < 2048) {
-        bytes.push((charCode >> 6) | 192)
-        bytes.push((charCode & 63) | 128)
+      let codePoint = inputString.codePointAt(i)
+      if (codePoint > 0xffff) i++
+      else if (codePoint >= 0xd800 && codePoint <= 0xdfff) codePoint = 0xfffd
+      if (codePoint < 0x80) bytes.push(codePoint)
+      else if (codePoint < 0x800) {
+        bytes.push(0xc0 | (codePoint >> 6), 0x80 | (codePoint & 0x3f))
+      } else if (codePoint < 0x10000) {
+        bytes.push(0xe0 | (codePoint >> 12), 0x80 | ((codePoint >> 6) & 0x3f), 0x80 | (codePoint & 0x3f))
       } else {
-        bytes.push((charCode >> 12) | 224)
-        bytes.push(((charCode >> 6) & 63) | 128)
-        bytes.push((charCode & 63) | 128)
+        bytes.push(0xf0 | (codePoint >> 18), 0x80 | ((codePoint >> 12) & 0x3f),
+          0x80 | ((codePoint >> 6) & 0x3f), 0x80 | (codePoint & 0x3f))
       }
     }
     return bytes
+  }
+
+  const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+  function bytesToBase64(input) {
+    const bytes = Array.from(input, value => Number(value) & 0xff)
+    let result = ''
+    for (let i = 0; i < bytes.length; i += 3) {
+      const a = bytes[i], hasB = i + 1 < bytes.length, hasC = i + 2 < bytes.length
+      const b = hasB ? bytes[i + 1] : 0
+      const c = hasC ? bytes[i + 2] : 0
+      result += BASE64_ALPHABET[a >> 2]
+      result += BASE64_ALPHABET[((a & 3) << 4) | (b >> 4)]
+      result += hasB ? BASE64_ALPHABET[((b & 15) << 2) | (c >> 6)] : '='
+      result += hasC ? BASE64_ALPHABET[c & 63] : '='
+    }
+    return result
   }
 
   const NATIVE_EVENTS_NAMES = {
@@ -492,7 +517,8 @@ globalThis.lx_setup = (key, id, name, description, version, author, homepage, ra
             case 'base64':
               return new Uint8Array(JSON.parse(nativeFuncs.utils_b642buf(input)))
             case 'hex':
-              return new Uint8Array(input.match(/.{1,2}/g).map(byte => parseInt(byte, 16)))
+              if (input.length % 2 !== 0 || !/^[0-9a-f]*$/i.test(input)) throw new Error('Invalid hex string')
+              return new Uint8Array(input.match(/.{2}/g)?.map(byte => parseInt(byte, 16)) || [])
             default:
               return new Uint8Array(stringToBytes(input))
           }
@@ -512,7 +538,8 @@ globalThis.lx_setup = (key, id, name, description, version, author, homepage, ra
             case 'hex':
               return new Uint8Array(buf).reduce((str, byte) => str + byte.toString(16).padStart(2, '0'), '')
             case 'base64':
-              return nativeFuncs.utils_str2b64(bytesToString(Array.from(buf)))
+              // Encode raw bytes directly; decoding bytes as UTF-8 first corrupts binary payloads.
+              return bytesToBase64(buf)
             case 'utf8':
             case 'utf-8':
             default:
