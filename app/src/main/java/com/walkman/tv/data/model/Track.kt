@@ -36,6 +36,9 @@ data class Track(
     /** Whether the source carries an MV for this track (set by per-platform search/board builders). */
     val providerKey: String get() = sourceKey ?: source.key
 
+    /** Actual built-in provider, null for custom script platforms even when legacy source is LOCAL. */
+    val builtInSource: SourceID? get() = sourceKey?.let { ScriptSourceKey.from(it)?.builtIn } ?: source
+
     /** Human-readable provider label; custom providers fall back to their declared key. */
     val providerDisplayName: String get() = sourceDisplayName?.takeIf { it.isNotBlank() }
         ?: sourceKey?.let { ScriptSourceKey.from(it)?.displayName }
