@@ -15,7 +15,7 @@ import org.json.JSONObject
 internal class TrackDetailFetcher(private val http: CatalogHttp) {
 
     suspend fun fetch(track: Track): TrackDetails? = runCatching {
-        when (track.source) {
+        when (track.builtInSource) {
             SourceID.WY -> fetchNetEase(track)
             SourceID.TX -> fetchQq(track)
             SourceID.KW -> fetchKuwo(track)
