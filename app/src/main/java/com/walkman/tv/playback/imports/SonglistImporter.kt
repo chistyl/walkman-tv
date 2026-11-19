@@ -9,7 +9,6 @@ import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.data.store.LibraryStore
 import com.walkman.tv.source.catalog.Songlists
 import com.walkman.tv.source.SourceManager
-import com.walkman.tv.data.model.ScriptSourceKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,7 +24,7 @@ sealed class ImportError(message: String) : Throwable(message) {
     object UnrecognizedURL : ImportError("无法识别歌单链接，请粘贴酷我 / 酷狗 / QQ / 网易云的歌单分享链接")
     class FetchFailed(detail: String) : ImportError("获取歌单失败：$detail")
     object EmptyPlaylist : ImportError("歌单为空、私密或暂时无法读取（私密歌单需创建者设为公开后才能导入）")
-    object CustomProviderRefreshUnsupported : ImportError("此自訂音源的歌單更新功能尚未接入，為避免錯誤覆蓋歌單，請保留目前內容")
+    object CustomProviderRefreshUnsupported : ImportError("自訂音源尚未載入或未提供歌單更新功能，請確認音源狀態")
 }
 
 data class ImportResult(val playlistId: String, val count: Int)
