@@ -15,8 +15,8 @@ function loadPreloadWithoutNativeUrlSearchParams() {
     URLSearchParams: undefined,
     __lx_native_call__: (_key, action, data) => nativeCalls.push({ action, data: JSON.parse(data) }),
     __lx_native_call__set_timeout: () => {},
-    __lx_native_call__utils_str2b64: () => '',
-    __lx_native_call__utils_b642buf: () => '[]',
+    __lx_native_call__utils_str2b64: value => Buffer.from(value, 'utf8').toString('base64'),
+    __lx_native_call__utils_b642buf: value => JSON.stringify(Array.from(Buffer.from(value, 'base64'))),
     __lx_native_call__utils_str2md5: () => '',
     __lx_native_call__utils_aes_encrypt: () => '',
     __lx_native_call__utils_rsa_encrypt: () => '',
@@ -92,6 +92,39 @@ test('QuickJS preload supplies a compatible URLSearchParams implementation', () 
   })
 })
 
+
+
+test('buffer codec preserves four-byte UTF-8 and arbitrary binary Base64', () => {
+  const { context } = loadPreloadWithoutNativeUrlSearchParams()
+  const result = vm.runInContext(`(() => {
+    const text = '繁體中文🎵𠜎'
+    const encoded = lx.utils.buffer.from(text)
+    const decoded = lx.utils.buffer.bufToString(encoded, 'utf8')
+    const binary = new Uint8Array([0, 127, 128, 255, 1, 254])
+    const base64 = lx.utils.buffer.bufToString(binary, 'base64')
+    const restored = lx.utils.buffer.from(base64, 'base64')
+    const hex = lx.utils.buffer.from('00ff80', 'hex')
+    let invalidHexRejected = false
+    try { lx.utils.buffer.from('0xz', 'hex') } catch (_) { invalidHexRejected = true }
+    return JSON.stringify({
+      decoded,
+      encodedBytes: Array.from(encoded),
+      base64,
+      restoredBytes: Array.from(restored),
+      hexBytes: Array.from(hex),
+      invalidHexRejected,
+    })
+  })()`, context)
+
+  assert.deepEqual(JSON.parse(result), {
+    decoded: '繁體中文🎵𠜎',
+    encodedBytes: Array.from(Buffer.from('繁體中文🎵𠜎', 'utf8')),
+    base64: 'AH+A/wH+',
+    restoredBytes: [0, 127, 128, 255, 1, 254],
+    hexBytes: [0, 255, 128],
+    invalidHexRejected: true,
+  })
+})
 
 test('preload preserves supported search and songlist actions and long custom quality keys', async () => {
   const { context, nativeCalls } = loadPreloadWithoutNativeUrlSearchParams()
