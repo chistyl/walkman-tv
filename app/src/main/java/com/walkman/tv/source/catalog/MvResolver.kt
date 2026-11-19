@@ -19,7 +19,7 @@ import org.json.JSONObject
  */
 class MvResolver(private val http: CatalogHttp) {
 
-    suspend fun getMvUrl(track: Track): MusicVideoInfo? = when (track.source) {
+    suspend fun getMvUrl(track: Track): MusicVideoInfo? = when (track.builtInSource) {
         SourceID.KW -> kuwo(track)
         SourceID.WY -> netease(track)
         SourceID.KG -> kugou(track)
