@@ -10,7 +10,9 @@ import com.walkman.tv.data.model.UserScript
 import com.walkman.tv.source.builtin.BuiltInResolver
 import com.walkman.tv.source.js.JsScriptRuntime
 import com.walkman.tv.source.js.ScriptHttpClient
+import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -167,9 +169,9 @@ class SourceManager(
                 .filter { (_, capability) -> capability.actions.contains("search") }
                 .map { (key, _) -> loaded to key }
         }.distinctBy { it.first.script.id to it.second }
-        return kotlinx.coroutines.coroutineScope {
+        return coroutineScope {
             providers.map { (loaded, source) ->
-                kotlinx.coroutines.async {
+                async {
                     runCatching { searchWithScript(loaded, source, keyword, page) }.getOrDefault(emptyList())
                 }
             }.awaitAll().flatten()
