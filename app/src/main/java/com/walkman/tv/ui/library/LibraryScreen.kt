@@ -484,6 +484,7 @@ private fun PlaylistDetailPane(
                                     songlists = appContainer.songlists,
                                     library = appContainer.libraryStore,
                                     scope = appContainer.appScope,
+                                    sourceManager = appContainer.sourceManager,
                                 ) { msg ->
                                     android.widget.Toast.makeText(appContext, msg, android.widget.Toast.LENGTH_SHORT).show()
                                 }
