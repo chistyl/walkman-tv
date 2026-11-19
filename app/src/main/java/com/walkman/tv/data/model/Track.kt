@@ -21,6 +21,8 @@ data class Track(
     val extras: Map<String, String> = emptyMap(),
     /** Dynamic custom-provider key; null means this is a legacy built-in track. */
     val sourceKey: String? = null,
+    /** Display label from the imported script; null keeps legacy built-in naming. */
+    val sourceDisplayName: String? = null,
 ) {
     val subtitle: String
         get() = if (!albumName.isNullOrEmpty()) "$singer · $albumName" else singer
@@ -33,7 +35,9 @@ data class Track(
     val providerKey: String get() = sourceKey ?: source.key
 
     /** Human-readable provider label; custom providers fall back to their declared key. */
-    val providerDisplayName: String get() = sourceKey?.let { ScriptSourceKey.from(it)?.displayName } ?: source.displayName
+    val providerDisplayName: String get() = sourceDisplayName?.takeIf { it.isNotBlank() }
+        ?: sourceKey?.let { ScriptSourceKey.from(it)?.displayName }
+        ?: source.displayName
 
     val hasMv: Boolean
         get() = !extras["mvId"].isNullOrEmpty()
