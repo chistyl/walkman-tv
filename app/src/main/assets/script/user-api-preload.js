@@ -107,6 +107,7 @@ globalThis.lx_setup = (key, id, name, description, version, author, homepage, ra
     '__lx_native_call__utils_str2b64',
     '__lx_native_call__utils_b642buf',
     '__lx_native_call__utils_str2md5',
+    '__lx_native_call__utils_random_bytes',
     '__lx_native_call__utils_aes_encrypt',
     '__lx_native_call__utils_rsa_encrypt',
   ]
@@ -544,11 +545,10 @@ globalThis.lx_setup = (key, id, name, description, version, author, homepage, ra
         return utils.buffer.from(nativeFuncs.utils_rsa_encrypt(dataToB64(buffer), key, RSA_PADDING.NoPadding), 'base64')
       },
       randomBytes(size) {
-        const byteArray = new Uint8Array(size)
-        for (let i = 0; i < size; i++) {
-          byteArray[i] = Math.floor(Math.random() * 256) // 随机生成一个字节的值（0-255）
+        if (!Number.isSafeInteger(size) || size < 0 || size > 65536) {
+          throw new RangeError('size must be an integer between 0 and 65536')
         }
-        return byteArray
+        return new Uint8Array(JSON.parse(nativeFuncs.utils_random_bytes(size)))
       },
       md5(str) {
         if (typeof str !== 'string') throw new Error('param required a string')
