@@ -37,6 +37,8 @@ data class DownloadRecord(
      *  Uri (content://…). Non-null ⇒ the file lives there (not under [baseDir]); playback +
      *  existence checks + deletion go through the ContentResolver. */
     var safUri: String? = null,
+    /** Exact provider tier key; null on legacy records means [quality].key. */
+    val qualityKey: String? = null,
 )
 
 @Serializable
