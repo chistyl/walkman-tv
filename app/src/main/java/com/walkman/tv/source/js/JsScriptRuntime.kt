@@ -240,7 +240,7 @@ class JsScriptRuntime(
         val requestKey = obj.optString("requestKey").ifEmpty { return }
         val url = obj.optString("url").ifEmpty { return }
         val options = obj.optJSONObject("options") ?: JSONObject()
-        http.send(requestKey, url, options) { error, response ->
+        http.send(requestKey, url, options, cookieNamespace = script.id) { error, response ->
             // Completes on an OkHttp thread — hop back to the JS thread to call the script.
             scope.launch {
                 val payload = JSONObject().put("requestKey", requestKey)
