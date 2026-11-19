@@ -200,6 +200,31 @@ class SourceManager(
         val ls = scriptFor(source, action) ?: return null
         return ls.runtime.requestAction(source, action, info)
     }
+
+    /**
+     * Resolve an optional LX Music v4 `pic` action for the currently playing track.
+     * Existing search-result artwork always wins; this is a playback-only fallback.
+     * Accepted script results: URL string, {url}, or {data:{url}}.
+     */
+    suspend fun resolveOptionalPicture(track: Track): String? {
+        track.picURL?.takeIf(::isHttpImageUrl)?.let { return it }
+        val info = JSONObject().put("musicInfo", makeOldMusicInfo(track))
+        val raw = runCatching { requestOptionalAction(track, "pic", info) }.getOrNull()
+        val obj = raw as? JSONObject
+        val candidate = when (raw) {
+            is String -> raw
+            is JSONObject -> obj?.optString("url")?.takeIf { it.isNotBlank() }
+                ?: obj?.optJSONObject("data")?.optString("url")?.takeIf { it.isNotBlank() }
+            else -> null
+        }
+        return candidate?.takeIf(::isHttpImageUrl)
+    }
+
+    private fun isHttpImageUrl(value: String): Boolean {
+        val uri = runCatching { android.net.Uri.parse(value) }.getOrNull() ?: return false
+        return uri.scheme.equals("https", ignoreCase = true) ||
+            uri.scheme.equals("http", ignoreCase = true)
+    }
     /** Ask a user script for lyric data — raw `{lyric, tlyric, rlyric, lxlyric}` (iOS `requestLyric`). */
     suspend fun requestLyric(track: Track): JSONObject? {
         val ls = scriptFor(ScriptSourceKey(track.providerKey), "lyric") ?: throw SourceException("没有脚本提供 ${track.providerDisplayName} 歌词")
