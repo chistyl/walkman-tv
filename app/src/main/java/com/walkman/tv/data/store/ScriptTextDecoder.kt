@@ -26,12 +26,14 @@ object ScriptTextDecoder {
                 ?: runCatching { String(bytes, CharsetHolder.GB18030) }.getOrNull()
         } ?: return null
 
-        val normalized = decoded
-            .removePrefix("\uFEFF")
-            .replace("\r\n", "\n")
-            .replace('\r', '\n')
-        return normalized.takeIf { it.isNotBlank() && '\u0000' !in it }
+        return normalize(decoded).takeIf { it.isNotBlank() && '\u0000' !in it }
     }
+
+    /** Normalize text received from paste boxes and remote URLs as well as decoded files. */
+    fun normalize(text: String): String = text
+        .removePrefix("\uFEFF")
+        .replace("\r\n", "\n")
+        .replace('\r', '\n')
 
     private fun decodeStrict(bytes: ByteArray, charset: java.nio.charset.Charset): String? =
         runCatching {
