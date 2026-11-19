@@ -143,6 +143,13 @@ class JsScriptRuntime(
         g.setProperty("__lx_native_call__utils_b642buf", JSCallFunction { a ->
             runCatching { CryptoBridge.b642buf(a[0] as String) }.getOrDefault("[]")
         })
+        g.setProperty("__lx_native_call__utils_random_bytes", JSCallFunction { a ->
+            runCatching {
+                val size = (a.getOrNull(0) as? Number)?.toInt()
+                    ?: throw IllegalArgumentException("byte count required")
+                CryptoBridge.randomBytesJson(size)
+            }.getOrElse { "[]" }
+        })
         g.setProperty("__lx_native_call__utils_str2md5", JSCallFunction { a ->
             runCatching { CryptoBridge.str2md5(a[0] as String) }.getOrDefault("")
         })
