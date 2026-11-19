@@ -713,7 +713,7 @@ private fun ActiveDownloadRow(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(rec.track.name, color = AppColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                Text("${rec.track.singer} · ${rec.quality.displayName}", color = AppColors.TextMuted, fontSize = 11.sp, maxLines = 1)
+                Text("${rec.track.singer} · ${com.walkman.tv.playback.customQualityLabel(rec.qualityKey) ?: rec.quality.displayName}", color = AppColors.TextMuted, fontSize = 11.sp, maxLines = 1)
                 Spacer(Modifier.height(4.dp))
                 Box(
                     modifier = Modifier
