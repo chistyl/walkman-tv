@@ -116,7 +116,7 @@ class SourceManager(
             val q = pickPlayQuality(
                 preferred,
                 alt.qualities.toSet(),
-                altLS.capabilities.sources[alt.source]?.qualities?.toSet() ?: emptySet(),
+                altLS.capabilities.sources[ScriptSourceKey(alt.source.key)]?.qualities?.toSet() ?: emptySet(),
             )
             runCatching { resolveViaScript(alt, q, altLS) }.getOrNull()?.let { url ->
                 val warn = "原 ${track.source.displayName} 源无法获取播放地址，已换到 ${alt.source.displayName}"
@@ -139,23 +139,23 @@ class SourceManager(
 
     /** Ask a user script for lyric data — raw `{lyric, tlyric, rlyric, lxlyric}` (iOS `requestLyric`). */
     suspend fun requestLyric(track: Track): JSONObject? {
-        val ls = scriptFor(track.source, "lyric") ?: throw SourceException("没有脚本提供 ${track.source.displayName} 歌词")
+        val ls = scriptFor(ScriptSourceKey(track.source.key), "lyric") ?: throw SourceException("没有脚本提供 ${track.source.displayName} 歌词")
         val info = JSONObject().put("type", "").put("musicInfo", makeOldMusicInfo(track))
         return ls.runtime.requestAction(ScriptSourceKey(track.source.key), "lyric", info) as? JSONObject
     }
 
     fun availableQualities(source: SourceID): List<Quality> {
         val set = mutableSetOf<Quality>()
-        _loaded.value.forEach { it.capabilities.sources[source]?.qualities?.forEach(set::add) }
+        _loaded.value.forEach { it.capabilities.sources[ScriptSourceKey(source.key)]?.qualities?.forEach(set::add) }
         return Quality.entries.filter { set.contains(it) }
     }
 
     fun supportedSources(): List<SourceID> {
-        val set = mutableSetOf<SourceID>()
+        val set = mutableSetOf<ScriptSourceKey>()
         _loaded.value.forEach { ls ->
             ls.capabilities.sources.forEach { (src, cap) -> if (cap.actions.contains("musicUrl")) set.add(src) }
         }
-        return SourceID.entries.filter { set.contains(it) }
+        return set.mapNotNull { key -> key.builtIn }.distinct()
     }
 
     /** Build the v4 "old format" musicInfo a script expects (iOS `makeOldMusicInfo`). */
