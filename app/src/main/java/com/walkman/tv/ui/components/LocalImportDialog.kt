@@ -149,7 +149,7 @@ fun LocalImportDialog(onDismiss: () -> Unit) {
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
             ) {
                 Text(
-                    pickedFile?.name ?: "选择資料夾…",
+                    pickedFile?.name ?: "選擇資料夾…",
                     fontSize = 13.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -191,7 +191,7 @@ fun LocalImportDialog(onDismiss: () -> Unit) {
                         .padding(horizontal = 14.dp, vertical = 12.dp),
                 ) {
                     Text(
-                        text = playlistName.ifEmpty { "（默认用資料夾名）" },
+                        text = playlistName.ifEmpty { "（預設使用資料夾名稱）" },
                         color = if (playlistName.isEmpty()) AppColors.TextMuted else AppColors.TextPrimary,
                         fontSize = 14.sp,
                     )
