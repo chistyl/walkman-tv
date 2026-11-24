@@ -1,5 +1,7 @@
 package com.walkman.tv.playback
 
+import com.walkman.tv.util.ChineseText
+
 /** A single lyric line (iOS `LyricLine`). [time] is seconds; -1 means untimed (plain text). */
 data class LyricLine(
     val id: Int,
@@ -25,7 +27,7 @@ object LyricParser {
         if (lines.isEmpty()) {
             raw.replace("\r\n", "\n").replace("\r", "\n")
                 .split("\n").filter { it.isNotBlank() }
-                .forEach { lines.add(LyricLine(nextId++, -1.0, it.trim())) }
+                .forEach { lines.add(LyricLine(nextId++, -1.0, ChineseText.toTaiwanTraditional(it.trim()))) }
         }
         return lines
     }
@@ -47,7 +49,7 @@ object LyricParser {
                 var msStr = m.groupValues.getOrNull(3)?.ifEmpty { "0" } ?: "0"
                 if (msStr.length == 2) msStr += "0"
                 val ms = msStr.toDoubleOrNull() ?: 0.0
-                out.add(Parsed(mins * 60 + secs + ms / 1000.0, text))
+                out.add(Parsed(mins * 60 + secs + ms / 1000.0, ChineseText.toTaiwanTraditional(text)))
             }
         }
         return out.sortedBy { it.time }
