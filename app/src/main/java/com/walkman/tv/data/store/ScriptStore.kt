@@ -4,6 +4,7 @@ import android.content.Context
 import com.walkman.tv.data.model.UserScript
 import com.walkman.tv.source.SourceManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,14 +23,34 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
     private val _scripts = MutableStateFlow<List<UserScript>>(emptyList())
     val scripts: StateFlow<List<UserScript>> = _scripts.asStateFlow()
 
-    /** Load persisted scripts and start the enabled ones. First-run users start with no
-     *  custom source — they configure their own via Settings (URL / paste / file / QR upload). */
+    /**
+     * Load saved scripts first, then install the bundled 野花 v1 source only when no matching
+     * source is already present. Existing user scripts are never replaced or removed.
+     *
+     * The bundled script performs network requests during initialization. Keep that operation
+     * bounded and best-effort so an unavailable third-party service cannot prevent app startup.
+     */
     suspend fun loadAll() {
         val persisted = withContext(Dispatchers.IO) { store.load() }
-        // Preserve all user-imported sources, including 野花 v1, across upgrades.
-        // Never silently delete a user's custom source during startup.
         _scripts.value = persisted
         persisted.filter { it.enabled }.forEach { sourceManager.load(it) }
+        installBundledYehuaIfMissing()
+    }
+
+    private suspend fun installBundledYehuaIfMissing() {
+        // Treat either historical display name as an existing installation. This also protects
+        // a user's manually imported copy, even if its author metadata differs.
+        if (_scripts.value.any { it.name.trim() in BUNDLED_YEHUA_NAMES }) return
+
+        val raw = runCatching {
+            withContext(Dispatchers.IO) {
+                context.assets.open(BUNDLED_YEHUA_ASSET).bufferedReader(Charsets.UTF_8).use { it.readText() }
+            }
+        }.getOrNull() ?: return
+
+        // Do not block startup indefinitely on a third-party source's init/network requests.
+        runCatching { withTimeout(BUNDLED_IMPORT_TIMEOUT_MS) { import(raw) } }
+            .onFailure { android.util.Log.w(TAG, "Bundled 野花 v1 source was not installed: ${it.message}") }
     }
 
     /** Result of [import]: [replaced] is the older copy of the same script (same name + author)
@@ -91,6 +112,11 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
     private suspend fun persist() = withContext(Dispatchers.IO) { store.save(_scripts.value) }
 
     companion object {
+        private const val TAG = "ScriptStore"
+        private const val BUNDLED_YEHUA_ASSET = "script/yehua-v1.js"
+        private const val BUNDLED_IMPORT_TIMEOUT_MS = 12_000L
+        private val BUNDLED_YEHUA_NAMES = setOf("野花🌷", "野花")
+
         private val headerBlock = Regex("""/\*[\s\S]*?\*/""")
         private val tagLine = Regex("""@(\w+)\s+(.+)""")
 
