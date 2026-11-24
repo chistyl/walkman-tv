@@ -8,10 +8,10 @@ import kotlinx.serialization.Serializable
 enum class SourceID(val key: String, val displayName: String) {
     @SerialName("kw") KW("kw", "酷我"),
     @SerialName("kg") KG("kg", "酷狗"),
-    @SerialName("tx") TX("tx", "QQ音乐"),
-    @SerialName("wy") WY("wy", "网易云"),
+    @SerialName("tx") TX("tx", "QQ 音樂"),
+    @SerialName("wy") WY("wy", "網易雲音樂"),
     @SerialName("mg") MG("mg", "咪咕"),
-    @SerialName("local") LOCAL("local", "本地");
+    @SerialName("local") LOCAL("local", "本機");
 
     companion object {
         fun fromKey(key: String?): SourceID? = entries.firstOrNull { it.key == key }
@@ -38,14 +38,14 @@ enum class SourceID(val key: String, val displayName: String) {
  */
 @Serializable
 enum class Quality(val key: String, val displayName: String) {
-    @SerialName("128k")       K128       ("128k",       "标准 128k"),
-    @SerialName("320k")       K320       ("320k",       "高品 320k"),
-    @SerialName("flac")       FLAC       ("flac",       "无损 FLAC"),
+    @SerialName("128k")       K128       ("128k",       "標準 128k"),
+    @SerialName("320k")       K320       ("320k",       "高品質 320k"),
+    @SerialName("flac")       FLAC       ("flac",       "無損 FLAC"),
     @SerialName("flac24bit")  FLAC24     ("flac24bit",  "Hi-Res 24bit"),
     @SerialName("hires")      HIRES      ("hires",      "Hi-Res 高解析"),
-    @SerialName("atmos")      ATMOS      ("atmos",      "臻品全景声"),
-    @SerialName("atmos_plus") ATMOS_PLUS ("atmos_plus", "臻品全景声 2.0"),
-    @SerialName("master")     MASTER     ("master",     "臻品母带");
+    @SerialName("atmos")      ATMOS      ("atmos",      "臻品全景聲"),
+    @SerialName("atmos_plus") ATMOS_PLUS ("atmos_plus", "臻品全景聲 2.0"),
+    @SerialName("master")     MASTER     ("master",     "臻品母帶");
 
     /** Extended tiers may be played even when catalog metadata doesn't list them — see spec §3. */
     val isExtendedTier: Boolean
