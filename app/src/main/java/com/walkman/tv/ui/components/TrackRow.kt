@@ -100,7 +100,7 @@ fun TrackRow(
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        track.name,
+                        track.displayName,
                         color = if (nowPlaying) AppColors.AccentGreen else AppColors.TextPrimary,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold,
