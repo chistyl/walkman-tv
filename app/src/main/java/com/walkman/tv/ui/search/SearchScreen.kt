@@ -386,6 +386,9 @@ private fun HotSearchGrid(
                     )
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
+                        // Keep room around scaled TV focus surfaces so their green border is
+                        // not clipped by LazyColumn's viewport at the first/last rows or edges.
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
                         verticalArrangement = Arrangement.spacedBy(7.dp),
                     ) {
                         itemsIndexed(col.words) { idx, word ->
