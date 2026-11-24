@@ -66,7 +66,6 @@ import kotlinx.coroutines.launch
 fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     var queryValue by remember { mutableStateOf(TextFieldValue("")) }
-    val query = queryValue.text
     val traditionalizer = remember { Transliterator.getInstance("Simplified-Traditional") }
     var filter by remember { mutableStateOf<SourceID?>(null) }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
@@ -82,12 +81,13 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     }
 
     fun runSearch() {
-        if (query.isBlank()) return
+        val currentQuery = queryValue.text
+        if (currentQuery.isBlank()) return
         scope.launch {
             loading = true
             searched = true
             val f = filter
-            val q = query
+            val q = currentQuery
             // Record into history before kicking off the request so it shows up on the next
             // empty-query render even if the result list ends up empty.
             appContainer.searchHistoryStore.record(q)
@@ -125,7 +125,7 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     }
 
     Row(modifier = modifier.fillMaxSize().padding(top = 8.dp)) {
-        // LEFT: search input + virtual keypad
+        // LEFT: Android TV system text input
         Column(modifier = Modifier.width(360.dp).fillMaxHeight().padding(end = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
