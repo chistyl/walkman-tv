@@ -38,6 +38,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Text
 import com.walkman.tv.di.encodeQrToBitmap
+import com.walkman.tv.util.ChineseText
 import com.walkman.tv.ui.appContainer
 import com.walkman.tv.ui.theme.AppColors
 import kotlinx.coroutines.Dispatchers
@@ -96,10 +97,10 @@ fun QrDialog(
                 }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(title, color = AppColors.TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Text(ChineseText.toTaiwanTraditional(title), color = AppColors.TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    subtitle,
+                    ChineseText.toTaiwanTraditional(subtitle),
                     color = AppColors.TextSecondary,
                     fontSize = 12.sp,
                 )
@@ -125,7 +126,7 @@ fun QrDialog(
                 }
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    "或在电脑 / 手机浏览器中打开下方地址：",
+                    "或在電腦／手機瀏覽器中開啟下方網址：",
                     color = AppColors.TextMuted,
                     fontSize = 12.sp,
                 )
