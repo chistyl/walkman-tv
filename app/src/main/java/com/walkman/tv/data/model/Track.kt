@@ -1,6 +1,7 @@
 package com.walkman.tv.data.model
 
 import kotlinx.serialization.Serializable
+import com.walkman.tv.util.ChineseText
 
 /**
  * A playable song, mirroring iOS `Track`. [extras] carries source-specific fields the v4 JS
@@ -20,8 +21,13 @@ data class Track(
     val qualities: List<Quality> = emptyList(),
     val extras: Map<String, String> = emptyMap(),
 ) {
+    /** Taiwan Traditional Chinese display values; raw provider fields remain untouched. */
+    val displayName: String get() = ChineseText.toTaiwanTraditional(name)
+    val displaySinger: String get() = ChineseText.toTaiwanTraditional(singer)
+    val displayAlbumName: String? get() = albumName?.let(ChineseText::toTaiwanTraditional)
+
     val subtitle: String
-        get() = if (!albumName.isNullOrEmpty()) "$singer · $albumName" else singer
+        get() = if (!displayAlbumName.isNullOrEmpty()) "$displaySinger · $displayAlbumName" else displaySinger
 
     /** mm:ss display of [duration]. */
     val intervalText: String
