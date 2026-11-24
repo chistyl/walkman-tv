@@ -24,10 +24,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Diamond
 import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.QrCode2
-import androidx.compose.material.icons.filled.SurroundSound
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -209,21 +207,6 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                         Text(src.displayName, fontSize = 13.sp)
                     }
                 }
-            }
-        }
-
-        Section("內建直連備援") {
-            ToggleRow("指令碼失敗時嘗試內建直連（酷我／網易雲）", settings.fallbackEnabled) {
-                scope.launch { appContainer.settingsStore.update { it.copy(fallbackEnabled = !it.fallbackEnabled) } }
-            }
-        }
-
-        Section("音訊解碼") {
-            ToggleRow("Hi-Res 硬體直通（播放無損音訊時若發生閃退，請關閉此選項）", settings.audioOffloadEnabled) {
-                scope.launch { appContainer.settingsStore.update { it.copy(audioOffloadEnabled = !it.audioOffloadEnabled) } }
-            }
-            ToggleRow("強制使用軟體解碼（播放時若閃退或沒有聲音，請開啟此選項，從下一首歌曲開始生效）", settings.forceSoftwareDecoding) {
-                scope.launch { appContainer.settingsStore.update { it.copy(forceSoftwareDecoding = !it.forceSoftwareDecoding) } }
             }
         }
 
