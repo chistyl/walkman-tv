@@ -146,7 +146,7 @@ class DownloadStore(private val context: Context) {
     fun treeDisplayName(uri: Uri): String =
         runCatching { DocumentFile.fromTreeUri(context, uri)?.name }.getOrNull()
             ?: uri.lastPathSegment?.substringAfterLast(':')?.substringAfterLast('/')
-            ?: "已选文件夹"
+            ?: "已選取資料夾"
 
     /**
      * Write already-finished (and, for mp3/flac, already-tagged) bytes into the SAF tree under
