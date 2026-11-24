@@ -369,11 +369,11 @@ private fun HotSearchGrid(
 ) {
     val orderedSources = listOf(SourceID.KW, SourceID.WY, SourceID.KG, SourceID.TX)
     val visibleColumns = orderedSources.mapNotNull { source -> columns.firstOrNull { it.source == source && it.words.isNotEmpty() } }
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
         SectionHeader("熱門搜尋")
         Row(
             modifier = Modifier.fillMaxWidth().weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             visibleColumns.forEach { col ->
                 Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
