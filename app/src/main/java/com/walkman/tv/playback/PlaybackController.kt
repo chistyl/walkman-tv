@@ -154,18 +154,10 @@ class PlaybackController(
         const val MAX_CONSECUTIVE_FAILURES = 3
 
         /**
-         * Build the ExoPlayer with settings tuned for music playback on Android TV:
-         *
-         * - Larger LoadControl buffers (60s max / 30s min target) so a Hi-Res FLAC at
-         *   ~10 Mbps doesn't constantly underrun on slower connections; the start
-         *   threshold (3s) keeps perceived play latency low.
-         * - DefaultAudioSink with audio offload enabled — on Android 10+ the OS will
-         *   route bit-perfect PCM/FLAC to dedicated DSP/HDMI passthrough when the
-         *   downstream device can decode it, preserving 24-bit / 96-192 kHz tracks
-         *   without resampling.
-         * - DefaultRenderersFactory in PREFER_EXTENSION mode so the bundled FLAC /
-         *   OPUS / VORBIS extension renderers (when present) win over the slower
-         *   MediaCodec path.
+         * Build ExoPlayer using Media3's standard audio sink. Avoid custom PCM processor,
+         * float output and AudioTrack playback-parameter paths because several Android TV
+         * vendor audio HAL implementations are unstable with those optional paths.
+         * Audio offload remains disabled for consistent PCM output on Android 9+.
          */
         fun buildPlayer(
             appContext: android.content.Context,
@@ -182,51 +174,24 @@ class PlaybackController(
                 .setPrioritizeTimeOverSizeThresholds(true)
                 .build()
 
-            // Prefer bundled FLAC/OPUS/VORBIS extension renderers over MediaCodec; pipe audio at
-            // float precision so 24-bit sources don't get prematurely truncated to 16-bit PCM.
-            // (Audio offload is opted in via TrackSelectionParameters below — the deprecated
-            //  DefaultRenderersFactory.setEnableAudioOffload was removed in Media3 1.4.)
-            //
-            // Anonymous subclass overrides buildAudioSink so we can append our
-            // [AudioLevelProcessor] to the DefaultAudioSink's processor chain. The processor
-            // forwards bytes unchanged, so audio quality is preserved. When the OS chooses
-            // audio offload (DSP / HDMI passthrough / A2DP offload), this chain is bypassed
-            // entirely and the processor stops receiving samples — the consumer naturally
-            // falls back to a synthetic waveform.
-            val renderersFactory = object : DefaultRenderersFactory(appContext) {
-                override fun buildAudioSink(
-                    context: android.content.Context,
-                    enableFloatOutput: Boolean,
-                    enableAudioTrackPlaybackParams: Boolean,
-                ): AudioSink? {
-                    return DefaultAudioSink.Builder(context)
-                        .setEnableFloatOutput(enableFloatOutput)
-                        .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                        .setAudioProcessorChain(
-                            DefaultAudioSink.DefaultAudioProcessorChain(levelProcessor),
-                        )
-                        .build()
-                }
-            }
+            // Use Media3's stock audio sink and PCM conversion path. Keep decoder fallback
+            // enabled so a device-specific hardware decoder rejection can fall back safely.
+            val renderersFactory = DefaultRenderersFactory(appContext)
                 .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
                 .setEnableDecoderFallback(true)
                 .setMediaCodecSelector { mimeType, secure, tunneling ->
                     val all = MediaCodecSelector.DEFAULT.getDecoderInfos(mimeType, secure, tunneling)
-                    // 只管音频；MV 视频仍走硬解，软解 1080p 在盒子上会卡。没有可用的软件解码器时退回
-                    // 全部，宁可走硬解也别直接放不了。
                     if (!softwareOnly() || !androidx.media3.common.MimeTypes.isAudio(mimeType)) all
                     else all.filter { it.softwareOnly }.ifEmpty { all }
                 }
-                .setEnableAudioFloatOutput(true)
-                .setEnableAudioTrackPlaybackParams(true)
+                .setEnableAudioFloatOutput(false)
+                .setEnableAudioTrackPlaybackParams(false)
 
             val audioAttrs = AudioAttributes.Builder()
                 .setUsage(C.USAGE_MEDIA)
                 .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
                 .build()
 
-            // Use the 1-arg constructor + setRenderersFactory(): the 2-arg Builder(Context,
-            // RenderersFactory) overload is ambiguous with Builder(Context, MediaSource.Factory).
             val player = ExoPlayer.Builder(appContext)
                 .setRenderersFactory(renderersFactory)
                 .setLoadControl(loadControl)
@@ -234,10 +199,6 @@ class PlaybackController(
                 .setHandleAudioBecomingNoisy(true)
                 .build()
 
-            // Keep audio offload disabled by default. Some Android TV firmware advertises
-            // incomplete or unstable offload support; decoding to PCM through Media3's bundled
-            // decoders is more consistent across Android 9+ devices. Users can still opt in via
-            // setAudioOffloadEnabled() when their audio hardware is known to work reliably.
             player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
                 .setAudioOffloadPreferences(
                     TrackSelectionParameters.AudioOffloadPreferences.Builder()
