@@ -314,7 +314,7 @@ fun PlaylistNameDialog(
             }
             Spacer(Modifier.size(6.dp))
             Text(
-                "中文输入不便？点击「手機掃碼輸入」用手机键盘",
+                "不方便輸入中文嗎？點選「手機掃碼輸入」即可使用手機鍵盤",
                 color = AppColors.TextMuted,
                 fontSize = 11.sp,
             )
