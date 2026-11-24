@@ -34,12 +34,12 @@ enum class VinylColor(val label: String) {
 @Serializable
 data class Settings(
     val preferredQuality: Quality = Quality.FLAC24,
-    val fallbackEnabled: Boolean = true,
+    val fallbackEnabled: Boolean = false,
     /** Audio offload (DSP direct path / HDMI passthrough). Bit-perfect Hi-Res on good HALs,
      *  but some vendor HALs (小米/鸿蒙/坚果 etc.) crash natively in the offload path — the
      *  settings toggle lets affected users turn it off. Default on so existing users keep
      *  the current behaviour. */
-    val audioOffloadEnabled: Boolean = true,
+    val audioOffloadEnabled: Boolean = false,
     /** 强制软件解码（音频）。部分电视、盒子的硬件解码器会闪退或没声音，开启后只用系统软件解码器，
      *  同时关闭硬件直通。默认关闭。 */
     val forceSoftwareDecoding: Boolean = false,
@@ -86,7 +86,19 @@ class SettingsStore(context: Context) {
     val settings: StateFlow<Settings> = _settings.asStateFlow()
 
     suspend fun loadAll() {
-        _settings.value = withContext(Dispatchers.IO) { store.load() }
+        val loaded = withContext(Dispatchers.IO) { store.load() }
+        // These advanced compatibility switches are intentionally retired from the UI.
+        // Force them off on upgrade as well, so old persisted values cannot keep enabling
+        // hidden fallback/offload/software-decoder behaviour.
+        val normalized = loaded.copy(
+            fallbackEnabled = false,
+            audioOffloadEnabled = false,
+            forceSoftwareDecoding = false,
+        )
+        _settings.value = normalized
+        if (normalized != loaded) {
+            withContext(Dispatchers.IO) { store.save(normalized) }
+        }
     }
 
     suspend fun update(transform: (Settings) -> Settings) {
