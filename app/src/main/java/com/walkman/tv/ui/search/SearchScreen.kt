@@ -400,7 +400,7 @@ private fun HotSearchGrid(
             visibleColumns.forEach { col ->
                 Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
                     Text(
-                        col.source.displayName,
+                        ChineseText.toTaiwanTraditional(col.source.displayName),
                         color = sourceTint(col.source),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
