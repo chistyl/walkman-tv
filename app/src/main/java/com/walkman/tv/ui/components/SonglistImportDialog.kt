@@ -49,7 +49,7 @@ import kotlinx.coroutines.launch
  * Flow:
  *   1. User pastes a share URL (or scans the QR to push from phone). Every keystroke runs
  *      [SonglistImporter.parse] / [SonglistImporter.pureIdOrNull] so the recognition status
- *      flips between "✓ 已识别" / source picker / nothing in real time.
+ *      flips between "✓ 已辨識" / source picker / nothing in real time.
  *   2. Optional 歌單名稱 override — same control as PlaylistNameDialog (with QR fallback).
  *   3. 確認匯入 → [SonglistImporter.importPlaylist] off the UI thread. 900ms confirmation, then
  *      dismiss. Errors render inline as red text so the user can correct and retry.
@@ -289,7 +289,7 @@ fun SonglistImportDialog(onDismiss: () -> Unit) {
         if (ip != null && port != null) {
             QrDialog(
                 url = "http://$ip:$port/songlist-url",
-                title = "扫码推送歌單連結",
+                title = "掃碼傳送歌單連結",
                 subtitle = "在手機上貼上歌單連結，送出後會自動填入電視端的輸入框",
                 onDismiss = { showQr = false },
             )
