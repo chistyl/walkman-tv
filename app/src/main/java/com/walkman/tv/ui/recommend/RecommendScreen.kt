@@ -110,8 +110,8 @@ private fun NowPlayingPanel(onOpenPlayer: () -> Unit, modifier: Modifier = Modif
     }
     Spacer(Modifier.height(12.dp))
     if (track != null) {
-      Text(track.name, color = AppColors.TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-      Text(track.singer, color = AppColors.TextSecondary, fontSize = 13.sp, maxLines = 1)
+      Text(track.displayName, color = AppColors.TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+      Text(track.displaySinger, color = AppColors.TextSecondary, fontSize = 13.sp, maxLines = 1)
       Spacer(Modifier.height(8.dp))
       val active = LyricParser.activeIndex(state.positionMs / 1000.0, lyrics)
       val line = lyrics.getOrNull(active)?.text ?: if (state.resolving) "解析中…" else ""
@@ -227,8 +227,8 @@ private fun RecommendGrid(
       val svc = appContainer.songlists.serviceFor(info.source)
       val d = runCatching { svc?.fetchDetail(info) }.getOrNull()
       detail = DetailView(
-        title = info.name,
-        subtitle = info.author.takeIf { it.isNotBlank() } ?: info.source.displayName,
+        title = info.displayName,
+        subtitle = info.displayAuthor.takeIf { it.isNotBlank() } ?: info.source.displayName,
         tracks = d?.tracks ?: emptyList(),
       )
       loadingDetail = false
@@ -242,7 +242,7 @@ private fun RecommendGrid(
       val svc = appContainer.boards.serviceFor(board.source)
       val tracks = runCatching { svc?.fetchTracks(board.bangid, 1) ?: emptyList() }.getOrDefault(emptyList())
       detail = DetailView(
-        title = board.name,
+        title = board.displayName,
         subtitle = board.source.displayName,
         tracks = tracks,
       )
@@ -505,7 +505,7 @@ private fun HeroBanner(
       ) {
         Column(modifier = Modifier.weight(1f)) {
           Text(
-            item.songlist.name,
+            item.songlist.displayName,
             color = Color.White,
             fontSize = 30.sp,
             // Explicit: the inherited TV text style's line height is sized for body text, so a
