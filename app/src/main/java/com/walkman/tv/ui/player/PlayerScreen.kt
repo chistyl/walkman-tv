@@ -189,7 +189,7 @@ fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
 
     if (track == null) {
       Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("暂无播放", color = AppColors.TextSecondary)
+        Text("目前沒有播放內容", color = AppColors.TextSecondary)
       }
       return@Box
     }
@@ -215,7 +215,7 @@ fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
             overflow = TextOverflow.Ellipsis,
           )
           // 播放调试信息（设置里开启）：获取地址 / 失败自动跳过 / 换源降级，排查音源问题用。
-          val status = state.error ?: (if (state.resolving) "正在获取播放地址…" else state.warning)
+          val status = state.error ?: (if (state.resolving) "正在取得播放網址…" else state.warning)
           if (settings.showDebugInfo && status != null) {
             Text(
               status,
@@ -297,14 +297,14 @@ fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
             },
             onToggleFav = { showPicker = true },
             onMv = {
-              android.widget.Toast.makeText(context, "正在获取 MV…", android.widget.Toast.LENGTH_SHORT).show()
+              android.widget.Toast.makeText(context, "正在取得 MV…", android.widget.Toast.LENGTH_SHORT).show()
               scope.launch {
                 val info = runCatching { appContainer.mvResolver.getMvUrl(track) }.getOrNull()
                 val url = info?.bestUrl()
                 if (url != null) {
                   controller.playMvUrl(url)
                 } else {
-                  android.widget.Toast.makeText(context, "暂无可用 MV", android.widget.Toast.LENGTH_SHORT).show()
+                  android.widget.Toast.makeText(context, "目前沒有可用的 MV", android.widget.Toast.LENGTH_SHORT).show()
                 }
               }
             },
@@ -520,10 +520,10 @@ private fun EqualizerDialog(onDismiss: () -> Unit) {
         .background(AppColors.BgPanel)
         .padding(horizontal = 22.dp, vertical = 20.dp),
     ) {
-      Text("均衡器", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+      Text("等化器", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
       Spacer(Modifier.height(4.dp))
       Text(
-        if (presets.isEmpty()) "本机不支持系统均衡器" else "选择一个预设，立即生效",
+        if (presets.isEmpty()) "本机不支持系统等化器" else "選擇預設效果即可立即套用",
         color = AppColors.TextSecondary,
         fontSize = 12.sp,
       )
@@ -869,7 +869,7 @@ private fun LyricPane(
   modifier: Modifier = Modifier,
 ) {
   if (lyrics.isEmpty()) {
-    Box(modifier, contentAlignment = Alignment.Center) { Text("暂无歌词", color = AppColors.TextMuted) }
+    Box(modifier, contentAlignment = Alignment.Center) { Text("目前沒有歌詞", color = AppColors.TextMuted) }
     return
   }
   val active = LyricParser.activeIndex(positionMs / 1000.0, lyrics)
@@ -976,7 +976,7 @@ private fun MvQueueDrawer(
     Box(modifier = Modifier.fillMaxHeight().width(360.dp).background(AppColors.BgPanel.copy(alpha = 0.95f))) {
       Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text(
-          "播放队列 (${queue.size})",
+          "播放佇列 (${queue.size})",
           color = AppColors.TextPrimary,
           fontSize = 16.sp,
           fontWeight = FontWeight.Bold,
