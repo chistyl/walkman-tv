@@ -80,8 +80,8 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
         hotColumns = runCatching { appContainer.hotSearch.fetchAll() }.getOrDefault(emptyList())
     }
 
-    fun runSearch() {
-        val currentQuery = queryValue.text
+    fun runSearch(searchText: String = queryValue.text) {
+        val currentQuery = searchText
         if (currentQuery.isBlank()) return
         scope.launch {
             loading = true
@@ -122,7 +122,7 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
         appContainer.events.qrSearchKeyword.collect { k ->
             queryValue = TextFieldValue(k)
             showQr = false
-            runSearch()
+            runSearch(k)
         }
     }
 
@@ -177,7 +177,7 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                 onOpenPlayer = onOpenPlayer,
                 onPickHistory = { kw ->
                     queryValue = TextFieldValue(kw)
-                    runSearch()
+                    runSearch(kw)
                 },
                 onPickHot = { kw ->
                     queryValue = TextFieldValue(kw)
