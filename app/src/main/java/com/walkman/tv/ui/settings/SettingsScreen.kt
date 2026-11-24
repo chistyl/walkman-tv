@@ -87,7 +87,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
             scope.launch {
-                status = "正在读取文件…"
+                status = "正在讀取檔案…"
                 val raw = withContext(Dispatchers.IO) {
                     runCatching {
                         context.contentResolver.openInputStream(uri)?.use {
@@ -96,11 +96,11 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                     }.getOrNull()
                 }
                 if (raw.isNullOrEmpty()) {
-                    status = "读取文件失败"
+                    status = "讀取檔案失敗"
                 } else {
-                    status = "正在导入文件…"
+                    status = "正在匯入檔案…"
                     val r = appContainer.scriptStore.import(raw)
-                    status = r.fold({ it.message }, { "导入失败：${it.message}" })
+                    status = r.fold({ it.message }, { "匯入失敗：${it.message}" })
                 }
             }
         }
@@ -151,9 +151,9 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
     LaunchedEffect(Unit) {
         appContainer.events.qrScriptText.collect { raw ->
             showQr = false
-            status = "正在导入上传的脚本…"
+            status = "正在匯入上傳的指令碼…"
             val r = appContainer.scriptStore.import(raw)
-            status = r.fold({ it.message }, { "导入失败：${it.message}" })
+            status = r.fold({ it.message }, { "匯入失敗：${it.message}" })
         }
     }
 
@@ -161,7 +161,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxSize().padding(top = 8.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Section("播放音质") {
+        Section("播放音質") {
             // 8 tiers including extended (hires/atmos/master) — wrap so they fit on any TV width.
             // Each pill carries a small icon to make the tier intent scannable in one glance.
             androidx.compose.foundation.layout.FlowRow(
@@ -187,7 +187,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        Section("发现页音源") {
+        Section("探索頁音源") {
             // Toggle each source in/out. The discover (home) page subtitle and section
             // contents track this list in real time — see HomeStore.loadIfNeeded.
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -212,28 +212,28 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        Section("内置直连兜底") {
-            ToggleRow("脚本失败时尝试内置直连（kw/wy）", settings.fallbackEnabled) {
+        Section("內建直連備援") {
+            ToggleRow("指令碼失敗時嘗試內建直連（酷我／網易雲）", settings.fallbackEnabled) {
                 scope.launch { appContainer.settingsStore.update { it.copy(fallbackEnabled = !it.fallbackEnabled) } }
             }
         }
 
-        Section("音频解码") {
-            ToggleRow("Hi-Res 硬件直通（播放无损闪退时请关闭）", settings.audioOffloadEnabled) {
+        Section("音訊解碼") {
+            ToggleRow("Hi-Res 硬體直通（播放無損音訊時若發生閃退，請關閉此選項）", settings.audioOffloadEnabled) {
                 scope.launch { appContainer.settingsStore.update { it.copy(audioOffloadEnabled = !it.audioOffloadEnabled) } }
             }
-            ToggleRow("强制软件解码（播放闪退或没声音时请开启，下一首起生效）", settings.forceSoftwareDecoding) {
+            ToggleRow("強制使用軟體解碼（播放時若閃退或沒有聲音，請開啟此選項，從下一首歌曲開始生效）", settings.forceSoftwareDecoding) {
                 scope.launch { appContainer.settingsStore.update { it.copy(forceSoftwareDecoding = !it.forceSoftwareDecoding) } }
             }
         }
 
-        Section("歌词翻译") {
-            ToggleRow("显示歌词翻译（外语歌有翻译时在每句下方显示）", settings.showLyricTranslation) {
+        Section("歌詞翻譯") {
+            ToggleRow("显示歌詞翻譯（外语歌有翻译时在每句下方显示）", settings.showLyricTranslation) {
                 scope.launch { appContainer.settingsStore.update { it.copy(showLyricTranslation = !it.showLyricTranslation) } }
             }
         }
 
-        Section("歌词大小") {
+        Section("歌詞大小") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 com.walkman.tv.data.store.LyricSize.entries.forEach { size ->
                     TvPill(
@@ -246,7 +246,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        Section("黑胶颜色") {
+        Section("黑膠唱片顏色") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 com.walkman.tv.data.store.VinylColor.entries.forEach { color ->
                     TvPill(
@@ -259,19 +259,19 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        Section("播放界面") {
-            ToggleRow("播放控件自动隐藏", settings.autoHidePlayerControls) {
+        Section("播放畫面") {
+            ToggleRow("自動隱藏播放控制項", settings.autoHidePlayerControls) {
                 scope.launch { appContainer.settingsStore.update { it.copy(autoHidePlayerControls = !it.autoHidePlayerControls) } }
             }
             Spacer(Modifier.height(8.dp))
             Text(
-                "开启后，播放页 5 秒无操作自动隐藏进度条和播放按钮，按方向键或确认键重新显示。",
+                "開啟後，播放畫面閒置 5 秒會自動隱藏進度列與播放按鈕；按方向鍵或確認鍵即可重新顯示。",
                 color = AppColors.TextMuted,
                 fontSize = 11.sp,
             )
         }
 
-        Section("下载目录") {
+        Section("下載資料夾") {
             val roots = remember { appContainer.downloadStore.availableRoots() }
             val treeUriStr = settings.customDownloadTreeUri
             val usingTree = treeUriStr != null
@@ -312,13 +312,13 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                     onClick = { openDownloadPicker() },
                     selected = usingTree || usingCustomFolder,
                 ) {
-                    Text("选择其他文件夹…", fontSize = 13.sp)
+                    Text("選擇其他資料夾…", fontSize = 13.sp)
                 }
             }
             if (dlPermHint) {
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "需要存储写入权限：请在系统设置里为「随便听」开启文件访问（或允许存储权限），返回后再点选择。",
+                    "需要儲存空間寫入權限：請在系統設定中允許「隨便聽」存取檔案（或授予儲存空間權限），返回後再點選擇。",
                     color = AppColors.Warning,
                     fontSize = 11.sp,
                 )
@@ -326,28 +326,28 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             Spacer(Modifier.height(8.dp))
             Text(
                 when {
-                    usingTree -> "已选文件夹：" + (
+                    usingTree -> "已選擇資料夾：" + (
                         treeUriStr?.let { runCatching { appContainer.downloadStore.treeDisplayName(Uri.parse(it)) }.getOrNull() }
-                            ?: "自定义文件夹"
+                            ?: "自訂資料夾"
                         )
-                    usingCustomFolder -> "已选文件夹：" + (settings.customDownloadDir ?: "")
-                    else -> currentPath ?: "（应用默认音乐目录）"
+                    usingCustomFolder -> "已選擇資料夾：" + (settings.customDownloadDir ?: "")
+                    else -> currentPath ?: "（應用程式預設音樂資料夾）"
                 },
                 color = AppColors.TextMuted,
                 fontSize = 11.sp,
             )
             Text(
                 if (usingTree || usingCustomFolder) {
-                    "下载会保存到你选的文件夹（可被文件管理器/其它应用浏览）。切换目录只影响之后的下载。"
+                    "下載內容會儲存至你選擇的資料夾（可透過檔案管理員或其他應用程式瀏覽）。變更資料夾只會影響後續下載。"
                 } else {
-                    "存储卷目录在应用专属空间（卸载会清除、不易在文件管理器看到）；想存到可见位置请点「选择其他文件夹」。切换只影响之后的下载，已下载的仍可正常播放。"
+                    "存储卷目录在应用专属空间（卸载会清除、不易在文件管理器看到）；想存到可见位置请点「選擇其他資料夾」。切换只影响之后的下载，已下载的仍可正常播放。"
                 },
                 color = AppColors.TextMuted,
                 fontSize = 11.sp,
             )
         }
 
-        Section("下载并发数") {
+        Section("同時下載數量") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 (1..6).forEach { n ->
                     TvPill(
@@ -360,27 +360,27 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             }
             Spacer(Modifier.height(8.dp))
             Text(
-                "同时下载的最大歌曲数（批量下载时排队，越大越快但越占带宽）。默认 3。",
+                "同時下載的歌曲數量上限（批次下載時會依序排隊；數量越多速度可能越快，但也會占用更多頻寬）。預設為 3。",
                 color = AppColors.TextMuted,
                 fontSize = 11.sp,
             )
         }
 
-        Section("批量下载") {
-            ToggleRow("已下载的也按新音质重下", settings.redownloadOnQualityChange) {
+        Section("批次下載") {
+            ToggleRow("已下載的歌曲也依新音質重新下載", settings.redownloadOnQualityChange) {
                 scope.launch { appContainer.settingsStore.update { it.copy(redownloadOnQualityChange = !it.redownloadOnQualityChange) } }
             }
             Spacer(Modifier.height(8.dp))
             Text(
-                "开启后，对歌单「下载全部」时，已下载但音质与所选不同的歌会按新音质重新下载（如 128k 升级到 FLAC）；关闭则一律跳过已下载。默认开启。",
+                "開啟後，對歌單執行「全部下載」時，已下載但音質與所選設定不同的歌曲會依新音質重新下載（例如從 128 kbps 升級為 FLAC）；關閉後則一律略過已下載的歌曲。預設為開啟。",
                 color = AppColors.TextMuted,
                 fontSize = 11.sp,
             )
         }
 
-        Section("自定义音源") {
+        Section("自訂音源") {
             Text(
-                "粘贴 URL 自动远程拉取；直接粘贴脚本则按 JS 代码导入；或上传 .js 文件；扫码可在手机/电脑操作。",
+                "貼上 URL 可自動從遠端載入；直接貼上指令碼則會以 JS 程式碼匯入；也可上傳 .js 檔案，或掃描 QR Code 透過手機／電腦操作。",
                 color = AppColors.TextMuted,
                 fontSize = 12.sp,
             )
@@ -393,7 +393,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .then(fieldModifier),
-                        placeholder = { Text("URL（http://...）或直接粘贴 JS 代码", color = AppColors.TextMuted) },
+                        placeholder = { Text("URL（http://...）或直接貼上 JS 程式碼", color = AppColors.TextMuted) },
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = { importInput(scope, url) { status = it } }),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -411,21 +411,21 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                     selected = true,
                     focusRequester = importFocus,
                 ) {
-                    Text("导入", fontSize = 14.sp)
+                    Text("匯入", fontSize = 14.sp)
                 }
                 Spacer(Modifier.width(8.dp))
                 TvPill(
                     onClick = {
                         runCatching {
                             filePicker.launch(arrayOf("application/javascript", "text/javascript", "application/x-javascript", "text/plain", "*/*"))
-                        }.onFailure { status = "未找到可用的文件选择器" }
+                        }.onFailure { status = "找不到可用的檔案選擇器" }
                     },
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Filled.UploadFile, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("上传文件", fontSize = 13.sp)
+                        Text("上傳檔案", fontSize = 13.sp)
                     }
                 }
                 Spacer(Modifier.width(8.dp))
@@ -434,14 +434,14 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                     shape = CircleShape,
                     contentPadding = PaddingValues(10.dp),
                 ) {
-                    Icon(Icons.Filled.QrCode2, contentDescription = "扫码导入", modifier = Modifier.size(22.dp))
+                    Icon(Icons.Filled.QrCode2, contentDescription = "扫码匯入", modifier = Modifier.size(22.dp))
                 }
             }
             status?.let { Text(it, color = AppColors.TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp)) }
 
             Spacer(Modifier.padding(top = 6.dp))
             if (scripts.isEmpty()) {
-                Text("尚未导入任何脚本", color = AppColors.TextMuted, fontSize = 13.sp)
+                Text("尚未匯入任何脚本", color = AppColors.TextMuted, fontSize = 13.sp)
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     scripts.forEach { s ->
@@ -467,7 +467,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                                         Text("v${s.version}  ${s.author}", color = AppColors.TextMuted, fontSize = 12.sp)
                                     }
                                     Text(
-                                        if (s.enabled) "已启用" else "已停用",
+                                        if (s.enabled) "已啟用" else "已停用",
                                         color = if (s.enabled) AppColors.AccentGreen else AppColors.TextMuted,
                                         fontSize = 12.sp,
                                     )
@@ -478,20 +478,20 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                                 onClick = { pendingDelete = s },
                                 accent = AppColors.Danger,
                                 contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
-                            ) { Text("删除", fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+                            ) { Text("刪除", fontSize = 13.sp, fontWeight = FontWeight.Bold) }
                         }
                     }
                 }
             }
         }
 
-        Section("调试") {
-            ToggleRow("显示调试信息", settings.showDebugInfo) {
+        Section("偵錯") {
+            ToggleRow("显示偵錯信息", settings.showDebugInfo) {
                 scope.launch { appContainer.settingsStore.update { it.copy(showDebugInfo = !it.showDebugInfo) } }
             }
             Spacer(Modifier.height(8.dp))
             Text(
-                "排查音源等问题时开启，平时不需要。目前包括：播放页歌手名下方显示获取播放地址、播放失败自动跳过、换音源等状态。",
+                "排查音源等問題時再開啟，平時不需要。目前包含：在播放畫面的歌手名稱下方顯示取得播放網址、播放失敗時自動跳過，以及切換音源等狀態。",
                 color = AppColors.TextMuted,
                 fontSize = 11.sp,
             )
@@ -510,7 +510,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 pendingDelete = null
                 appContainer.appScope.launch {
                     appContainer.scriptStore.remove(target.id)
-                    status = "已删除：${target.name}"
+                    status = "已刪除：${target.name}"
                 }
             },
         )
@@ -522,15 +522,15 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         if (ip != null && port != null) {
             QrDialog(
                 url = "http://$ip:$port/script",
-                title = "扫码导入音源",
-                subtitle = "手机扫码、电脑打开地址都可以，可粘贴脚本 URL 或上传 .js 文件",
+                title = "扫码匯入音源",
+                subtitle = "可使用手機掃碼或透過電腦開啟網址，並貼上指令碼 URL 或上傳 .js 檔案",
                 onDismiss = { showQr = false },
             )
         } else {
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { showQr = false },
-                title = { Text("无法启动扫码") },
-                text = { Text("请确认电视已连接 Wi-Fi 且本地服务已启动后再试。") },
+                title = { Text("無法啟動掃碼") },
+                text = { Text("請確認電視已連線至 Wi-Fi，且本機服務已啟動後再試。") },
                 confirmButton = {
                     androidx.compose.material3.TextButton(onClick = { showQr = false }) {
                         Text("好", color = AppColors.AccentGreen)
@@ -573,7 +573,7 @@ private fun hasStorageWriteAccess(ctx: android.content.Context): Boolean =
 /**
  * Auto-detects the input: if it looks like an http(s) URL, fetches the URL and imports the
  * body; otherwise treats the input as raw JS code and imports it directly. Used by both the
- * "导入" button and the IME "完成" action.
+ * "匯入" button and the IME "完成" action.
  */
 private fun importInput(scope: kotlinx.coroutines.CoroutineScope, input: String, onStatus: (String) -> Unit) {
     if (input.isBlank()) return
@@ -581,12 +581,12 @@ private fun importInput(scope: kotlinx.coroutines.CoroutineScope, input: String,
     val isUrl = trimmed.startsWith("http://", ignoreCase = true) ||
         trimmed.startsWith("https://", ignoreCase = true)
     scope.launch {
-        onStatus(if (isUrl) "正在下载脚本…" else "正在导入脚本…")
+        onStatus(if (isUrl) "正在下載指令碼…" else "正在匯入脚本…")
         val result = runCatching {
             val raw = if (isUrl) appContainer.fetchText(trimmed) else trimmed
             appContainer.scriptStore.import(raw).getOrThrow()
         }
-        onStatus(result.fold({ it.message }, { "导入失败：${it.message}" }))
+        onStatus(result.fold({ it.message }, { "匯入失敗：${it.message}" }))
     }
 }
 
@@ -594,17 +594,17 @@ private fun importInput(scope: kotlinx.coroutines.CoroutineScope, input: String,
 private fun importFromUrl(scope: kotlinx.coroutines.CoroutineScope, url: String, onStatus: (String) -> Unit) {
     if (url.isBlank()) return
     scope.launch {
-        onStatus("正在导入…")
+        onStatus("正在匯入…")
         val result = runCatching {
             val raw = appContainer.fetchText(url.trim())
             appContainer.scriptStore.import(raw).getOrThrow()
         }
-        onStatus(result.fold({ it.message }, { "导入失败：${it.message}" }))
+        onStatus(result.fold({ it.message }, { "匯入失敗：${it.message}" }))
     }
 }
 
 /**
- * 检查更新: auto-checks GitHub once on open, then drives the whole download → install flow
+ * 檢查更新: auto-checks GitHub once on open, then drives the whole download → install flow
  * inline. State lives in [com.walkman.tv.playback.update.UpdateManager] so leaving and
  * re-entering Settings resumes wherever it was (e.g. keeps a "有新版本" result).
  */
@@ -624,28 +624,28 @@ private fun UpdateSection() {
     }
     // Note: auto-launching the installer on download-complete is handled globally in RootScreen.
 
-    Section("检查更新") {
-        Text("当前版本 v${mgr.currentVersion}", color = AppColors.TextSecondary, fontSize = 13.sp)
+    Section("檢查更新") {
+        Text("目前版本 v${mgr.currentVersion}", color = AppColors.TextSecondary, fontSize = 13.sp)
 
         // Status line — plain text, no focusable, so it can freely swap per state.
         when (val s = state) {
             is UpdateState.Checking ->
-                Text("正在检查更新…", color = AppColors.TextMuted, fontSize = 13.sp)
+                Text("正在檢查更新…", color = AppColors.TextMuted, fontSize = 13.sp)
             is UpdateState.UpToDate ->
                 Text("已是最新版本", color = AppColors.AccentGreen, fontSize = 13.sp)
             is UpdateState.Failed ->
-                Text("检查失败：${s.message}", color = AppColors.Danger, fontSize = 12.sp)
+                Text("檢查失敗：${s.message}", color = AppColors.Danger, fontSize = 12.sp)
             is UpdateState.Available -> {
-                Text("发现新版本 v${s.release.versionName}", color = AppColors.AccentGreen, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text("發現新版本 v${s.release.versionName}", color = AppColors.AccentGreen, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 if (s.release.notes.isNotBlank()) {
                     Text(s.release.notes, color = AppColors.TextMuted, fontSize = 12.sp, maxLines = 6, overflow = TextOverflow.Ellipsis)
                 }
             }
             is UpdateState.Downloaded -> {
-                Text("下载完成", color = AppColors.AccentGreen, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text("下載完成", color = AppColors.AccentGreen, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 if (permHint) {
                     Text(
-                        "请在系统弹出的设置里允许「随便听」安装未知应用，返回后再点「立即安装」。",
+                        "請在系統開啟的設定畫面中，允許「隨便聽」安裝未知來源的應用程式，返回後再點選「立即安裝」。",
                         color = AppColors.Warning, fontSize = 12.sp,
                     )
                 }
@@ -654,16 +654,16 @@ private fun UpdateSection() {
         }
 
         // ONE stable button: its label + action follow the state, but the composable node never
-        // leaves the tree — so remote focus stays put across 检查→检查中→有更新 transitions
+        // leaves the tree — so remote focus stays put across 检查→檢查中→有更新 transitions
         // instead of drifting to some other control on the page.
         val actionLabel = when (val s = state) {
-            is UpdateState.Checking -> "检查中…"
-            is UpdateState.UpToDate -> "重新检查"
-            is UpdateState.Failed -> "重试"
-            is UpdateState.Available -> "下载并安装"
-            is UpdateState.Downloading -> "正在下载 ${(s.progress * 100).toInt()}%…"
-            is UpdateState.Downloaded -> "立即安装"
-            is UpdateState.Idle -> "检查更新"
+            is UpdateState.Checking -> "檢查中…"
+            is UpdateState.UpToDate -> "重新檢查"
+            is UpdateState.Failed -> "重試"
+            is UpdateState.Available -> "下載並安裝"
+            is UpdateState.Downloading -> "正在下載 ${(s.progress * 100).toInt()}%…"
+            is UpdateState.Downloaded -> "立即安裝"
+            is UpdateState.Idle -> "檢查更新"
         }
         TvPill(
             onClick = {
@@ -695,7 +695,7 @@ private fun ToggleRow(label: String, on: Boolean, onToggle: () -> Unit) {
     TvFocusable(onClick = onToggle, modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(label, color = AppColors.TextPrimary, fontSize = 14.sp, modifier = Modifier.weight(1f))
-            Text(if (on) "开" else "关", color = if (on) AppColors.AccentGreen else AppColors.TextMuted, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text(if (on) "開啟" else "關閉", color = if (on) AppColors.AccentGreen else AppColors.TextMuted, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -730,10 +730,10 @@ private fun DeleteScriptConfirmDialog(
                 .background(AppColors.BgPanel)
                 .padding(horizontal = 24.dp, vertical = 22.dp),
         ) {
-            Text("删除自定义音源", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("刪除自訂音源", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(10.dp))
             Text(
-                "确定要删除「$scriptName」吗？删除后需要重新导入才能使用。",
+                "確定要刪除「$scriptName」吗？刪除后需要重新匯入才能使用。",
                 color = AppColors.TextSecondary,
                 fontSize = 14.sp,
             )
@@ -755,7 +755,7 @@ private fun DeleteScriptConfirmDialog(
                     accent = AppColors.Danger,
                     contentPadding = PaddingValues(horizontal = 24.dp, vertical = 10.dp),
                 ) {
-                    Text("确定", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text("確定", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
