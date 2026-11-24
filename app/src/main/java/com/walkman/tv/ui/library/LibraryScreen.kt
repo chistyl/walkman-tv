@@ -637,7 +637,7 @@ private fun DownloadedTab(
             if (folderTracks.isNotEmpty()) {
                 item {
                     Text(
-                        "${folder.name}  (${folderTracks.size})",
+                        "${ChineseText.toTaiwanTraditional(folder.name)}  (${folderTracks.size})",
                         color = AppColors.TextPrimary,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
@@ -753,7 +753,7 @@ private fun FailedDownloadRow(rec: com.walkman.tv.data.model.DownloadRecord) {
         Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
             Text(rec.track.displayName, color = AppColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
             Text(
-                rec.errorMessage ?: "下載失敗",
+                rec.errorMessage?.let(ChineseText::toTaiwanTraditional) ?: "下載失敗",
                 color = AppColors.Danger,
                 fontSize = 11.sp,
                 maxLines = 1,
