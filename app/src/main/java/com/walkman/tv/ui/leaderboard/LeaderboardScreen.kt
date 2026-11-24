@@ -82,7 +82,7 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                 items(uniqueBoards, key = { it.id }) { b ->
                     TvFocusable(onClick = { selected = b }, modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            b.name,
+                            b.displayName,
                             color = if (selected?.id == b.id) AppColors.AccentGreen else AppColors.TextPrimary,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -94,7 +94,7 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
         }
         Spacer(Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-            Text(selected?.name ?: "排行榜", color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(selected?.displayName ?: "排行榜", color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             when {
                 loadingTracks -> LoadingState(Modifier.fillMaxSize())
                 tracks.isNotEmpty() -> {
