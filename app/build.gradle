@@ -144,11 +144,6 @@ dependencies {
 
     // Media playback
     implementation "androidx.media3:media3-exoplayer:1.10.1"
-    // Bundled software decoders keep FLAC and Opus playback available on older Android TV builds
-    // even when the device firmware does not provide matching MediaCodec decoders. The standard
-    // Media3 extractors continue handling common MP3, AAC, WAV, Ogg/Vorbis and MP4/M4A containers.
-    implementation "androidx.media3:media3-decoder-flac:1.10.1"
-    implementation "androidx.media3:media3-decoder-opus:1.10.1"
     implementation "androidx.media3:media3-session:1.10.1"
     implementation "androidx.media3:media3-ui:1.10.1"
 
