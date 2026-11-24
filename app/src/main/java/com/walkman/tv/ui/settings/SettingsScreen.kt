@@ -228,7 +228,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         }
 
         Section("歌詞翻譯") {
-            ToggleRow("显示歌詞翻譯（外语歌有翻译时在每句下方显示）", settings.showLyricTranslation) {
+            ToggleRow("顯示歌詞翻譯（外语歌有翻译时在每句下方显示）", settings.showLyricTranslation) {
                 scope.launch { appContainer.settingsStore.update { it.copy(showLyricTranslation = !it.showLyricTranslation) } }
             }
         }
@@ -340,7 +340,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 if (usingTree || usingCustomFolder) {
                     "下載內容會儲存至你選擇的資料夾（可透過檔案管理員或其他應用程式瀏覽）。變更資料夾只會影響後續下載。"
                 } else {
-                    "存储卷目录在应用专属空间（卸载会清除、不易在文件管理器看到）；想存到可见位置请点「選擇其他資料夾」。切换只影响之后的下载，已下载的仍可正常播放。"
+                    "儲存磁碟區目錄位於應用程式專屬空間（解除安裝時會一併清除，且不易在檔案管理員中檢視）；若要儲存至可見位置，請點選「選擇其他資料夾」。變更僅影響後續下載，已下載的歌曲仍可正常播放。"
                 },
                 color = AppColors.TextMuted,
                 fontSize = 11.sp,
@@ -434,14 +434,14 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                     shape = CircleShape,
                     contentPadding = PaddingValues(10.dp),
                 ) {
-                    Icon(Icons.Filled.QrCode2, contentDescription = "扫码匯入", modifier = Modifier.size(22.dp))
+                    Icon(Icons.Filled.QrCode2, contentDescription = "掃碼匯入", modifier = Modifier.size(22.dp))
                 }
             }
             status?.let { Text(it, color = AppColors.TextSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp)) }
 
             Spacer(Modifier.padding(top = 6.dp))
             if (scripts.isEmpty()) {
-                Text("尚未匯入任何脚本", color = AppColors.TextMuted, fontSize = 13.sp)
+                Text("尚未匯入任何指令碼", color = AppColors.TextMuted, fontSize = 13.sp)
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     scripts.forEach { s ->
@@ -486,7 +486,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         }
 
         Section("偵錯") {
-            ToggleRow("显示偵錯信息", settings.showDebugInfo) {
+            ToggleRow("顯示偵錯資訊", settings.showDebugInfo) {
                 scope.launch { appContainer.settingsStore.update { it.copy(showDebugInfo = !it.showDebugInfo) } }
             }
             Spacer(Modifier.height(8.dp))
@@ -522,7 +522,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         if (ip != null && port != null) {
             QrDialog(
                 url = "http://$ip:$port/script",
-                title = "扫码匯入音源",
+                title = "掃碼匯入音源",
                 subtitle = "可使用手機掃碼或透過電腦開啟網址，並貼上指令碼 URL 或上傳 .js 檔案",
                 onDismiss = { showQr = false },
             )
@@ -581,7 +581,7 @@ private fun importInput(scope: kotlinx.coroutines.CoroutineScope, input: String,
     val isUrl = trimmed.startsWith("http://", ignoreCase = true) ||
         trimmed.startsWith("https://", ignoreCase = true)
     scope.launch {
-        onStatus(if (isUrl) "正在下載指令碼…" else "正在匯入脚本…")
+        onStatus(if (isUrl) "正在下載指令碼…" else "正在匯入指令碼…")
         val result = runCatching {
             val raw = if (isUrl) appContainer.fetchText(trimmed) else trimmed
             appContainer.scriptStore.import(raw).getOrThrow()
@@ -733,7 +733,7 @@ private fun DeleteScriptConfirmDialog(
             Text("刪除自訂音源", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(10.dp))
             Text(
-                "確定要刪除「$scriptName」吗？刪除后需要重新匯入才能使用。",
+                "確定要刪除「$scriptName」嗎？刪除後需要重新匯入才能使用。",
                 color = AppColors.TextSecondary,
                 fontSize = 14.sp,
             )
