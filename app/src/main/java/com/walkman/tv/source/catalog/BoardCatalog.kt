@@ -123,7 +123,7 @@ private class NetEaseBoard(private val http: CatalogHttp) : BoardService {
         BoardInfo("wy__19723756", SourceID.WY, "19723756", "飆升榜"),
         BoardInfo("wy__3779629", SourceID.WY, "3779629", "新歌榜"),
         BoardInfo("wy__3778678", SourceID.WY, "3778678", "熱門歌曲榜"),
-        BoardInfo("wy__2884035", SourceID.WY, "2884035", "原创榜"),
+        BoardInfo("wy__2884035", SourceID.WY, "2884035", "原創榜"),
     )
 
     override suspend fun fetchBoards(): List<BoardInfo> {
@@ -284,7 +284,7 @@ private class QQBoard(private val http: CatalogHttp) : BoardService {
         BoardInfo("tx__59", SourceID.TX, "59", "香港地區榜"),
         BoardInfo("tx__16", SourceID.TX, "16", "韓國榜"),
         BoardInfo("tx__17", SourceID.TX, "17", "日本榜"),
-        BoardInfo("tx__65", SourceID.TX, "65", "国风熱門歌曲榜"),
+        BoardInfo("tx__65", SourceID.TX, "65", "國風熱門歌曲榜"),
         BoardInfo("tx__58", SourceID.TX, "58", "饒舌榜"),
         BoardInfo("tx__29", SourceID.TX, "29", "影視金曲榜"),
         BoardInfo("tx__63", SourceID.TX, "63", "DJ 舞曲榜"),
