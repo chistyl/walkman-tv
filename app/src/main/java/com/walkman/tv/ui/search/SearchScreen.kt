@@ -1,6 +1,7 @@
 package com.walkman.tv.ui.search
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +34,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardActions
@@ -66,6 +69,7 @@ import kotlinx.coroutines.launch
 fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     var queryValue by remember { mutableStateOf(TextFieldValue("")) }
+    var searchFocused by remember { mutableStateOf(false) }
     val simplifier = remember { Transliterator.getInstance("Traditional-Simplified") }
     var filter by remember { mutableStateOf<SourceID?>(null) }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
@@ -137,9 +141,15 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                         // Simplified Chinese conversion happens only when submitting search.
                         queryValue = entered
                     },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f)
+                        .onFocusChanged { searchFocused = it.isFocused }
+                        .border(
+                            width = if (searchFocused) 2.dp else 1.dp,
+                            color = if (searchFocused) AppColors.AccentGreen else AppColors.Card,
+                            shape = RoundedCornerShape(10.dp),
+                        ),
                     singleLine = true,
-                    placeholder = { Text("輸入關鍵字") },
+                    placeholder = { Text("輸入關鍵字", color = Color(0xFF858B98)) },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Text,
                         imeAction = ImeAction.Search,
@@ -151,6 +161,10 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                         focusedBorderColor = AppColors.AccentGreen,
                         unfocusedBorderColor = AppColors.Card,
                         cursorColor = AppColors.AccentGreen,
+                        focusedPlaceholderColor = Color(0xFF858B98),
+                        unfocusedPlaceholderColor = Color(0xFF858B98),
+                        focusedContainerColor = AppColors.BgPanel,
+                        unfocusedContainerColor = AppColors.BgPanel,
                     ),
                 )
                 Spacer(Modifier.width(8.dp))
@@ -353,13 +367,14 @@ private fun HotSearchGrid(
     columns: List<com.walkman.tv.source.catalog.HotSearchColumn>,
     onPick: (String) -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
+    val visibleColumns = columns.filter { it.words.isNotEmpty() }.take(4)
+    Column(modifier = Modifier.fillMaxSize().padding(end = 8.dp)) {
         SectionHeader("熱門搜尋")
         Row(
             modifier = Modifier.fillMaxWidth().weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            columns.forEach { col ->
+            visibleColumns.forEach { col ->
                 Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
                     Text(
                         col.source.displayName,
@@ -369,7 +384,8 @@ private fun HotSearchGrid(
                         modifier = Modifier.padding(bottom = 6.dp, start = 4.dp),
                     )
                     LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(5.dp),
                     ) {
                         itemsIndexed(col.words) { idx, word ->
                             com.walkman.tv.ui.components.TvFocusable(
@@ -377,7 +393,7 @@ private fun HotSearchGrid(
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Row(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Text(
