@@ -79,6 +79,7 @@ import com.walkman.tv.ui.appContainer
 import com.walkman.tv.ui.components.Artwork
 import com.walkman.tv.ui.components.TvFocusable
 import com.walkman.tv.ui.components.TvPill
+import com.walkman.tv.util.ChineseText
 import com.walkman.tv.ui.theme.AppColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -215,7 +216,7 @@ fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
             overflow = TextOverflow.Ellipsis,
           )
           // 播放调试信息（设置里开启）：获取地址 / 失败自动跳过 / 换源降级，排查音源问题用。
-          val status = state.error ?: (if (state.resolving) "正在取得播放網址…" else state.warning)
+          val status = ChineseText.toTaiwanTraditional(state.error ?: (if (state.resolving) "正在取得播放網址…" else state.warning).orEmpty()).ifBlank { null }
           if (settings.showDebugInfo && status != null) {
             Text(
               status,
@@ -1037,7 +1038,7 @@ private fun QueueRow(
       Spacer(Modifier.width(8.dp))
       Column(modifier = Modifier.weight(1f)) {
         Text(
-          track.name,
+          ChineseText.toTaiwanTraditional(track.name),
           color = if (isCurrent) AppColors.AccentGreen else AppColors.TextPrimary,
           fontSize = 13.sp,
           fontWeight = FontWeight.SemiBold,
