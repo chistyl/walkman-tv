@@ -120,7 +120,7 @@ fun SonglistScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                         }
                     }
                 }
-                else -> EmptyHint("暂无歌单", Modifier.fillMaxSize())
+                else -> EmptyHint("目前沒有歌單", Modifier.fillMaxSize())
             }
         }
 
