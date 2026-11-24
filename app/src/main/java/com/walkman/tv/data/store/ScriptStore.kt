@@ -49,8 +49,15 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
         }.getOrNull() ?: return
 
         // Do not block startup indefinitely on a third-party source's init/network requests.
-        runCatching { withTimeout(BUNDLED_IMPORT_TIMEOUT_MS) { import(raw) } }
-            .onFailure { android.util.Log.w(TAG, "Bundled 野花 v1 source was not installed: ${it.message}") }
+        val imported = runCatching {
+            withTimeout(BUNDLED_IMPORT_TIMEOUT_MS) { import(raw) }
+        }.getOrElse {
+            android.util.Log.w(TAG, "Bundled 野花 v1 source import timed out or failed: ${it.message}")
+            return
+        }
+        imported.onFailure {
+            android.util.Log.w(TAG, "Bundled 野花 v1 source was rejected: ${it.message}")
+        }
     }
 
     /** Result of [import]: [replaced] is the older copy of the same script (same name + author)
