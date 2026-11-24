@@ -70,11 +70,11 @@ fun QrDialog(
     val debug = appContainer.settingsStore.settings.collectAsState().value.showDebugInfo
     val context = androidx.compose.ui.platform.LocalContext.current
     fun dismiss(reason: String) {
-        if (debug) android.widget.Toast.makeText(context, "二维码弹窗关闭：$reason", android.widget.Toast.LENGTH_SHORT).show()
+        if (debug) android.widget.Toast.makeText(context, "QR Code 彈出視窗關閉：$reason", android.widget.Toast.LENGTH_SHORT).show()
         onDismiss()
     }
     LaunchedEffect(Unit) {
-        if (debug) android.widget.Toast.makeText(context, "二维码弹窗打开", android.widget.Toast.LENGTH_SHORT).show()
+        if (debug) android.widget.Toast.makeText(context, "QR Code 彈出視窗開啟", android.widget.Toast.LENGTH_SHORT).show()
     }
 
     Dialog(
@@ -120,7 +120,7 @@ fun QrDialog(
                     }
                 } else {
                     Box(modifier = Modifier.size(220.dp), contentAlignment = Alignment.Center) {
-                        Text(if (generating) "正在生成二维码…" else "无法生成二维码", color = AppColors.TextMuted)
+                        Text(if (generating) "正在產生 QR Code…" else "無法產生 QR Code", color = AppColors.TextMuted)
                     }
                 }
                 Spacer(Modifier.height(10.dp))
