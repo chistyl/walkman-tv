@@ -51,8 +51,8 @@ private fun Modifier.focusRequesterIfFirst(fr: FocusRequester): Modifier = this.
  * "Add this track to..." dialog. Shows every playlist (我喜欢的 + user-created) with a check
  * indicator showing whether [track] is in it; tapping toggles the check, and nothing is written
  * until 完成 (取消 / back discards). Bottom row
- * has a 新建歌单 affordance that opens [PlaylistNameDialog] inline. [showDownloadButton] adds a
- * 下载 button — only the player uses it; track lists have their own row-end 下载 button.
+ * has a 新增歌單 affordance that opens [PlaylistNameDialog] inline. [showDownloadButton] adds a
+ * 下載 button — only the player uses it; track lists have their own row-end 下載 button.
  */
 @Composable
 fun PlaylistPickerDialog(track: Track, onDismiss: () -> Unit, showDownloadButton: Boolean = false) {
@@ -105,7 +105,7 @@ fun PlaylistPickerDialog(track: Track, onDismiss: () -> Unit, showDownloadButton
                 .padding(horizontal = 22.dp, vertical = 20.dp),
         ) {
             Text(
-                "添加到歌单",
+                "加入歌單",
                 color = AppColors.TextPrimary,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
@@ -178,7 +178,7 @@ fun PlaylistPickerDialog(track: Track, onDismiss: () -> Unit, showDownloadButton
                         onClick = { showDownload = true },
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                     ) {
-                        Text("下载", fontSize = 13.sp)
+                        Text("下載", fontSize = 13.sp)
                     }
                 }
                 TvPill(
@@ -188,7 +188,7 @@ fun PlaylistPickerDialog(track: Track, onDismiss: () -> Unit, showDownloadButton
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.size(4.dp))
-                        Text("新建歌单", fontSize = 13.sp)
+                        Text("新增歌單", fontSize = 13.sp)
                     }
                 }
                 TvPill(
@@ -215,7 +215,7 @@ fun PlaylistPickerDialog(track: Track, onDismiss: () -> Unit, showDownloadButton
     if (showCreate) {
         PlaylistNameDialog(
             initial = "",
-            title = "新建歌单",
+            title = "新增歌單",
             onDismiss = { showCreate = false },
             onConfirm = { name ->
                 scope.launch {
@@ -232,7 +232,7 @@ fun PlaylistPickerDialog(track: Track, onDismiss: () -> Unit, showDownloadButton
 /**
  * Name-input dialog for a playlist. Chinese-friendly: shows a real BasicTextField (Compose
  * pops the system IME — whatever Chinese / Pinyin keyboard the user has installed on the TV),
- * plus a 手机扫码输入 affordance that opens a QR code pointing to LocalServer's
+ * plus a 手機掃碼輸入 affordance that opens a QR code pointing to LocalServer's
  * /playlist-name form so the user can type on their phone instead. Name received from the QR
  * flow is pushed into the field; the user can edit further or hit 完成 immediately.
  */
@@ -299,7 +299,7 @@ fun PlaylistNameDialog(
                         Box {
                             if (name.isEmpty()) {
                                 Text(
-                                    "请输入歌单名（按确认键调出系统输入法）",
+                                    "請輸入歌單名稱（按確認鍵叫出系統輸入法）",
                                     color = AppColors.TextMuted,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Medium,
@@ -314,7 +314,7 @@ fun PlaylistNameDialog(
             }
             Spacer(Modifier.size(6.dp))
             Text(
-                "中文输入不便？点击「手机扫码输入」用手机键盘",
+                "中文输入不便？点击「手機掃碼輸入」用手机键盘",
                 color = AppColors.TextMuted,
                 fontSize = 11.sp,
             )
@@ -328,7 +328,7 @@ fun PlaylistNameDialog(
                     onClick = { showQr = true },
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                 ) {
-                    Text("手机扫码输入", fontSize = 13.sp)
+                    Text("手機掃碼輸入", fontSize = 13.sp)
                 }
                 TvPill(
                     onClick = onDismiss,
@@ -356,8 +356,8 @@ fun PlaylistNameDialog(
         if (ip != null && port != null) {
             QrDialog(
                 url = "http://$ip:$port/playlist-name",
-                title = "扫码输入名字",
-                subtitle = "在手机上输入（中英文都行），提交后名字会自动填入输入框",
+                title = "掃碼輸入名稱",
+                subtitle = "在手機上輸入（支援中英文），送出後名稱會自動填入輸入框",
                 onDismiss = { showQr = false },
             )
         } else {
