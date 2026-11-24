@@ -181,7 +181,7 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                 },
                 onPickHot = { kw ->
                     queryValue = TextFieldValue(kw)
-                    runSearch()
+                    runSearch(kw)
                 },
                 onPickSonglist = { info ->
                     scope.launch {
