@@ -25,8 +25,14 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
     /** Load persisted scripts and start the enabled ones. First-run users start with no
      *  custom source — they configure their own via Settings (URL / paste / file / QR upload). */
     suspend fun loadAll() {
-        val list = withContext(Dispatchers.IO) { store.load() }
+        val persisted = withContext(Dispatchers.IO) { store.load() }
+        // Retire the previously imported 野花 source on upgrade. Remove it from persisted
+        // custom sources so it is no longer shown as enabled or loaded into the resolver.
+        val list = persisted.filterNot { it.name.trim() == "野花" }
         _scripts.value = list
+        if (list.size != persisted.size) {
+            withContext(Dispatchers.IO) { store.save(list) }
+        }
         list.filter { it.enabled }.forEach { sourceManager.load(it) }
     }
 
