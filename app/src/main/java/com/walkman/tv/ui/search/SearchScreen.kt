@@ -35,6 +35,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -68,6 +75,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
     var queryValue by remember { mutableStateOf(TextFieldValue("")) }
     var searchFocused by remember { mutableStateOf(false) }
     val simplifier = remember { Transliterator.getInstance("Traditional-Simplified") }
@@ -147,6 +155,19 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                 },
                 modifier = Modifier
                     .width(450.dp)
+                    // Let the TV remote leave the text field with directional keys.
+                    .onPreviewKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown) {
+                            val direction = when (event.key) {
+                                Key.DirectionLeft -> FocusDirection.Left
+                                Key.DirectionRight -> FocusDirection.Right
+                                Key.DirectionUp -> FocusDirection.Up
+                                Key.DirectionDown -> FocusDirection.Down
+                                else -> null
+                            }
+                            direction?.let { focusManager.moveFocus(it) } ?: false
+                        } else false
+                    }
                     .onFocusChanged { searchFocused = it.isFocused }
                     .border(
                         width = if (searchFocused) 2.dp else 1.dp,
