@@ -35,6 +35,7 @@ import com.walkman.tv.ui.components.TvFocusable
 import com.walkman.tv.ui.components.TvPill
 import com.walkman.tv.ui.playList
 import com.walkman.tv.ui.theme.AppColors
+import com.walkman.tv.util.ChineseText
 
 private val boardSources = listOf(SourceID.KW, SourceID.WY, SourceID.KG, SourceID.TX)
 
@@ -82,7 +83,7 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                                 onClick = { if (source != s) source = s },
                                 selected = source == s,
                                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 6.dp),
-                            ) { Text(s.displayName, fontSize = 11.sp) }
+                            ) { Text(ChineseText.toTaiwanTraditional(s.displayName), fontSize = 11.sp) }
                         }
                     }
                 }
@@ -93,7 +94,7 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                 items(uniqueBoards, key = { it.id }) { b ->
                     TvFocusable(onClick = { selected = b }, modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            b.displayName,
+                            ChineseText.toTaiwanTraditional(b.displayName),
                             color = if (selected?.id == b.id) AppColors.AccentGreen else AppColors.TextPrimary,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -105,7 +106,7 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
         }
         Spacer(Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-            Text(selected?.displayName ?: "排行榜", color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(ChineseText.toTaiwanTraditional(selected?.displayName ?: "排行榜"), color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             when {
                 loadingTracks -> LoadingState(Modifier.fillMaxSize())
                 tracks.isNotEmpty() -> {
