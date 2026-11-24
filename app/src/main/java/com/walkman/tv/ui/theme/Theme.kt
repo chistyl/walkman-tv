@@ -2,6 +2,9 @@ package com.walkman.tv.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ColorScheme
@@ -40,11 +43,21 @@ object Dimens {
 @Composable
 fun WalkmanTvTheme(content: @Composable () -> Unit) {
     @Suppress("UNUSED_EXPRESSION") isSystemInDarkTheme() // TV is always dark here
-    MaterialTheme(
-        colorScheme = WalkmanColorScheme,
-        typography = WalkmanTypography,
-        content = content,
-    )
+    // Keep the TV UI typography stable across Android versions and OEM accessibility
+    // font-scale defaults. Preserve display density while using the app's designed text sizes.
+    val systemDensity = LocalDensity.current
+    CompositionLocalProvider(
+        LocalDensity provides Density(
+            density = systemDensity.density,
+            fontScale = 1f,
+        ),
+    ) {
+        MaterialTheme(
+            colorScheme = WalkmanColorScheme,
+            typography = WalkmanTypography,
+            content = content,
+        )
+    }
 }
 
 private val WalkmanTypography = Typography().let { base ->
