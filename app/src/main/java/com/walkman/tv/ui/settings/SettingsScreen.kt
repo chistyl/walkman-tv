@@ -228,7 +228,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         }
 
         Section("歌詞翻譯") {
-            ToggleRow("顯示歌詞翻譯（外语歌有翻译时在每句下方显示）", settings.showLyricTranslation) {
+            ToggleRow("顯示歌詞翻譯（外語歌曲有翻譯時，會顯示在每句歌詞下方）", settings.showLyricTranslation) {
                 scope.launch { appContainer.settingsStore.update { it.copy(showLyricTranslation = !it.showLyricTranslation) } }
             }
         }
