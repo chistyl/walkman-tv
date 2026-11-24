@@ -76,8 +76,8 @@ class SourceManager(
                 runCatching { resolveViaScript(track, q, ls) }
                     .onSuccess { url ->
                         val warn = when {
-                            scriptIdx > 0 -> "已切换到音源「${ls.script.name}」"
-                            idx > 0 -> "${first.displayName} 远程不支持，已降级到 ${q.displayName}"
+                            scriptIdx > 0 -> "已切換至音源「${ls.script.name}」"
+                            idx > 0 -> "${first.displayName} 遠端不支援，已降低至 ${q.displayName}"
                             else -> null
                         }
                         return ResolvedTrack(url, ResolveOrigin.Script(ls.script.name), q, warn)
@@ -102,9 +102,9 @@ class SourceManager(
         }
 
         if (scriptFor(track.source, "musicUrl") == null) {
-            throw SourceException("没有脚本提供 ${track.source.displayName} 源，请到设置 → 自定义音源 导入脚本")
+            throw SourceException("沒有指令碼提供 ${track.source.displayName} 源，請前往「設定」→「自訂音源」匯入指令碼")
         }
-        throw SourceException("这首 ${track.source.displayName} 歌曲无法获取播放地址，换一首或换个能用的脚本")
+        throw SourceException("這首 ${track.source.displayName} 歌曲無法取得播放網址，請換一首歌曲或更換可用的指令碼")
     }
 
     private suspend fun tryOtherSources(track: Track, preferred: Quality): ResolvedTrack? {
@@ -118,7 +118,7 @@ class SourceManager(
                 altLS.capabilities.sources[alt.source]?.qualities?.toSet() ?: emptySet(),
             )
             runCatching { resolveViaScript(alt, q, altLS) }.getOrNull()?.let { url ->
-                val warn = "原 ${track.source.displayName} 源无法获取播放地址，已换到 ${alt.source.displayName}"
+                val warn = "原本的 ${track.source.displayName} 音源無法取得播放網址，已切換至 ${alt.source.displayName}"
                 return ResolvedTrack(url, ResolveOrigin.OtherSource(alt.source), q, warn)
             }
         }
@@ -133,12 +133,12 @@ class SourceManager(
         val obj = result as? JSONObject
         val url = obj?.optJSONObject("data")?.optString("url")?.ifEmpty { null }
             ?: obj?.optString("url")?.ifEmpty { null }
-        return url ?: throw SourceException("脚本返回了无效结果")
+        return url ?: throw SourceException("指令碼傳回無效結果")
     }
 
     /** Ask a user script for lyric data — raw `{lyric, tlyric, rlyric, lxlyric}` (iOS `requestLyric`). */
     suspend fun requestLyric(track: Track): JSONObject? {
-        val ls = scriptFor(track.source, "lyric") ?: throw SourceException("没有脚本提供 ${track.source.displayName} 歌词")
+        val ls = scriptFor(track.source, "lyric") ?: throw SourceException("沒有指令碼提供 ${track.source.displayName} 歌詞")
         val info = JSONObject().put("type", "").put("musicInfo", makeOldMusicInfo(track))
         return ls.runtime.requestAction(track.source, "lyric", info) as? JSONObject
     }
