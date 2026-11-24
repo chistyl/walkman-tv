@@ -75,7 +75,7 @@ fun BatchDownloadDialog(playlistName: String, tracks: List<Track>, onDismiss: ()
                 .background(AppColors.BgPanel)
                 .padding(horizontal = 22.dp, vertical = 20.dp),
         ) {
-            Text("批量下载", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("批次下載", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.size(4.dp))
             Text(
                 "《$playlistName》· ${tracks.size} 首",
@@ -86,10 +86,10 @@ fun BatchDownloadDialog(playlistName: String, tracks: List<Track>, onDismiss: ()
             )
             Spacer(Modifier.size(14.dp))
 
-            Text("目标音质", color = AppColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text("目標音質", color = AppColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.size(2.dp))
             Text(
-                "每首歌取不超过此档的最佳音质（不支持时自动降级）。",
+                "每首歌曲將採用不超過此等級的最佳音質（若不支援，將自動降低音質）。",
                 color = AppColors.TextMuted,
                 fontSize = 11.sp,
             )
@@ -121,7 +121,7 @@ fun BatchDownloadDialog(playlistName: String, tracks: List<Track>, onDismiss: ()
             }
 
             Spacer(Modifier.size(12.dp))
-            Text("保存到", color = AppColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text("儲存至", color = AppColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.size(6.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -140,16 +140,16 @@ fun BatchDownloadDialog(playlistName: String, tracks: List<Track>, onDismiss: ()
                     onClick = { showNewFolder = true },
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                 ) {
-                    Text("+ 新建", fontSize = 12.sp)
+                    Text("+ 新增", fontSize = 12.sp)
                 }
             }
 
             Spacer(Modifier.size(10.dp))
             Text(
                 if (settings.redownloadOnQualityChange) {
-                    "已下载且音质相同的会跳过；音质不同的将按新音质重下（可在设置里关闭）。"
+                    "已下載且音質相同的歌曲會略過；音質不同的歌曲將依新音質重新下載（可在設定中關閉）。"
                 } else {
-                    "已下载的歌曲将全部跳过（可在设置里开启「按新音质重下」）。"
+                    "已下載的歌曲將全部略過（可在設定中開啟「依新音質重新下載」）。"
                 },
                 color = AppColors.TextMuted,
                 fontSize = 11.sp,
@@ -158,7 +158,7 @@ fun BatchDownloadDialog(playlistName: String, tracks: List<Track>, onDismiss: ()
             enqueued?.let {
                 Spacer(Modifier.size(12.dp))
                 Text(
-                    if (it > 0) "✓ 已加入 $it 首到下载队列" else "全部已下载，无需重复",
+                    if (it > 0) "✓ 已將 $it 首歌曲加入下載佇列" else "全部歌曲皆已下載，無須重複下載",
                     color = AppColors.AccentGreen,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -193,7 +193,7 @@ fun BatchDownloadDialog(playlistName: String, tracks: List<Track>, onDismiss: ()
                         focusRequester = startFocus,
                         contentPadding = PaddingValues(horizontal = 22.dp, vertical = 8.dp),
                     ) {
-                        Text("开始下载", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("開始下載", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -203,7 +203,7 @@ fun BatchDownloadDialog(playlistName: String, tracks: List<Track>, onDismiss: ()
     if (showNewFolder) {
         PlaylistNameDialog(
             initial = "",
-            title = "新建下载分类",
+            title = "新增下載分類",
             onDismiss = { showNewFolder = false },
             onConfirm = { name ->
                 scope.launch {
