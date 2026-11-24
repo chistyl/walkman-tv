@@ -713,7 +713,7 @@ private fun ActiveDownloadRow(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(rec.track.displayName, color = AppColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                Text("${rec.track.singer} · ${rec.quality.displayName}", color = AppColors.TextMuted, fontSize = 11.sp, maxLines = 1)
+                Text("${rec.track.displaySinger} · ${rec.quality.displayName}", color = AppColors.TextMuted, fontSize = 11.sp, maxLines = 1)
                 Spacer(Modifier.height(4.dp))
                 Box(
                     modifier = Modifier
