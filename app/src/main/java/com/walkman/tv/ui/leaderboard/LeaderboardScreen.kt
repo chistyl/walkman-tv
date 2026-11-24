@@ -103,7 +103,7 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                         playList(tracks, idx); onOpenPlayer()
                     }
                 }
-                else -> EmptyHint("暂无内容", Modifier.fillMaxSize())
+                else -> EmptyHint("目前沒有內容", Modifier.fillMaxSize())
             }
         }
     }
