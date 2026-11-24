@@ -53,6 +53,7 @@ import com.walkman.tv.ui.appContainer
 import com.walkman.tv.ui.components.Artwork
 import com.walkman.tv.ui.components.TvFocusable
 import com.walkman.tv.ui.components.TvPill
+import com.walkman.tv.util.ChineseText
 import com.walkman.tv.ui.theme.AppColors
 
 @Composable
@@ -110,12 +111,12 @@ private fun NowPlayingPanel(onOpenPlayer: () -> Unit, modifier: Modifier = Modif
     }
     Spacer(Modifier.height(12.dp))
     if (track != null) {
-      Text(track.displayName, color = AppColors.TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-      Text(track.displaySinger, color = AppColors.TextSecondary, fontSize = 13.sp, maxLines = 1)
+      Text(ChineseText.toTaiwanTraditional(track.displayName), color = AppColors.TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+      Text(ChineseText.toTaiwanTraditional(track.displaySinger), color = AppColors.TextSecondary, fontSize = 13.sp, maxLines = 1)
       Spacer(Modifier.height(8.dp))
       val active = LyricParser.activeIndex(state.positionMs / 1000.0, lyrics)
       val line = lyrics.getOrNull(active)?.text ?: if (state.resolving) "解析中…" else ""
-      Text(line, color = AppColors.LyricIdle, fontSize = 13.sp, maxLines = 1)
+      Text(ChineseText.toTaiwanTraditional(line), color = AppColors.LyricIdle, fontSize = 13.sp, maxLines = 1)
     } else {
       Text("目前沒有播放內容，前往推薦頁選擇歌曲即可開始播放", color = AppColors.TextSecondary, fontSize = 14.sp)
     }
@@ -377,7 +378,7 @@ private fun SectionHeader(
     modifier = Modifier.fillMaxWidth().padding(start = 4.dp),
     verticalAlignment = Alignment.Bottom,
   ) {
-    Text(title, color = AppColors.TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+    Text(ChineseText.toTaiwanTraditional(title), color = AppColors.TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
     if (!subtitle.isNullOrBlank()) {
       Spacer(Modifier.width(10.dp))
       Text(
@@ -393,7 +394,7 @@ private fun SectionHeader(
         onClick = onTrailingClick,
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 6.dp),
       ) {
-        Text(trailing, fontSize = 12.sp)
+        Text(ChineseText.toTaiwanTraditional(trailing), fontSize = 12.sp)
       }
     }
   }
