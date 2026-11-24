@@ -80,7 +80,7 @@ class LocalMusicStore(
         // 4) Anchor the persistent Uri.
         val record = existing ?: LocalFolderRecord(
             id = folderID,
-            name = playlistName.ifBlank { root.name ?: "本地音乐" },
+            name = playlistName.ifBlank { root.name ?: "本機音樂" },
             persistedUriString = treeUri.toString(),
         ).also { localFolderStore.add(it) }
         ImportResult(record, tracks)
@@ -117,7 +117,7 @@ class LocalMusicStore(
 
         val record = existing ?: LocalFolderRecord(
             id = folderID,
-            name = playlistName.ifBlank { dir.name.ifBlank { "本地音乐" } },
+            name = playlistName.ifBlank { dir.name.ifBlank { "本機音樂" } },
             persistedUriString = dirUri,
         ).also { localFolderStore.add(it) }
         ImportResult(record, tracks)
@@ -182,22 +182,22 @@ class LocalMusicStore(
         known: Map<String, Track>,
         onProgress: (Float) -> Unit = {},
     ): List<Track> = withContext(Dispatchers.IO) {
-        val record = localFolderStore.find(folderID) ?: throw IllegalStateException("文件夹记录已丢失")
+        val record = localFolderStore.find(folderID) ?: throw IllegalStateException("資料夾紀錄已遺失")
         val rootUri = Uri.parse(record.persistedUriString)
         val leaves: List<Pair<Uri, String>> = if (rootUri.scheme == "file") {
             val dir = java.io.File(rootUri.path ?: "")
-            if (!dir.isDirectory || dir.listFiles() == null) throw IllegalStateException("文件夹不可访问：${record.name}")
+            if (!dir.isDirectory || dir.listFiles() == null) throw IllegalStateException("無法存取資料夾：${record.name}")
             mutableListOf<Pair<java.io.File, String>>().also { walkFile(dir, "", it) }
                 .map { (f, rel) -> Uri.fromFile(f) to rel }
         } else {
             val root = runCatching { DocumentFile.fromTreeUri(context, rootUri) }.getOrNull()
-                ?.takeIf { it.isDirectory } ?: throw IllegalStateException("文件夹不可访问：${record.name}")
+                ?.takeIf { it.isDirectory } ?: throw IllegalStateException("無法存取資料夾：${record.name}")
             mutableListOf<Pair<DocumentFile, String>>().also { walk(root, "", it) }
                 .map { (f, rel) -> f.uri to rel }
         }.sortedBy { it.second.lowercase() }
         // Zero audio files almost always means we lost read access (permission revoked, drive
         // remounted empty) rather than the user deleting everything — refuse instead of wiping.
-        if (leaves.isEmpty()) throw IllegalStateException("「${record.name}」里没有读到音频文件，可能没有存储权限或文件夹已移动")
+        if (leaves.isEmpty()) throw IllegalStateException("「${record.name}」中找不到音訊檔案，可能是沒有儲存空間權限，或資料夾已移動")
 
         leaves.mapIndexed { idx, (uri, relPath) ->
             val id = "local_" + sha256Hex("$folderID|$relPath").take(24)
@@ -314,7 +314,7 @@ class LocalMusicStore(
                 }
             }
         }
-        if (artist.isBlank()) artist = "未知歌手"
+        if (artist.isBlank()) artist = "未知演唱者"
 
         // 4) Stable, file-safe trackID. SHA-256(folderID + "|" + relPath), first 24 hex chars.
         val hash = sha256Hex("$folderID|$relPath").take(24)
