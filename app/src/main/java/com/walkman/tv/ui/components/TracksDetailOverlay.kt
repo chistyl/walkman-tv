@@ -19,6 +19,7 @@ import androidx.tv.material3.Text
 import com.walkman.tv.data.model.Track
 import com.walkman.tv.ui.appContainer
 import com.walkman.tv.ui.playList
+import com.walkman.tv.util.ChineseText
 import com.walkman.tv.ui.theme.AppColors
 
 /**
@@ -50,7 +51,7 @@ fun TracksDetailOverlay(
             .padding(top = 8.dp),
     ) {
         Text(
-            title,
+            ChineseText.toTaiwanTraditional(title),
             color = AppColors.TextPrimary,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
@@ -58,7 +59,7 @@ fun TracksDetailOverlay(
             overflow = TextOverflow.Ellipsis,
         )
         if (!subtitle.isNullOrBlank()) {
-            Text(subtitle, color = AppColors.TextMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(ChineseText.toTaiwanTraditional(subtitle), color = AppColors.TextMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.height(6.dp))
         val nowId = appContainer.playbackController.state.collectAsState().value.currentTrack?.id
