@@ -92,7 +92,7 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
             val q = simplifier.transliterate(currentQuery)
             // Record into history before kicking off the request so it shows up on the next
             // empty-query render even if the result list ends up empty.
-            appContainer.searchHistoryStore.record(q)
+            appContainer.searchHistoryStore.record(currentQuery)
             val pair = runCatching {
                 coroutineScope {
                     val tracksJob = async {
