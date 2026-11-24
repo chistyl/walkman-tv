@@ -174,19 +174,19 @@ private fun ExitConfirmDialog(onCancel: () -> Unit, onConfirm: () -> Unit) {
             // unbalanced; this matches the standard "body left, actions right" dialog pattern.
         ) {
             Text(
-                text = "退出应用",
+                text = "結束應用程式",
                 color = AppColors.TextPrimary,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
             )
             Spacer(Modifier.height(10.dp))
             Text(
-                text = "确定要退出随便听吗？",
+                text = "確定要結束「隨便聽」嗎？",
                 color = AppColors.TextSecondary,
                 fontSize = 14.sp,
             )
             Spacer(Modifier.height(22.dp))
-            // Both buttons right-aligned, 取消 immediately to the left of 确定 with a small gap.
+            // Both buttons right-aligned, 取消 immediately to the left of 確定 with a small gap.
             // Standard TV dialog footer pattern: actions hug the trailing edge so D-pad Right
             // from anywhere in the dialog body lands on the action row predictably.
             Row(
@@ -206,7 +206,7 @@ private fun ExitConfirmDialog(onCancel: () -> Unit, onConfirm: () -> Unit) {
                     accent = AppColors.Danger,  // 红色基调 — 让破坏性动作从「OK 绿」里拽出来
                     contentPadding = PaddingValues(horizontal = 28.dp, vertical = 10.dp),
                 ) {
-                    Text("确定", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text("確定", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
