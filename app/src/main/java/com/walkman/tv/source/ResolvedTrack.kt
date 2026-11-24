@@ -18,7 +18,7 @@ sealed interface ResolveOrigin {
         override val label get() = "换源: ${source.displayName}"
     }
     data object LocalFile : ResolveOrigin {
-        override val label get() = "本地"
+        override val label get() = "本機"
     }
 }
 
