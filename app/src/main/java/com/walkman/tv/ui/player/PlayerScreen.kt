@@ -200,7 +200,7 @@ fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
         // 左侧歌词自适应收缩区：吃掉除去右侧唱片尺寸后剩下的全部横向空间
         Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
           Text(
-            track.name,
+            track.displayName,
             color = AppColors.TextPrimary,
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
@@ -208,7 +208,7 @@ fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
             overflow = TextOverflow.Ellipsis,
           )
           Text(
-            track.singer,
+            track.displaySinger,
             color = AppColors.TextSecondary,
             fontSize = 13.sp,
             maxLines = 1,
