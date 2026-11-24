@@ -166,10 +166,10 @@ class PlaybackController(
         ): ExoPlayer {
             val loadControl = DefaultLoadControl.Builder()
                 .setBufferDurationsMs(
-                    /* minBufferMs = */ 30_000,
-                    /* maxBufferMs = */ 60_000,
-                    /* bufferForPlaybackMs = */ 3_000,
-                    /* bufferForPlaybackAfterRebufferMs = */ 5_000,
+                    /* minBufferMs = */ 15_000,
+                    /* maxBufferMs = */ 50_000,
+                    /* bufferForPlaybackMs = */ 1_000,
+                    /* bufferForPlaybackAfterRebufferMs = */ 2_000,
                 )
                 .setPrioritizeTimeOverSizeThresholds(true)
                 .build()
