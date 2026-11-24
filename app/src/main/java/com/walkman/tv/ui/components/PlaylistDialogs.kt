@@ -112,7 +112,7 @@ fun PlaylistPickerDialog(track: Track, onDismiss: () -> Unit, showDownloadButton
             )
             Spacer(Modifier.size(4.dp))
             Text(
-                track.name,
+                track.displayName,
                 color = AppColors.TextSecondary,
                 fontSize = 13.sp,
                 maxLines = 1,
