@@ -67,7 +67,6 @@ import com.walkman.tv.ui.components.TvFocusable
 import com.walkman.tv.ui.components.TvPill
 import com.walkman.tv.ui.components.TvTextFieldHost
 import com.walkman.tv.ui.theme.AppColors
-import com.walkman.tv.playback.update.UpdateState
 import kotlinx.coroutines.launch
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
@@ -493,7 +492,6 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             )
         }
 
-        UpdateSection()
     }
 
     pendingDelete?.let { target ->
@@ -596,85 +594,6 @@ private fun importFromUrl(scope: kotlinx.coroutines.CoroutineScope, url: String,
             appContainer.scriptStore.import(raw).getOrThrow()
         }
         onStatus(result.fold({ it.message }, { "匯入失敗：${it.message}" }))
-    }
-}
-
-/**
- * 檢查更新: auto-checks GitHub once on open, then drives the whole download → install flow
- * inline. State lives in [com.walkman.tv.playback.update.UpdateManager] so leaving and
- * re-entering Settings resumes wherever it was (e.g. keeps a "有新版本" result).
- */
-@Composable
-private fun UpdateSection() {
-    val ctx = LocalContext.current
-    val mgr = appContainer.updateManager
-    val state by mgr.state.collectAsState()
-    var permHint by remember { mutableStateOf(false) }
-
-    // Check + download run on the process-lived appScope (not a composable scope) so leaving
-    // Settings mid-flight doesn't cancel them — the StateFlow keeps progressing and the UI
-    // re-attaches to wherever it got to when the user comes back.
-    // Auto-check once — only from a clean Idle so re-entering Settings doesn't re-hit GitHub.
-    LaunchedEffect(Unit) {
-        if (mgr.state.value is UpdateState.Idle) appContainer.appScope.launch { mgr.check() }
-    }
-    // Note: auto-launching the installer on download-complete is handled globally in RootScreen.
-
-    Section("檢查更新") {
-        Text("目前版本 v${mgr.currentVersion}", color = AppColors.TextSecondary, fontSize = 13.sp)
-
-        // Status line — plain text, no focusable, so it can freely swap per state.
-        when (val s = state) {
-            is UpdateState.Checking ->
-                Text("正在檢查更新…", color = AppColors.TextMuted, fontSize = 13.sp)
-            is UpdateState.UpToDate ->
-                Text("已是最新版本", color = AppColors.AccentGreen, fontSize = 13.sp)
-            is UpdateState.Failed ->
-                Text("檢查失敗：${s.message}", color = AppColors.Danger, fontSize = 12.sp)
-            is UpdateState.Available -> {
-                Text("發現新版本 v${s.release.versionName}", color = AppColors.AccentGreen, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                if (s.release.notes.isNotBlank()) {
-                    Text(s.release.notes, color = AppColors.TextMuted, fontSize = 12.sp, maxLines = 6, overflow = TextOverflow.Ellipsis)
-                }
-            }
-            is UpdateState.Downloaded -> {
-                Text("下載完成", color = AppColors.AccentGreen, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                if (permHint) {
-                    Text(
-                        "請在系統開啟的設定畫面中，允許「隨便聽」安裝未知來源的應用程式，返回後再點選「立即安裝」。",
-                        color = AppColors.Warning, fontSize = 12.sp,
-                    )
-                }
-            }
-            else -> {} // Idle / Downloading — the button label carries the state
-        }
-
-        // ONE stable button: its label + action follow the state, but the composable node never
-        // leaves the tree — so remote focus stays put across 检查→檢查中→有更新 transitions
-        // instead of drifting to some other control on the page.
-        val actionLabel = when (val s = state) {
-            is UpdateState.Checking -> "檢查中…"
-            is UpdateState.UpToDate -> "重新檢查"
-            is UpdateState.Failed -> "重試"
-            is UpdateState.Available -> "下載並安裝"
-            is UpdateState.Downloading -> "正在下載 ${(s.progress * 100).toInt()}%…"
-            is UpdateState.Downloaded -> "立即安裝"
-            is UpdateState.Idle -> "檢查更新"
-        }
-        TvPill(
-            onClick = {
-                when (val s = state) {
-                    is UpdateState.Idle, is UpdateState.UpToDate, is UpdateState.Failed ->
-                        appContainer.appScope.launch { mgr.check() }
-                    is UpdateState.Available ->
-                        appContainer.appScope.launch { mgr.download(s.release) }
-                    is UpdateState.Downloaded ->
-                        permHint = !mgr.install(ctx, s.file)
-                    else -> {} // Checking / Downloading — busy, no-op
-                }
-            },
-            selected = true,
-        ) { Text(actionLabel, fontSize = 14.sp) }
     }
 }
 
