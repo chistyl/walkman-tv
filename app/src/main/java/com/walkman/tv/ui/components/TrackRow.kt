@@ -137,7 +137,7 @@ fun TrackRow(
         if (onDownload != null || onAddToPlaylist != null || onRemove != null) {
             // Tight cluster: the buttons sit closer to each other than to the row.
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                onDownload?.let { RowAction(Icons.Filled.Download, "下载", it) }
+                onDownload?.let { RowAction(Icons.Filled.Download, "下載", it) }
                 onAddToPlaylist?.let { RowAction(Icons.AutoMirrored.Filled.PlaylistAdd, "加入歌單", it) }
                 onRemove?.let { RowAction(Icons.Filled.DeleteOutline, removeLabel, it, danger = true) }
             }
