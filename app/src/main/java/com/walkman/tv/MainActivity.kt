@@ -2,13 +2,10 @@ package com.walkman.tv
 
 import android.os.Bundle
 import android.view.KeyEvent
-import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import com.walkman.tv.ui.RootScreen
 import com.walkman.tv.ui.theme.AppColors
