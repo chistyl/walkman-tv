@@ -219,7 +219,7 @@ private fun RecommendGrid(
     appContainer.homeStore.loadIfNeeded(settings.homeSources)
   }
 
-  val activeLabel = home.sources.joinToString(" · ") { it.displayName }
+  val activeLabel = ChineseText.toTaiwanTraditional(home.sources.joinToString(" · ") { it.displayName })
 
   fun openSonglist(info: com.walkman.tv.data.model.SonglistInfo) {
     if (loadingDetail) return
@@ -229,7 +229,7 @@ private fun RecommendGrid(
       val d = runCatching { svc?.fetchDetail(info) }.getOrNull()
       detail = DetailView(
         title = info.displayName,
-        subtitle = info.displayAuthor.takeIf { it.isNotBlank() } ?: info.source.displayName,
+        subtitle = ChineseText.toTaiwanTraditional(info.displayAuthor.takeIf { it.isNotBlank() } ?: info.source.displayName),
         tracks = d?.tracks ?: emptyList(),
       )
       loadingDetail = false
@@ -244,7 +244,7 @@ private fun RecommendGrid(
       val tracks = runCatching { svc?.fetchTracks(board.bangid, 1) ?: emptyList() }.getOrDefault(emptyList())
       detail = DetailView(
         title = board.displayName,
-        subtitle = board.source.displayName,
+        subtitle = ChineseText.toTaiwanTraditional(board.source.displayName),
         tracks = tracks,
       )
       loadingDetail = false
@@ -518,9 +518,9 @@ private fun HeroBanner(
           )
           Spacer(Modifier.height(8.dp))
           val subParts = buildList {
-            add(item.source.displayName)
+            add(ChineseText.toTaiwanTraditional(item.source.displayName))
             val plays = item.songlist.playCount
-            if (!plays.isNullOrBlank()) add(plays) else add("熱門播放")
+            if (!plays.isNullOrBlank()) add(ChineseText.toTaiwanTraditional(plays)) else add("熱門播放")
           }
           Text(
             subParts.joinToString(" · "),
@@ -580,7 +580,7 @@ private fun SonglistRow(items: List<com.walkman.tv.data.model.SonglistInfo>, onS
       AlbumCard(
         picURL = info.picURL,
         title = info.displayName,
-        subtitle = info.playCount?.let { "▶ $it" } ?: info.source.displayName,
+        subtitle = ChineseText.toTaiwanTraditional(info.playCount?.let { "▶ $it" } ?: info.source.displayName),
         fallbackTint = info.source.tintColor(),
         onClick = { onSelect(info) },
       )
@@ -601,7 +601,7 @@ private fun BoardRow(items: List<com.walkman.tv.data.model.BoardInfo>, onSelect:
       AlbumCard(
         picURL = board.picURL,
         title = board.displayName,
-        subtitle = board.source.displayName,
+        subtitle = ChineseText.toTaiwanTraditional(board.source.displayName),
         fallbackTint = board.source.tintColor(),
         onClick = { onSelect(board) },
       )
