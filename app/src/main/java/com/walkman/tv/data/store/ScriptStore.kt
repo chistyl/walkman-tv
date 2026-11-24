@@ -34,7 +34,7 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
      *  that this import updated in place, or null when it was added as a new source. */
     data class Imported(val script: UserScript, val replaced: UserScript?) {
         val message: String
-            get() = if (replaced == null) "已添加音源：${script.name}"
+            get() = if (replaced == null) "已新增音源：${script.name}"
             else "已更新音源：${script.name}（替换了同名旧版本${replaced.version.takeIf { it.isNotBlank() }?.let { " v$it" } ?: ""}）"
     }
 
