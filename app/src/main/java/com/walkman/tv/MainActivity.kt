@@ -19,12 +19,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             WalkmanTvTheme {
-                // Keep the TV screen awake while audio/video is playing.
-                val playing = App.container.playbackController.state.collectAsState().value.isPlaying
-                LaunchedEffect(playing) {
-                    if (playing) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                    else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                }
+                // Audio playback is owned by PlaybackService; the activity may leave the
+                // foreground or the TV display may sleep without stopping the music.
                 RootScreen(modifier = Modifier.fillMaxSize().background(AppColors.BgDeep))
             }
         }

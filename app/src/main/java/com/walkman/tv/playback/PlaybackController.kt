@@ -197,6 +197,8 @@ class PlaybackController(
                 .setLoadControl(loadControl)
                 .setAudioAttributes(audioAttrs, /* handleAudioFocus = */ true)
                 .setHandleAudioBecomingNoisy(true)
+                // Keep the CPU awake while audio is active, including with the TV display off.
+                .setWakeMode(C.WAKE_MODE_LOCAL)
                 .build()
 
             player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
