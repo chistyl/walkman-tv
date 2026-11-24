@@ -1,6 +1,8 @@
 package com.walkman.tv.ui.search
 
 import androidx.compose.foundation.background
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.QrCode2
@@ -32,6 +34,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardActions
+import androidx.compose.ui.text.input.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
+import android.icu.text.Transliterator
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,7 +65,9 @@ import kotlinx.coroutines.launch
 @Composable
 fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
-    var query by remember { mutableStateOf("") }
+    var queryValue by remember { mutableStateOf(TextFieldValue("")) }
+    val query = queryValue.text
+    val traditionalizer = remember { Transliterator.getInstance("Simplified-Traditional") }
     var filter by remember { mutableStateOf<SourceID?>(null) }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var songlists by remember { mutableStateOf<List<SonglistInfo>>(emptyList()) }
@@ -108,7 +118,7 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     // Phone-to-TV: incoming search keywords from the QR-served form.
     LaunchedEffect(Unit) {
         appContainer.events.qrSearchKeyword.collect { k ->
-            query = k
+            queryValue = TextFieldValue(k)
             showQr = false
             runSearch()
         }
@@ -118,7 +128,32 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
         // LEFT: search input + virtual keypad
         Column(modifier = Modifier.width(360.dp).fillMaxHeight().padding(end = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.weight(1f)) { SearchInputBox(query) }
+                OutlinedTextField(
+                    value = queryValue,
+                    onValueChange = { entered ->
+                        // Keep IME composing text untouched; convert only after a Chinese
+                        // candidate is committed so Pinyin input is not interrupted.
+                        queryValue = if (entered.composition == null) {
+                            val converted = traditionalizer.transliterate(entered.text)
+                            entered.copy(text = converted)
+                        } else entered
+                    },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    placeholder = { Text("輸入關鍵字") },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Search,
+                    ),
+                    keyboardActions = KeyboardActions(onSearch = { runSearch() }),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = AppColors.TextPrimary,
+                        unfocusedTextColor = AppColors.TextPrimary,
+                        focusedBorderColor = AppColors.AccentGreen,
+                        unfocusedBorderColor = AppColors.Card,
+                        cursorColor = AppColors.AccentGreen,
+                    ),
+                )
                 Spacer(Modifier.width(8.dp))
                 TvPill(
                     onClick = { showQr = true },
@@ -128,14 +163,6 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                     Icon(Icons.Filled.QrCode2, contentDescription = "掃碼搜尋", modifier = Modifier.size(22.dp))
                 }
             }
-            Spacer(Modifier.padding(top = 12.dp))
-            com.walkman.tv.ui.components.TvKeypad(
-                onAppend = { ch -> query += ch },
-                onBackspace = { if (query.isNotEmpty()) query = query.dropLast(1) },
-                onClear = { query = "" },
-                onConfirm = { runSearch() },
-                confirmLabel = "搜尋",
-            )
         }
 
         // RIGHT: platform chips + results
@@ -150,11 +177,11 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                 hotColumns = hotColumns,
                 onOpenPlayer = onOpenPlayer,
                 onPickHistory = { kw ->
-                    query = kw
+                    queryValue = TextFieldValue(kw)
                     runSearch()
                 },
                 onPickHot = { kw ->
-                    query = kw
+                    queryValue = TextFieldValue(kw)
                     runSearch()
                 },
                 onPickSonglist = { info ->
@@ -202,28 +229,6 @@ private fun QrUnavailableDialog(onDismiss: () -> Unit) {
         titleContentColor = AppColors.TextPrimary,
         textContentColor = AppColors.TextSecondary,
     )
-}
-
-// MARK: - Left panel ---------------------------------------------------------------------------
-
-@Composable
-private fun SearchInputBox(query: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(AppColors.BgPanel)
-            .padding(horizontal = 14.dp, vertical = 14.dp),
-    ) {
-        Text(
-            text = query.ifEmpty { "輸入關鍵字" },
-            color = if (query.isEmpty()) AppColors.TextMuted else AppColors.TextPrimary,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
 }
 
 // MARK: - Right panel --------------------------------------------------------------------------
