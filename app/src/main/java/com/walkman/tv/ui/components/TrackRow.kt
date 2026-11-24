@@ -71,7 +71,7 @@ fun TrackRow(
     onDownload: (() -> Unit)? = null,
     onAddToPlaylist: (() -> Unit)? = null,
     onRemove: (() -> Unit)? = null,
-    removeLabel: String = "删除",
+    removeLabel: String = "刪除",
     onClick: () -> Unit,
 ) {
     Row(
@@ -119,7 +119,7 @@ fun TrackRow(
                 if (downloaded) {
                     androidx.tv.material3.Icon(
                         imageVector = Icons.Filled.Download,
-                        contentDescription = "已下载",
+                        contentDescription = "已下載",
                         tint = AppColors.AccentGreen,
                         modifier = Modifier.size(16.dp),
                     )
@@ -138,7 +138,7 @@ fun TrackRow(
             // Tight cluster: the buttons sit closer to each other than to the row.
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 onDownload?.let { RowAction(Icons.Filled.Download, "下载", it) }
-                onAddToPlaylist?.let { RowAction(Icons.AutoMirrored.Filled.PlaylistAdd, "添加到歌单", it) }
+                onAddToPlaylist?.let { RowAction(Icons.AutoMirrored.Filled.PlaylistAdd, "加入歌單", it) }
                 onRemove?.let { RowAction(Icons.Filled.DeleteOutline, removeLabel, it, danger = true) }
             }
         }
@@ -244,7 +244,7 @@ fun TrackList(
     showDownloadedBadge: Boolean = false,
     /** Non-null ⇒ every row gets a delete button (从歌单移除 / 删除播放历史 …). */
     onRemove: ((Track) -> Unit)? = null,
-    removeLabel: String = "删除",
+    removeLabel: String = "刪除",
     onPlay: (index: Int) -> Unit,
 ) {
     // Collect once here (shared StateFlows) and derive the set of tracks that are downloaded AND
