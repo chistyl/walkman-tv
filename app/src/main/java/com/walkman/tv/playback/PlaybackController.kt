@@ -434,9 +434,9 @@ class PlaybackController(
                     .setUri(r.url)
                     .setMediaMetadata(
                         MediaMetadata.Builder()
-                            .setTitle(track.name)
-                            .setArtist(track.singer)
-                            .setAlbumTitle(track.albumName)
+                            .setTitle(track.displayName)
+                            .setArtist(track.displaySinger)
+                            .setAlbumTitle(track.displayAlbumName)
                             .apply { track.picURL?.let { setArtworkUri(android.net.Uri.parse(it)) } }
                             .build(),
                     )
