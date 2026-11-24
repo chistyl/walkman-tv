@@ -26,14 +26,10 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
      *  custom source — they configure their own via Settings (URL / paste / file / QR upload). */
     suspend fun loadAll() {
         val persisted = withContext(Dispatchers.IO) { store.load() }
-        // Retire the previously imported 野花 source on upgrade. Remove it from persisted
-        // custom sources so it is no longer shown as enabled or loaded into the resolver.
-        val list = persisted.filterNot { it.name.trim() == "野花" }
-        _scripts.value = list
-        if (list.size != persisted.size) {
-            withContext(Dispatchers.IO) { store.save(list) }
-        }
-        list.filter { it.enabled }.forEach { sourceManager.load(it) }
+        // Preserve all user-imported sources, including 野花 v1, across upgrades.
+        // Never silently delete a user's custom source during startup.
+        _scripts.value = persisted
+        persisted.filter { it.enabled }.forEach { sourceManager.load(it) }
     }
 
     /** Result of [import]: [replaced] is the older copy of the same script (same name + author)
