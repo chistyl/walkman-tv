@@ -270,11 +270,11 @@ private class NetEaseSonglist(private val http: CatalogHttp) : SonglistService {
     private fun refererHeaders() = mapOf("Referer" to "https://music.163.com/", "User-Agent" to UA)
 
     private val staticTags = listOf(
-        group("語言", listOf("华语", "歐美", "日語", "韓語", "粵語", "小語言")),
-        group("风格", listOf("流行", "摇滚", "民謠", "電子", "舞曲", "饒舌", "輕音樂", "爵士", "鄉村", "R&B/Soul", "古典", "民族", "英伦", "金屬", "龐克", "藍調", "雷鬼", "世界音樂", "拉丁", "另類／獨立", "New Age", "古風", "後搖", "Bossa Nova")),
+        group("語言", listOf("華語", "歐美", "日語", "韓語", "粵語", "小語言")),
+        group("風格", listOf("流行", "搖滾", "民謠", "電子", "舞曲", "饒舌", "輕音樂", "爵士", "鄉村", "R&B/Soul", "古典", "民族", "英倫", "金屬", "龐克", "藍調", "雷鬼", "世界音樂", "拉丁", "另類／獨立", "New Age", "古風", "後搖", "Bossa Nova")),
         group("情境", listOf("清晨", "夜晚", "學習", "工作", "午休", "下午茶", "捷運", "開車", "運動", "旅行", "散步", "酒吧")),
         group("情緒", listOf("懷舊", "清新", "浪漫", "性感", "感傷", "療癒", "放鬆", "孤獨", "感動", "興奮", "快樂", "安靜", "思念")),
-        group("主題", listOf("影視原聲", "ACG", "兒童", "校園", "遊戲", "70后", "80后", "90后", "網路歌曲", "KTV", "經典", "翻唱", "吉他", "钢琴", "器樂", "排行榜", "00后")),
+        group("主題", listOf("影視原聲", "ACG", "兒童", "校園", "遊戲", "70 後", "80 後", "90 後", "網路歌曲", "KTV", "經典", "翻唱", "吉他", "鋼琴", "器樂", "排行榜", "00 後")),
     )
 
     private fun group(name: String, names: List<String>) = SonglistTagGroup(name, names.map { SonglistTag(it, it) })
