@@ -27,7 +27,7 @@ class BuiltInResolver(client: OkHttpClient) {
         when (track.source) {
             SourceID.KW -> resolveKuwo(track.songmid, quality)
             SourceID.WY -> ResolvedURL(resolveNetEase(track.songmid))
-            else -> throw ResolveException("内置直连暂不支持 ${track.source.displayName}")
+            else -> throw ResolveException("內建直連暫不支援 ${track.source.displayName}")
         }
     }
 
@@ -55,9 +55,9 @@ class BuiltInResolver(client: OkHttpClient) {
             if (isKuwoDRMPlaceholder(u)) lastDRM = u else return ResolvedURL(u)
         }
         lastDRM?.let {
-            return ResolvedURL(it, "酷我对未授权请求只返回 DRM 占位音频。需要能解析真实 URL 的 v4 脚本才能听到原曲。")
+            return ResolvedURL(it, "酷我對未授權的請求只會回傳 DRM 佔位音訊。需要使用可解析真實 URL 的 v4 指令碼，才能播放原曲。")
         }
-        throw ResolveException("该曲目可能是 VIP 或受限歌曲")
+        throw ResolveException("此曲目可能是 VIP 或受限制的歌曲")
     }
 
     private fun orderedKuwoBRs(br: String): List<String> {
@@ -92,8 +92,8 @@ class BuiltInResolver(client: OkHttpClient) {
             .build()
         client.newCall(req).execute().use { resp ->
             if (resp.code !in listOf(301, 302, 303)) throw ResolveException("HTTP ${resp.code}")
-            val location = resp.header("Location") ?: throw ResolveException("未返回播放地址")
-            if (location.contains("/404")) throw ResolveException("该曲目可能是 VIP 或受限歌曲")
+            val location = resp.header("Location") ?: throw ResolveException("未回傳播放網址")
+            if (location.contains("/404")) throw ResolveException("此曲目可能是 VIP 或受限制的歌曲")
             return location
         }
     }
