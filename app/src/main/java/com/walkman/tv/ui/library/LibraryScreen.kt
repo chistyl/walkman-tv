@@ -258,7 +258,7 @@ private fun HistoryTab(
             nowPlayingId = nowId,
             showDownloadedBadge = true,
             onRemove = { t -> scope.launch { appContainer.libraryStore.removeFromHistory(t.id) } },
-            removeLabel = "从播放紀錄刪除",
+            removeLabel = "從播放紀錄中刪除",
         ) { idx ->
             playList(history.tracks, idx); onOpenPlayer()
         }
@@ -266,7 +266,7 @@ private fun HistoryTab(
     if (confirmClear) {
         com.walkman.tv.ui.components.ConfirmDialog(
             title = "清除播放紀錄",
-            message = "确定清除全部 ${history.tracks.size} 条播放紀錄吗？",
+            message = "確定要清除全部 ${history.tracks.size} 筆播放紀錄嗎？",
             confirmLabel = "清除",
             onCancel = { confirmClear = false },
             onConfirm = {
@@ -752,7 +752,7 @@ private fun FailedDownloadRow(rec: com.walkman.tv.data.model.DownloadRecord) {
         Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
             Text(rec.track.name, color = AppColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
             Text(
-                rec.errorMessage ?: "下载失敗",
+                rec.errorMessage ?: "下載失敗",
                 color = AppColors.Danger,
                 fontSize = 11.sp,
                 maxLines = 1,
