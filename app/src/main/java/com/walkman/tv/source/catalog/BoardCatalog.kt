@@ -43,22 +43,22 @@ internal suspend fun fillKuwoCovers(http: CatalogHttp, tracks: List<Track>): Lis
 private class KuwoBoard(private val http: CatalogHttp) : BoardService {
     override val source = SourceID.KW
     override val list = listOf(
-        BoardInfo("kw__93", SourceID.KW, "93", "飙升榜"),
-        BoardInfo("kw__16", SourceID.KW, "16", "热歌榜"),
+        BoardInfo("kw__93", SourceID.KW, "93", "飆升榜"),
+        BoardInfo("kw__16", SourceID.KW, "16", "熱門歌曲榜"),
         BoardInfo("kw__17", SourceID.KW, "17", "新歌榜"),
-        BoardInfo("kw__158", SourceID.KW, "158", "抖音热歌榜"),
-        BoardInfo("kw__187", SourceID.KW, "187", "流行趋势榜"),
-        BoardInfo("kw__104", SourceID.KW, "104", "华语榜"),
-        BoardInfo("kw__182", SourceID.KW, "182", "粤语榜"),
-        BoardInfo("kw__22", SourceID.KW, "22", "欧美榜"),
-        BoardInfo("kw__184", SourceID.KW, "184", "韩语榜"),
-        BoardInfo("kw__183", SourceID.KW, "183", "日语榜"),
-        BoardInfo("kw__26", SourceID.KW, "26", "经典怀旧榜"),
-        BoardInfo("kw__278", SourceID.KW, "278", "古风音乐榜"),
-        BoardInfo("kw__242", SourceID.KW, "242", "电音榜"),
+        BoardInfo("kw__158", SourceID.KW, "158", "抖音熱門歌曲榜"),
+        BoardInfo("kw__187", SourceID.KW, "187", "流行趨勢榜"),
+        BoardInfo("kw__104", SourceID.KW, "104", "華語榜"),
+        BoardInfo("kw__182", SourceID.KW, "182", "粵語榜"),
+        BoardInfo("kw__22", SourceID.KW, "22", "歐美榜"),
+        BoardInfo("kw__184", SourceID.KW, "184", "韓語榜"),
+        BoardInfo("kw__183", SourceID.KW, "183", "日語榜"),
+        BoardInfo("kw__26", SourceID.KW, "26", "經典懷舊榜"),
+        BoardInfo("kw__278", SourceID.KW, "278", "古風音樂榜"),
+        BoardInfo("kw__242", SourceID.KW, "242", "電音榜"),
         BoardInfo("kw__186", SourceID.KW, "186", "ACG神曲榜"),
-        BoardInfo("kw__284", SourceID.KW, "284", "热评榜"),
-        BoardInfo("kw__64", SourceID.KW, "64", "影视金曲榜"),
+        BoardInfo("kw__284", SourceID.KW, "284", "熱門評論榜"),
+        BoardInfo("kw__64", SourceID.KW, "64", "影視金曲榜"),
         BoardInfo("kw__12", SourceID.KW, "12", "Billboard榜"),
     )
 
@@ -120,9 +120,9 @@ private class KuwoBoard(private val http: CatalogHttp) : BoardService {
 private class NetEaseBoard(private val http: CatalogHttp) : BoardService {
     override val source = SourceID.WY
     override val list = listOf(
-        BoardInfo("wy__19723756", SourceID.WY, "19723756", "飙升榜"),
+        BoardInfo("wy__19723756", SourceID.WY, "19723756", "飆升榜"),
         BoardInfo("wy__3779629", SourceID.WY, "3779629", "新歌榜"),
-        BoardInfo("wy__3778678", SourceID.WY, "3778678", "热歌榜"),
+        BoardInfo("wy__3778678", SourceID.WY, "3778678", "熱門歌曲榜"),
         BoardInfo("wy__2884035", SourceID.WY, "2884035", "原创榜"),
     )
 
@@ -186,19 +186,19 @@ private class KugouBoard(private val http: CatalogHttp) : BoardService {
     override val source = SourceID.KG
     override val list = listOf(
         BoardInfo("kg__8888", SourceID.KG, "8888", "TOP500"),
-        BoardInfo("kg__6666", SourceID.KG, "6666", "飙升榜"),
-        BoardInfo("kg__23784", SourceID.KG, "23784", "网络红歌榜"),
-        BoardInfo("kg__52144", SourceID.KG, "52144", "抖音热歌榜"),
-        BoardInfo("kg__52767", SourceID.KG, "52767", "快手热歌榜"),
-        BoardInfo("kg__24971", SourceID.KG, "24971", "DJ热歌榜"),
-        BoardInfo("kg__44412", SourceID.KG, "44412", "说唱先锋榜"),
-        BoardInfo("kg__31308", SourceID.KG, "31308", "内地榜"),
-        BoardInfo("kg__33160", SourceID.KG, "33160", "电音榜"),
-        BoardInfo("kg__33161", SourceID.KG, "33161", "古风新歌榜"),
-        BoardInfo("kg__33165", SourceID.KG, "33165", "粤语金曲榜"),
-        BoardInfo("kg__33166", SourceID.KG, "33166", "欧美金曲榜"),
-        BoardInfo("kg__33163", SourceID.KG, "33163", "影视金曲榜"),
-        BoardInfo("kg__31311", SourceID.KG, "31311", "韩国榜"),
+        BoardInfo("kg__6666", SourceID.KG, "6666", "飆升榜"),
+        BoardInfo("kg__23784", SourceID.KG, "23784", "網路熱門歌曲榜"),
+        BoardInfo("kg__52144", SourceID.KG, "52144", "抖音熱門歌曲榜"),
+        BoardInfo("kg__52767", SourceID.KG, "52767", "快手熱門歌曲榜"),
+        BoardInfo("kg__24971", SourceID.KG, "24971", "DJ熱門歌曲榜"),
+        BoardInfo("kg__44412", SourceID.KG, "44412", "饒舌先鋒榜"),
+        BoardInfo("kg__31308", SourceID.KG, "31308", "中國大陸榜"),
+        BoardInfo("kg__33160", SourceID.KG, "33160", "電音榜"),
+        BoardInfo("kg__33161", SourceID.KG, "33161", "古風新歌榜"),
+        BoardInfo("kg__33165", SourceID.KG, "33165", "粵語金曲榜"),
+        BoardInfo("kg__33166", SourceID.KG, "33166", "歐美金曲榜"),
+        BoardInfo("kg__33163", SourceID.KG, "33163", "影視金曲榜"),
+        BoardInfo("kg__31311", SourceID.KG, "31311", "韓國榜"),
         BoardInfo("kg__31312", SourceID.KG, "31312", "日本榜"),
     )
 
@@ -273,21 +273,21 @@ private class KugouBoard(private val http: CatalogHttp) : BoardService {
 private class QQBoard(private val http: CatalogHttp) : BoardService {
     override val source = SourceID.TX
     override val list = listOf(
-        BoardInfo("tx__4", SourceID.TX, "4", "流行指数榜"),
-        BoardInfo("tx__26", SourceID.TX, "26", "热歌榜"),
+        BoardInfo("tx__4", SourceID.TX, "4", "流行指數榜"),
+        BoardInfo("tx__26", SourceID.TX, "26", "熱門歌曲榜"),
         BoardInfo("tx__27", SourceID.TX, "27", "新歌榜"),
-        BoardInfo("tx__62", SourceID.TX, "62", "飙升榜"),
-        BoardInfo("tx__28", SourceID.TX, "28", "网络歌曲榜"),
-        BoardInfo("tx__60", SourceID.TX, "60", "抖快榜"),
-        BoardInfo("tx__5", SourceID.TX, "5", "内地榜"),
-        BoardInfo("tx__3", SourceID.TX, "3", "欧美榜"),
-        BoardInfo("tx__59", SourceID.TX, "59", "香港地区榜"),
-        BoardInfo("tx__16", SourceID.TX, "16", "韩国榜"),
+        BoardInfo("tx__62", SourceID.TX, "62", "飆升榜"),
+        BoardInfo("tx__28", SourceID.TX, "28", "網路歌曲榜"),
+        BoardInfo("tx__60", SourceID.TX, "60", "抖音／快手榜"),
+        BoardInfo("tx__5", SourceID.TX, "5", "中國大陸榜"),
+        BoardInfo("tx__3", SourceID.TX, "3", "歐美榜"),
+        BoardInfo("tx__59", SourceID.TX, "59", "香港地區榜"),
+        BoardInfo("tx__16", SourceID.TX, "16", "韓國榜"),
         BoardInfo("tx__17", SourceID.TX, "17", "日本榜"),
-        BoardInfo("tx__65", SourceID.TX, "65", "国风热歌榜"),
-        BoardInfo("tx__58", SourceID.TX, "58", "说唱榜"),
-        BoardInfo("tx__29", SourceID.TX, "29", "影视金曲榜"),
-        BoardInfo("tx__63", SourceID.TX, "63", "DJ舞曲榜"),
+        BoardInfo("tx__65", SourceID.TX, "65", "国风熱門歌曲榜"),
+        BoardInfo("tx__58", SourceID.TX, "58", "饒舌榜"),
+        BoardInfo("tx__29", SourceID.TX, "29", "影視金曲榜"),
+        BoardInfo("tx__63", SourceID.TX, "63", "DJ 舞曲榜"),
     )
 
     override suspend fun fetchBoards(): List<BoardInfo> {
