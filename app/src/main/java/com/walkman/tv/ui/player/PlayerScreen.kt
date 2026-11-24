@@ -523,7 +523,7 @@ private fun EqualizerDialog(onDismiss: () -> Unit) {
       Text("等化器", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
       Spacer(Modifier.height(4.dp))
       Text(
-        if (presets.isEmpty()) "本机不支持系统等化器" else "選擇預設效果即可立即套用",
+        if (presets.isEmpty()) "此裝置不支援系統等化器" else "選擇預設效果即可立即套用",
         color = AppColors.TextSecondary,
         fontSize = 12.sp,
       )
