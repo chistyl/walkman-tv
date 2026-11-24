@@ -62,6 +62,7 @@ import com.walkman.tv.ui.components.TrackList
 import com.walkman.tv.ui.components.TvFocusable
 import com.walkman.tv.ui.components.TvPill
 import com.walkman.tv.ui.playList
+import com.walkman.tv.util.ChineseText
 import com.walkman.tv.ui.theme.AppColors
 import kotlinx.coroutines.launch
 
@@ -229,7 +230,7 @@ private fun HistoryTab(
     val clearFocus = remember { FocusRequester() }
     var confirmClear by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(history.name, fontSize = 18.sp, color = AppColors.TextPrimary)
+        Text(ChineseText.toTaiwanTraditional(history.name), fontSize = 18.sp, color = AppColors.TextPrimary)
         Spacer(Modifier.width(12.dp))
         if (history.tracks.isNotEmpty()) ListActionHint()
         Spacer(Modifier.weight(1f))
@@ -327,7 +328,7 @@ private fun PlaylistCard(playlist: Playlist, onClick: () -> Unit) {
             )
             Spacer(Modifier.padding(top = 8.dp))
             Text(
-                playlist.name,
+                ChineseText.toTaiwanTraditional(playlist.name),
                 color = AppColors.TextPrimary,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -432,7 +433,7 @@ private fun PlaylistDetailPane(
             )
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(playlist.name, color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text(ChineseText.toTaiwanTraditional(playlist.name), color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("${playlist.tracks.size} 首", color = AppColors.TextMuted, fontSize = 12.sp)
                     if (playlist.tracks.isNotEmpty()) {
@@ -712,8 +713,8 @@ private fun ActiveDownloadRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(rec.track.displayName, color = AppColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                Text("${rec.track.displaySinger} · ${rec.quality.displayName}", color = AppColors.TextMuted, fontSize = 11.sp, maxLines = 1)
+                Text(ChineseText.toTaiwanTraditional(rec.track.displayName), color = AppColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Text(ChineseText.toTaiwanTraditional("${rec.track.displaySinger} · ${rec.quality.displayName}"), color = AppColors.TextMuted, fontSize = 11.sp, maxLines = 1)
                 Spacer(Modifier.height(4.dp))
                 Box(
                     modifier = Modifier
@@ -805,7 +806,7 @@ private fun MissingDownloadRow(
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        track.name,
+                        ChineseText.toTaiwanTraditional(track.name),
                         color = if (nowPlaying) AppColors.AccentGreen else AppColors.TextPrimary,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -813,7 +814,7 @@ private fun MissingDownloadRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        track.subtitle,
+                        ChineseText.toTaiwanTraditional(track.subtitle),
                         color = AppColors.TextSecondary,
                         fontSize = 12.sp,
                         maxLines = 1,
