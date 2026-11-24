@@ -430,8 +430,12 @@ class PlaybackController(
                 }
                 // Start the MediaSessionService only after URL resolution and media preparation.
                 // Media3 owns the media notification and promotes the service when playback starts.
-                player.playWhenReady = true
+                // Start the service before the player transitions to READY/PLAYING.
+                // MediaSessionService observes that transition to publish its media notification
+                // and promote itself. Starting the FGS after playback has already begun can miss
+                // the transition on Android 9 and trigger RemoteServiceException.
                 ensureService()
+                player.playWhenReady = true
                 _state.value = _state.value.copy(
                     resolving = false,
                     warning = r.warning,
@@ -515,8 +519,9 @@ class PlaybackController(
         if (player.mediaItemCount == 0 && s.queue.isNotEmpty() && s.index in s.queue.indices) {
             playAt(s.index)
         } else {
-            player.play()
+            // Attach the MediaSessionService before changing the player state.
             ensureService()
+            player.play()
         }
     }
 
@@ -564,8 +569,8 @@ class PlaybackController(
         resolveJob?.cancel()
         player.setMediaItem(MediaItem.fromUri(url))
         player.prepare()
-        player.playWhenReady = true
         ensureService()
+        player.playWhenReady = true
         _state.value = _state.value.copy(isMv = true, resolving = false, error = null)
     }
 
