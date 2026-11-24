@@ -3,10 +3,10 @@ package com.walkman.tv.source.catalog
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Format a play count like lx-music: 亿 / 万 / plain. */
+/** Format a play count like lx-music: 億 / 萬 / plain. */
 fun formatPlayCount(n: Long): String = when {
-    n > 100_000_000 -> String.format("%.1f亿", n / 100_000_000.0)
-    n > 10_000 -> String.format("%.1f万", n / 10_000.0)
+    n > 100_000_000 -> String.format("%.1f億", n / 100_000_000.0)
+    n > 10_000 -> String.format("%.1f萬", n / 10_000.0)
     else -> n.toString()
 }
 
