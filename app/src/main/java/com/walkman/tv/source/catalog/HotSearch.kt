@@ -34,10 +34,39 @@ class HotSearch(private val http: CatalogHttp) {
     }
 
     private suspend fun qq(): List<String> {
-        val url = "https://c.y.qq.com/splcloud/fcgi-bin/gethotkey.fcg?format=json&inCharset=utf-8&outCharset=utf-8&notice=0&platform=h5&needNewCode=1"
-        val json = JSONObject(http.getText(url, mapOf("Referer" to "https://y.qq.com/", "User-Agent" to ua)))
-        val arr = json.optJSONObject("data")?.optJSONArray("hotkey") ?: return emptyList()
-        return (0 until arr.length()).mapNotNull { arr.optJSONObject(it)?.optString("k")?.trim()?.ifEmpty { null } }
+        // Prefer the legacy hotkey endpoint, but fall back to QQ Music's current musicu API
+        // when the legacy c.y.qq.com endpoint is blocked or no longer returns hotkey data.
+        val legacy = runCatching {
+            val url = "https://c.y.qq.com/splcloud/fcgi-bin/gethotkey.fcg?format=json&inCharset=utf-8&outCharset=utf-8&notice=0&platform=h5&needNewCode=1"
+            val json = JSONObject(http.getText(url, mapOf("Referer" to "https://y.qq.com/", "User-Agent" to ua)))
+            val arr = json.optJSONObject("data")?.optJSONArray("hotkey")
+            (0 until (arr?.length() ?: 0)).mapNotNull {
+                arr?.optJSONObject(it)?.optString("k")?.trim()?.ifEmpty { null }
+            }
+        }.getOrDefault(emptyList())
+        if (legacy.isNotEmpty()) return legacy
+
+        val request = JSONObject()
+            .put("comm", JSONObject().put("ct", 24).put("cv", 0))
+            .put("req", JSONObject()
+                .put("module", "music.search.SearchCgiService")
+                .put("method", "GetHotkey")
+                .put("param", JSONObject().put("search_type", 0).put("num", 20)))
+        val text = http.postJson(
+            "https://u.y.qq.com/cgi-bin/musicu.fcg",
+            request.toString(),
+            mapOf("Referer" to "https://y.qq.com/", "User-Agent" to ua),
+        )
+        val data = JSONObject(text).optJSONObject("req")?.optJSONObject("data") ?: return emptyList()
+        val arr = data.optJSONArray("vec_hotkey")
+            ?: data.optJSONArray("hotkey")
+            ?: data.optJSONArray("hotkey_list")
+            ?: return emptyList()
+        return (0 until arr.length()).mapNotNull { index ->
+            val item = arr.optJSONObject(index)
+            (item?.optString("k") ?: item?.optString("query") ?: item?.optString("word"))
+                ?.trim()?.ifEmpty { null }
+        }.distinct()
     }
 
     private suspend fun netease(): List<String> {
