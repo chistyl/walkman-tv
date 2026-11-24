@@ -153,6 +153,9 @@ dependencies {
     // io.coil-kt:coil-transformations artifact stopped publishing at 2.x and isn't synced with
     // coil-compose 2.7.0.)
 
+    // Taiwan Traditional Chinese conversion for source metadata and lyrics
+    implementation "com.github.houbb:opencc4j:1.14.0"
+
     // Networking + serialization + coroutines
     implementation "com.squareup.okhttp3:okhttp:4.12.0"
     implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3"
