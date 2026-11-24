@@ -110,7 +110,7 @@ fun SonglistScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     items(uniqueLists, key = { it.id }) { sl ->
-                        MediaCard(title = sl.name, picURL = sl.picURL, subtitle = sl.playCount?.let { "▶ $it" }) {
+                        MediaCard(title = sl.displayName, picURL = sl.picURL, subtitle = sl.playCount?.let { "▶ $it" }) {
                             scope.launch {
                                 loadingDetail = true
                                 val d = fetchOr(null) { service?.fetchDetail(sl) }
@@ -129,8 +129,8 @@ fun SonglistScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
         if (detail != null) {
             val (info, tracks) = detail!!
             com.walkman.tv.ui.components.TracksDetailOverlay(
-                title = info.name,
-                subtitle = info.author.takeIf { it.isNotBlank() },
+                title = info.displayName,
+                subtitle = info.displayAuthor.takeIf { it.isNotBlank() },
                 tracks = tracks,
                 onBack = { detail = null },
                 onOpenPlayer = onOpenPlayer,
