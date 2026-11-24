@@ -117,7 +117,7 @@ private fun NowPlayingPanel(onOpenPlayer: () -> Unit, modifier: Modifier = Modif
       val line = lyrics.getOrNull(active)?.text ?: if (state.resolving) "解析中…" else ""
       Text(line, color = AppColors.LyricIdle, fontSize = 13.sp, maxLines = 1)
     } else {
-      Text("暂无播放，去推荐里点歌开始吧", color = AppColors.TextSecondary, fontSize = 14.sp)
+      Text("目前沒有播放內容，前往推薦頁選擇歌曲即可開始播放", color = AppColors.TextSecondary, fontSize = 14.sp)
     }
 
     if (track != null) {
@@ -270,7 +270,7 @@ private fun RecommendGrid(
           }
           if (home.recommendations.isNotEmpty()) {
             item {
-              SectionHeader("推荐歌单", activeLabel, trailing = "查看全部") {
+              SectionHeader("推薦歌單", activeLabel, trailing = "查看全部") {
                 onNavigate(NavSection.Songlist)
               }
             }
@@ -314,7 +314,7 @@ private fun StatsRow(onNavigate: (NavSection) -> Unit) {
     modifier = Modifier.fillMaxWidth().height(72.dp),
   ) {
     StatTile(
-      label = "已播",
+      label = "已播放",
       count = played.tracks.size,
       picURL = StatThumbs.PLAYED,
       modifier = Modifier.weight(1f),
@@ -519,7 +519,7 @@ private fun HeroBanner(
           val subParts = buildList {
             add(item.source.displayName)
             val plays = item.songlist.playCount
-            if (!plays.isNullOrBlank()) add(plays) else add("热门播放")
+            if (!plays.isNullOrBlank()) add(plays) else add("熱門播放")
           }
           Text(
             subParts.joinToString(" · "),
@@ -697,12 +697,12 @@ private fun NoSourcesHint(onNavigate: (NavSection) -> Unit) {
     modifier = Modifier.fillMaxWidth().padding(top = 80.dp),
     horizontalAlignment = Alignment.CenterHorizontally,
   ) {
-    Text("没有勾选任何音源", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+    Text("尚未選取任何音源", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
     Spacer(Modifier.height(8.dp))
-    Text("去设置里勾选一个音源后再来发现", color = AppColors.TextMuted, fontSize = 13.sp)
+    Text("請先前往設定選取音源，再回來探索", color = AppColors.TextMuted, fontSize = 13.sp)
     Spacer(Modifier.height(16.dp))
     TvPill(onClick = { onNavigate(NavSection.Settings) }, selected = true) {
-      Text("打开设置", fontSize = 13.sp)
+      Text("開啟設定", fontSize = 13.sp)
     }
   }
 }
