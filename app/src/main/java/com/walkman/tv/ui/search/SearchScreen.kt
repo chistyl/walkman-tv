@@ -68,6 +68,7 @@ import com.walkman.tv.ui.components.TrackList
 import com.walkman.tv.ui.components.TvPill
 import com.walkman.tv.ui.playList
 import com.walkman.tv.ui.theme.AppColors
+import com.walkman.tv.util.ChineseText
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -429,7 +430,7 @@ private fun HotSearchGrid(
                                         modifier = Modifier.width(22.dp),
                                     )
                                     Text(
-                                        word,
+                                        ChineseText.toTaiwanTraditional(word),
                                         color = AppColors.TextPrimary,
                                         fontSize = 14.sp,
                                         maxLines = 1,
@@ -481,7 +482,7 @@ private fun SearchHistoryPane(history: List<String>, onPick: (String) -> Unit) {
                     onClick = { onPick(kw) },
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                 ) {
-                    Text(kw, fontSize = 13.sp)
+                    Text(ChineseText.toTaiwanTraditional(kw), fontSize = 13.sp)
                 }
             }
         }
