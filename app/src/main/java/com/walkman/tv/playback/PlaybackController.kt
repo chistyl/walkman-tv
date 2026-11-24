@@ -233,13 +233,15 @@ class PlaybackController(
                 .setHandleAudioBecomingNoisy(true)
                 .build()
 
-            // Ask the OS for audio offload when the downstream sink (DSP / HDMI passthrough /
-            // Bluetooth A2DP offload) can decode it directly — preserves bit-perfect PCM/FLAC.
+            // Keep audio offload disabled by default. Some Android TV firmware advertises
+            // incomplete or unstable offload support; decoding to PCM through Media3's bundled
+            // decoders is more consistent across Android 9+ devices. Users can still opt in via
+            // setAudioOffloadEnabled() when their audio hardware is known to work reliably.
             player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
                 .setAudioOffloadPreferences(
                     TrackSelectionParameters.AudioOffloadPreferences.Builder()
                         .setAudioOffloadMode(
-                            TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED,
+                            TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_DISABLED,
                         )
                         .build(),
                 )
