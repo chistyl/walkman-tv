@@ -70,14 +70,14 @@ fun TopNav(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            NavItem("推荐", active == NavSection.Recommend, focusRequester = recommendFocusRequester) {
+            NavItem("推薦", active == NavSection.Recommend, focusRequester = recommendFocusRequester) {
                 onSelect(NavSection.Recommend)
             }
             NavItem("排行榜", active == NavSection.Leaderboard) { onSelect(NavSection.Leaderboard) }
-            NavItem("歌单", active == NavSection.Songlist) { onSelect(NavSection.Songlist) }
-            NavItem("我的列表", active == NavSection.Library) { onSelect(NavSection.Library) }
-            NavItem("搜索", active == NavSection.Search, icon = Icons.Filled.Search) { onSelect(NavSection.Search) }
-            NavItemIconOnly(Icons.Filled.Settings, active == NavSection.Settings, contentDescription = "设置") {
+            NavItem("歌單", active == NavSection.Songlist) { onSelect(NavSection.Songlist) }
+            NavItem("我的清單", active == NavSection.Library) { onSelect(NavSection.Library) }
+            NavItem("搜尋", active == NavSection.Search, icon = Icons.Filled.Search) { onSelect(NavSection.Search) }
+            NavItemIconOnly(Icons.Filled.Settings, active == NavSection.Settings, contentDescription = "設定") {
                 onSelect(NavSection.Settings)
             }
         }
@@ -106,7 +106,7 @@ private fun Brand(modifier: Modifier = Modifier) {
         )
         Spacer(Modifier.width(6.dp))
         Text(
-            text = "随便听",
+            text = "隨便聽",
             color = AppColors.TextPrimary,
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold,
