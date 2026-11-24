@@ -250,7 +250,7 @@ class PlaybackController(
             return player
         }
     }
-    private var serviceStarted = false
+    @Volatile private var serviceStarted = false
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private val _state = MutableStateFlow(PlaybackState())
