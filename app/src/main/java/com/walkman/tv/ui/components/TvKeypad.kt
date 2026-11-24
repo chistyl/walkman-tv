@@ -62,8 +62,8 @@ fun TvKeypad(
         }
         Spacer(Modifier.size(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            KeyButton("删除", wide = true) { onBackspace() }
-            KeyButton("清空", wide = true) { onClear() }
+            KeyButton("刪除", wide = true) { onBackspace() }
+            KeyButton("清除", wide = true) { onClear() }
             KeyButton(confirmLabel, wide = true, primary = true) { onConfirm() }
         }
     }
