@@ -382,7 +382,7 @@ private fun SectionHeader(
     if (!subtitle.isNullOrBlank()) {
       Spacer(Modifier.width(10.dp))
       Text(
-        subtitle,
+        ChineseText.toTaiwanTraditional(subtitle),
         color = AppColors.TextMuted,
         fontSize = 13.sp,
         modifier = Modifier.padding(bottom = 4.dp),
@@ -579,7 +579,7 @@ private fun SonglistRow(items: List<com.walkman.tv.data.model.SonglistInfo>, onS
     items(unique, key = { "${it.source.key}_${it.id}" }) { info ->
       AlbumCard(
         picURL = info.picURL,
-        title = info.name,
+        title = info.displayName,
         subtitle = info.playCount?.let { "▶ $it" } ?: info.source.displayName,
         fallbackTint = info.source.tintColor(),
         onClick = { onSelect(info) },
@@ -600,7 +600,7 @@ private fun BoardRow(items: List<com.walkman.tv.data.model.BoardInfo>, onSelect:
     items(unique, key = { "${it.source.key}_${it.id}" }) { board ->
       AlbumCard(
         picURL = board.picURL,
-        title = board.name,
+        title = board.displayName,
         subtitle = board.source.displayName,
         fallbackTint = board.source.tintColor(),
         onClick = { onSelect(board) },
@@ -646,7 +646,7 @@ private fun AlbumCard(
     }
     Spacer(Modifier.height(8.dp))
     Text(
-      title,
+      ChineseText.toTaiwanTraditional(title),
       color = AppColors.TextPrimary,
       fontSize = 16.sp,
       fontWeight = FontWeight.SemiBold,
