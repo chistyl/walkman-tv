@@ -51,7 +51,7 @@ object PlaybackDiagnostics {
  fun shareReport(context: Context): Boolean {
   val file = File(context.applicationContext.filesDir, FILE_NAME)
   if (!file.exists() || file.length() == 0L) return false
-  val report = runCatching { file.readText() }.getOrDefault("無法讀取診斷紀錄")
+  val report = runCatching { file.readText().takeLast(100_000) }.getOrDefault("無法讀取診斷紀錄")
   val send = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_SUBJECT, "Walkman-TV 播放穩定性診斷報告"); putExtra(Intent.EXTRA_TEXT, report); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
   return runCatching { context.startActivity(Intent.createChooser(send, "分享播放診斷報告").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); true }.getOrDefault(false)
  }
