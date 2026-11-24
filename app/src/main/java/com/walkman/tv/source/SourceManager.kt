@@ -102,7 +102,7 @@ class SourceManager(
         }
 
         if (scriptFor(track.source, "musicUrl") == null) {
-            throw SourceException("沒有指令碼提供 ${track.source.displayName} 源，請前往「設定」→「自訂音源」匯入指令碼")
+            throw SourceException("沒有指令碼提供 ${track.source.displayName} 音源，請前往「設定」→「自訂音源」匯入指令碼")
         }
         throw SourceException("這首 ${track.source.displayName} 歌曲無法取得播放網址，請換一首歌曲或更換可用的指令碼")
     }
