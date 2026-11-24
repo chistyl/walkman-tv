@@ -64,7 +64,7 @@ fun DownloadDialog(track: Track, onDismiss: () -> Unit) {
     }
     var selectedFolderId by remember { mutableStateOf(DownloadFolder.DEFAULT_ID) }
     var showNewFolder by remember { mutableStateOf(false) }
-    // Default focus = 开始下载. Skips the cancel button so a single OK press is the primary
+    // Default focus = 開始下載. Skips the cancel button so a single OK press is the primary
     // action. User can D-pad up to the quality / folder picker if they want to change defaults.
     val startFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { startFocus.requestFocus() } }
@@ -80,7 +80,7 @@ fun DownloadDialog(track: Track, onDismiss: () -> Unit) {
                 .background(AppColors.BgPanel)
                 .padding(horizontal = 22.dp, vertical = 20.dp),
         ) {
-            Text("下载歌曲", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("下載歌曲", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.size(4.dp))
             Text(
                 "${track.name} · ${track.singer}",
@@ -92,7 +92,7 @@ fun DownloadDialog(track: Track, onDismiss: () -> Unit) {
             Spacer(Modifier.size(14.dp))
 
             // Quality picker
-            Text("音质", color = AppColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text("音質", color = AppColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.size(6.dp))
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -121,7 +121,7 @@ fun DownloadDialog(track: Track, onDismiss: () -> Unit) {
             }
 
             Spacer(Modifier.size(12.dp))
-            Text("保存到", color = AppColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text("儲存至", color = AppColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.size(6.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -140,7 +140,7 @@ fun DownloadDialog(track: Track, onDismiss: () -> Unit) {
                     onClick = { showNewFolder = true },
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                 ) {
-                    Text("+ 新建", fontSize = 12.sp)
+                    Text("+ 新增", fontSize = 12.sp)
                 }
             }
 
@@ -164,7 +164,7 @@ fun DownloadDialog(track: Track, onDismiss: () -> Unit) {
                     focusRequester = startFocus,
                     contentPadding = PaddingValues(horizontal = 22.dp, vertical = 8.dp),
                 ) {
-                    Text("开始下载", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text("開始下載", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -173,7 +173,7 @@ fun DownloadDialog(track: Track, onDismiss: () -> Unit) {
     if (showNewFolder) {
         PlaylistNameDialog(
             initial = "",
-            title = "新建下载分类",
+            title = "新增下載分類",
             onDismiss = { showNewFolder = false },
             onConfirm = { name ->
                 scope.launch {
