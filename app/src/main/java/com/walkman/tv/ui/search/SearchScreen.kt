@@ -130,85 +130,84 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
         }
     }
 
-    Row(modifier = modifier.fillMaxSize().padding(top = 8.dp)) {
-        // LEFT: Android TV system text input
-        Column(modifier = Modifier.width(360.dp).fillMaxHeight().padding(end = 12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = queryValue,
-                    onValueChange = { entered ->
-                        // Preserve the user's Traditional Chinese input as displayed.
-                        // Simplified Chinese conversion happens only when submitting search.
-                        queryValue = entered
-                    },
-                    modifier = Modifier.weight(1f)
-                        .onFocusChanged { searchFocused = it.isFocused }
-                        .border(
-                            width = if (searchFocused) 2.dp else 1.dp,
-                            color = if (searchFocused) AppColors.AccentGreen else AppColors.Card,
-                            shape = RoundedCornerShape(10.dp),
-                        ),
-                    singleLine = true,
-                    placeholder = { Text("輸入關鍵字", color = Color(0xFF858B98)) },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Text,
-                        imeAction = ImeAction.Search,
+    Column(modifier = modifier.fillMaxSize().padding(top = 8.dp)) {
+        // Search controls: source filters on the left, keyword field and QR action on the right.
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            PlatformChipRow(filter, onSelect = { filter = it })
+            Spacer(Modifier.weight(1f))
+            OutlinedTextField(
+                value = queryValue,
+                onValueChange = { entered ->
+                    // Preserve Traditional Chinese while composing and displaying the query.
+                    queryValue = entered
+                },
+                modifier = Modifier
+                    .width(450.dp)
+                    .onFocusChanged { searchFocused = it.isFocused }
+                    .border(
+                        width = if (searchFocused) 2.dp else 1.dp,
+                        color = if (searchFocused) AppColors.AccentGreen else AppColors.Card,
+                        shape = RoundedCornerShape(10.dp),
                     ),
-                    keyboardActions = KeyboardActions(onSearch = { runSearch() }),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = AppColors.TextPrimary,
-                        unfocusedTextColor = AppColors.TextPrimary,
-                        focusedBorderColor = AppColors.AccentGreen,
-                        unfocusedBorderColor = AppColors.Card,
-                        cursorColor = AppColors.AccentGreen,
-                        focusedPlaceholderColor = Color(0xFF858B98),
-                        unfocusedPlaceholderColor = Color(0xFF858B98),
-                        focusedContainerColor = AppColors.BgPanel,
-                        unfocusedContainerColor = AppColors.BgPanel,
-                    ),
-                )
-                Spacer(Modifier.width(8.dp))
-                TvPill(
-                    onClick = { showQr = true },
-                    shape = androidx.compose.foundation.shape.CircleShape,
-                    contentPadding = PaddingValues(10.dp),
-                ) {
-                    Icon(Icons.Filled.QrCode2, contentDescription = "掃碼搜尋", modifier = Modifier.size(22.dp))
-                }
+                singleLine = true,
+                placeholder = { Text("輸入關鍵字", color = Color(0xFF858B98)) },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Text,
+                    imeAction = ImeAction.Search,
+                ),
+                keyboardActions = KeyboardActions(onSearch = { runSearch() }),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = AppColors.TextPrimary,
+                    unfocusedTextColor = AppColors.TextPrimary,
+                    focusedBorderColor = AppColors.AccentGreen,
+                    unfocusedBorderColor = AppColors.Card,
+                    cursorColor = AppColors.AccentGreen,
+                    focusedPlaceholderColor = Color(0xFF858B98),
+                    unfocusedPlaceholderColor = Color(0xFF858B98),
+                    focusedContainerColor = AppColors.BgPanel,
+                    unfocusedContainerColor = AppColors.BgPanel,
+                ),
+            )
+            TvPill(
+                onClick = { showQr = true },
+                shape = androidx.compose.foundation.shape.CircleShape,
+                contentPadding = PaddingValues(10.dp),
+            ) {
+                Icon(Icons.Filled.QrCode2, contentDescription = "掃碼搜尋", modifier = Modifier.size(22.dp))
             }
         }
-
-        // RIGHT: platform chips + results
-        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-            PlatformChipRow(filter, onSelect = { filter = it })
-            Spacer(Modifier.padding(top = 8.dp))
-            ResultsPane(
-                loading = loading,
-                searched = searched,
-                songlists = songlists,
-                tracks = tracks,
-                hotColumns = hotColumns,
-                onOpenPlayer = onOpenPlayer,
-                onPickHistory = { kw ->
-                    queryValue = TextFieldValue(kw)
-                    runSearch(kw)
-                },
-                onPickHot = { kw ->
-                    queryValue = TextFieldValue(kw)
-                    runSearch(kw)
-                },
-                onPickSonglist = { info ->
-                    scope.launch {
-                        val svc = appContainer.songlists.serviceFor(info.source) ?: return@launch
-                        val detail = runCatching { svc.fetchDetail(info) }.getOrNull()
-                        val ts = detail?.tracks.orEmpty()
-                        if (ts.isNotEmpty()) {
-                            playList(ts, 0); onOpenPlayer()
-                        }
+        Spacer(Modifier.padding(top = 8.dp))
+        ResultsPane(
+            modifier = Modifier.fillMaxSize(),
+            loading = loading,
+            searched = searched,
+            songlists = songlists,
+            tracks = tracks,
+            hotColumns = hotColumns,
+            onOpenPlayer = onOpenPlayer,
+            onPickHistory = { kw ->
+                queryValue = TextFieldValue(kw)
+                runSearch(kw)
+            },
+            onPickHot = { kw ->
+                queryValue = TextFieldValue(kw)
+                runSearch(kw)
+            },
+            onPickSonglist = { info ->
+                scope.launch {
+                    val svc = appContainer.songlists.serviceFor(info.source) ?: return@launch
+                    val detail = runCatching { svc.fetchDetail(info) }.getOrNull()
+                    val ts = detail?.tracks.orEmpty()
+                    if (ts.isNotEmpty()) {
+                        playList(ts, 0); onOpenPlayer()
                     }
-                },
-            )
-        }
+                }
+            },
+        )
     }
 
     if (showQr) {
@@ -273,6 +272,7 @@ private fun PlatformChipRow(filter: SourceID?, onSelect: (SourceID?) -> Unit) {
 
 @Composable
 private fun ResultsPane(
+    modifier: Modifier = Modifier,
     loading: Boolean,
     searched: Boolean,
     songlists: List<SonglistInfo>,
@@ -288,7 +288,7 @@ private fun ResultsPane(
         loading -> LoadingState(Modifier.fillMaxSize())
         !searched -> {
             // Before searching: recent-search chips (if any) on top, then the 4-column hot lists.
-            Column(modifier = Modifier.fillMaxSize().padding(top = 4.dp)) {
+            Column(modifier = modifier.fillMaxSize().padding(top = 4.dp)) {
                 if (history.isNotEmpty()) {
                     SearchHistoryPane(history = history, onPick = onPickHistory)
                     Spacer(Modifier.padding(top = 10.dp))
@@ -302,7 +302,7 @@ private fun ResultsPane(
         }
         songlists.isEmpty() && tracks.isEmpty() ->
             EmptyHint("找不到搜尋結果", Modifier.fillMaxSize())
-        else -> Column(modifier = Modifier.fillMaxSize()) {
+        else -> Column(modifier = modifier.fillMaxSize()) {
             if (songlists.isNotEmpty()) {
                 SectionHeader("歌單 (${songlists.size})")
                 val uniqueSonglists = remember(songlists) { songlists.distinctBy { it.id + "_" + it.source.key } }
@@ -367,8 +367,9 @@ private fun HotSearchGrid(
     columns: List<com.walkman.tv.source.catalog.HotSearchColumn>,
     onPick: (String) -> Unit,
 ) {
-    val visibleColumns = columns.filter { it.words.isNotEmpty() }.take(4)
-    Column(modifier = Modifier.fillMaxSize().padding(end = 8.dp)) {
+    val orderedSources = listOf(SourceID.KW, SourceID.WY, SourceID.KG, SourceID.TX)
+    val visibleColumns = orderedSources.mapNotNull { source -> columns.firstOrNull { it.source == source && it.words.isNotEmpty() } }
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 22.dp, end = 8.dp)) {
         SectionHeader("熱門搜尋")
         Row(
             modifier = Modifier.fillMaxWidth().weight(1f),
@@ -379,13 +380,13 @@ private fun HotSearchGrid(
                     Text(
                         col.source.displayName,
                         color = sourceTint(col.source),
-                        fontSize = 13.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 6.dp, start = 4.dp),
+                        modifier = Modifier.padding(bottom = 8.dp, start = 6.dp),
                     )
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(5.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp),
                     ) {
                         itemsIndexed(col.words) { idx, word ->
                             com.walkman.tv.ui.components.TvFocusable(
@@ -393,7 +394,7 @@ private fun HotSearchGrid(
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Row(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 10.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 11.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Text(
@@ -406,7 +407,7 @@ private fun HotSearchGrid(
                                     Text(
                                         word,
                                         color = AppColors.TextPrimary,
-                                        fontSize = 13.sp,
+                                        fontSize = 14.sp,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
