@@ -54,10 +54,10 @@ import kotlinx.coroutines.launch
  * Local-folder import dialog. Spec §6.1 + §6.2.
  *
  * Flow:
- *   1. User taps 选择文件夹 → system SAF picker (ACTION_OPEN_DOCUMENT_TREE)
+ *   1. User taps 选择資料夾 → system SAF picker (ACTION_OPEN_DOCUMENT_TREE)
  *   2. URI captured + permission persisted by LocalMusicStore
  *   3. Optional: user names the playlist (defaults to folder name)
- *   4. Tap 确定导入 → scan + extract tags + create a Playlist in LibraryStore
+ *   4. Tap 確認匯入 → scan + extract tags + create a Playlist in LibraryStore
  *   5. Show progress; close on completion.
  */
 @Composable
@@ -72,10 +72,10 @@ fun LocalImportDialog(onDismiss: () -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var showBrowser by remember { mutableStateOf(false) }
     var permHint by remember { mutableStateOf(false) }
-    // 导入到: null = 新建歌单, else append into this existing user list (dedupes by track id).
+    // 匯入至: null = 新增歌單, else append into this existing user list (dedupes by track id).
     var target by remember { mutableStateOf<com.walkman.tv.data.model.Playlist?>(null) }
     var showTargetPicker by remember { mutableStateOf(false) }
-    // Default focus = 选择文件夹 since that's step 1 in the flow.
+    // Default focus = 选择資料夾 since that's step 1 in the flow.
     val pickerFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { pickerFocus.requestFocus() } }
 
@@ -132,16 +132,16 @@ fun LocalImportDialog(onDismiss: () -> Unit) {
                 .background(AppColors.BgPanel)
                 .padding(horizontal = 22.dp, vertical = 20.dp),
         ) {
-            Text("导入本地音乐", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("匯入本機音樂", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.size(4.dp))
             Text(
-                "选一个文件夹，应用会递归扫描所有 .mp3/.flac/.m4a/.wav 等音频文件并导入。",
+                "選擇資料夾後，應用程式會遞迴掃描並匯入所有 .mp3／.flac／.m4a／.wav 等音訊檔案。",
                 color = AppColors.TextSecondary,
                 fontSize = 12.sp,
             )
             Spacer(Modifier.size(14.dp))
 
-            Text("文件夹", color = AppColors.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text("資料夾", color = AppColors.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.size(6.dp))
             TvPill(
                 onClick = { openPicker() },
@@ -149,7 +149,7 @@ fun LocalImportDialog(onDismiss: () -> Unit) {
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
             ) {
                 Text(
-                    pickedFile?.name ?: "选择文件夹…",
+                    pickedFile?.name ?: "选择資料夾…",
                     fontSize = 13.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -158,21 +158,21 @@ fun LocalImportDialog(onDismiss: () -> Unit) {
             if (permHint) {
                 Spacer(Modifier.size(6.dp))
                 Text(
-                    "需要存储权限：请在系统设置里允许「随便听」访问音乐和音频（选「使用期间允许」或「允许管理所有文件」都可以），然后返回再点选择文件夹。",
+                    "需要存储权限：请在系统设置里允许「随便听」访问音乐和音频（选「使用期间允许」或「允许管理所有文件」都可以），然后返回再点选择資料夾。",
                     color = AppColors.Warning,
                     fontSize = 12.sp,
                 )
             }
             Spacer(Modifier.size(12.dp))
 
-            Text("导入到", color = AppColors.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text("匯入至", color = AppColors.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.size(6.dp))
             TvPill(
                 onClick = { if (!importing) showTargetPicker = true },
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
             ) {
                 Text(
-                    target?.let { "已有歌单：${it.name}" } ?: "新建歌单",
+                    target?.let { "現有歌單：${it.name}" } ?: "新增歌單",
                     fontSize = 13.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -181,7 +181,7 @@ fun LocalImportDialog(onDismiss: () -> Unit) {
             if (target == null) {
                 Spacer(Modifier.size(12.dp))
 
-                Text("歌单名（导入后创建一个用户歌单）", color = AppColors.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text("歌單名稱（匯入後會建立一個使用者歌單）", color = AppColors.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.size(6.dp))
                 Box(
                     modifier = Modifier
@@ -191,7 +191,7 @@ fun LocalImportDialog(onDismiss: () -> Unit) {
                         .padding(horizontal = 14.dp, vertical = 12.dp),
                 ) {
                     Text(
-                        text = playlistName.ifEmpty { "（默认用文件夹名）" },
+                        text = playlistName.ifEmpty { "（默认用資料夾名）" },
                         color = if (playlistName.isEmpty()) AppColors.TextMuted else AppColors.TextPrimary,
                         fontSize = 14.sp,
                     )
@@ -201,7 +201,7 @@ fun LocalImportDialog(onDismiss: () -> Unit) {
             if (importing) {
                 Spacer(Modifier.size(14.dp))
                 Text(
-                    "正在导入 ${(progress * 100).toInt()}%",
+                    "正在匯入 ${(progress * 100).toInt()}%",
                     color = AppColors.AccentGreen,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -262,18 +262,18 @@ fun LocalImportDialog(onDismiss: () -> Unit) {
                                     if (dest == null) {
                                         val playlist = appContainer.libraryStore.createList(playlistName.ifBlank { result.record.name })
                                         appContainer.libraryStore.addAllToList(playlist.id, result.tracks)
-                                        doneMessage = "✓ 导入完成，共 ${result.tracks.size} 首"
+                                        doneMessage = "✓ 匯入完成，共 ${result.tracks.size} 首"
                                     } else {
                                         val before = appContainer.libraryStore.userLists.value
                                             .firstOrNull { it.id == dest.id }?.tracks.orEmpty().mapTo(HashSet()) { it.id }
                                         val fresh = result.tracks.count { it.id !in before }
                                         appContainer.libraryStore.addAllToList(dest.id, result.tracks)
-                                        doneMessage = "✓ 已添加 $fresh 首到「${dest.name}」" +
-                                            if (fresh < result.tracks.size) "（${result.tracks.size - fresh} 首已存在，已跳过）" else ""
+                                        doneMessage = "✓ 已將 $fresh 首歌曲加入「${dest.name}」" +
+                                            if (fresh < result.tracks.size) "（${result.tracks.size - fresh} 首已存在，已略過）" else ""
                                     }
                                     importing = false
                                 }.onFailure { e ->
-                                    error = "导入失败：${e.message ?: "未知错误"}"
+                                    error = "匯入失敗：${e.message ?: "未知錯誤"}"
                                     importing = false
                                 }
                             }
@@ -281,7 +281,7 @@ fun LocalImportDialog(onDismiss: () -> Unit) {
                         selected = pickedFile != null && !importing,
                         contentPadding = PaddingValues(horizontal = 22.dp, vertical = 8.dp),
                     ) {
-                        Text("确定导入", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("確認匯入", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -303,7 +303,7 @@ fun LocalImportDialog(onDismiss: () -> Unit) {
         FolderBrowser(
             onPick = { dir ->
                 pickedFile = dir
-                if (playlistName.isBlank()) playlistName = dir.name.ifBlank { "本地音乐" }
+                if (playlistName.isBlank()) playlistName = dir.name.ifBlank { "本機音樂" }
                 permHint = false
                 showBrowser = false
             },
@@ -324,7 +324,7 @@ private fun hasStorageAccess(ctx: android.content.Context): Boolean =
         ContextCompat.checkSelfPermission(ctx, mediaReadPermission()) ==
         android.content.pm.PackageManager.PERMISSION_GRANTED
 
-/** 导入到: 新建歌单 or one of the user's lists. Focus starts on the current choice. */
+/** 匯入至: 新增歌單 or one of the user's lists. Focus starts on the current choice. */
 @Composable
 private fun ImportTargetDialog(
     current: com.walkman.tv.data.model.Playlist?,
@@ -346,7 +346,7 @@ private fun ImportTargetDialog(
                 .background(AppColors.BgPanel)
                 .padding(horizontal = 22.dp, vertical = 20.dp),
         ) {
-            Text("导入到", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("匯入至", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.size(12.dp))
             androidx.compose.foundation.lazy.LazyColumn(
                 modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
@@ -366,7 +366,7 @@ private fun ImportTargetDialog(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                pl?.name ?: "＋ 新建歌单",
+                                pl?.name ?: "＋ 新增歌單",
                                 color = if (selected) AppColors.AccentGreen else AppColors.TextPrimary,
                                 fontSize = 14.sp,
                                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
