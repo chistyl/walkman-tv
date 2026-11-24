@@ -100,7 +100,7 @@ private class KuwoBoard(private val http: CatalogHttp) : BoardService {
         return Track(
             id = Track.makeID(SourceID.KW, id),
             name = decode(d.optString("name", "未知")),
-            singer = decode(d.optString("artist")).ifEmpty { "未知歌手" },
+            singer = decode(d.optString("artist")).ifEmpty { "未知演唱者" },
             albumName = decode(d.optString("album")).ifEmpty { null },
             albumId = d.optString("albumid").ifEmpty { null },
             source = SourceID.KW,
@@ -168,7 +168,7 @@ internal fun buildNetEaseTrack(d: JSONObject?): Track? {
     return Track(
         id = Track.makeID(SourceID.WY, id),
         name = d.optString("name", "未知"),
-        singer = singer.ifEmpty { "未知歌手" },
+        singer = singer.ifEmpty { "未知演唱者" },
         albumName = album?.optString("name")?.ifEmpty { null },
         albumId = album?.opt("id")?.toString(),
         source = SourceID.WY,
@@ -253,7 +253,7 @@ private class KugouBoard(private val http: CatalogHttp) : BoardService {
         return Track(
             id = Track.makeID(SourceID.KG, audioId),
             name = decode(d.optString("songname", "未知")),
-            singer = singer.ifEmpty { "未知歌手" },
+            singer = singer.ifEmpty { "未知演唱者" },
             albumName = decode(d.optString("remark")).ifEmpty { null },
             albumId = albumId,
             source = SourceID.KG,
