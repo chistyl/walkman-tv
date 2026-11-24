@@ -39,7 +39,7 @@ import java.io.File
  * java.io.File directories starting from the device's storage volumes (internal / SD / USB).
  * Requires the caller to have already secured storage read access.
  *
- * D-pad: folders are focusable rows (OK enters); "⬆ 上级" goes up; 选此文件夹 picks the current dir.
+ * D-pad: folders are focusable rows (OK enters); "⬆ 上一層" goes up; 選擇此資料夾 picks the current dir.
  */
 @Composable
 fun FolderBrowser(onPick: (File) -> Unit, onCancel: () -> Unit) {
@@ -64,10 +64,10 @@ fun FolderBrowser(onPick: (File) -> Unit, onCancel: () -> Unit) {
                 .background(AppColors.BgPanel)
                 .padding(horizontal = 22.dp, vertical = 20.dp),
         ) {
-            Text("选择音乐文件夹", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("選擇音樂資料夾", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.size(4.dp))
             Text(
-                current?.absolutePath ?: "选择一个存储位置（内部存储 / SD 卡 / U 盘）",
+                current?.absolutePath ?: "選擇儲存位置（內部儲存空間／SD 卡／USB 隨身碟）",
                 color = AppColors.TextSecondary,
                 fontSize = 12.sp,
                 maxLines = 1,
@@ -81,13 +81,13 @@ fun FolderBrowser(onPick: (File) -> Unit, onCancel: () -> Unit) {
             ) {
                 if (current != null) {
                     item {
-                        FolderRow(label = "⬆ 上级", onClick = { stack = stack.dropLast(1) })
+                        FolderRow(label = "⬆ 上一層", onClick = { stack = stack.dropLast(1) })
                     }
                 }
                 if (entries.isEmpty()) {
                     item {
                         Text(
-                            if (current == null) "未找到可读取的存储位置" else "（此文件夹没有子文件夹）",
+                            if (current == null) "找不到可讀取的儲存位置" else "（此資料夾沒有子資料夾）",
                             color = AppColors.TextMuted,
                             fontSize = 13.sp,
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -116,7 +116,7 @@ fun FolderBrowser(onPick: (File) -> Unit, onCancel: () -> Unit) {
                         selected = true,
                         contentPadding = PaddingValues(horizontal = 22.dp, vertical = 8.dp),
                     ) {
-                        Text("选此文件夹", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("選擇此資料夾", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -143,8 +143,8 @@ private fun rootLabel(dir: File, isRoot: Boolean): String {
     if (!isRoot) return dir.name
     val path = dir.absolutePath
     return when {
-        path == Environment.getExternalStorageDirectory()?.absolutePath -> "内部存储"
-        path.startsWith("/storage/") || path.startsWith("/mnt/media_rw/") -> "外置存储（${dir.name}）"
+        path == Environment.getExternalStorageDirectory()?.absolutePath -> "內部儲存空間"
+        path.startsWith("/storage/") || path.startsWith("/mnt/media_rw/") -> "外接儲存裝置（${dir.name}）"
         else -> dir.name.ifBlank { path }
     }
 }
