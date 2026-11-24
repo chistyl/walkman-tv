@@ -390,7 +390,8 @@ private fun HotSearchGrid(
     onPick: (String) -> Unit,
 ) {
     val orderedSources = listOf(SourceID.KW, SourceID.WY, SourceID.KG, SourceID.TX)
-    val visibleColumns = orderedSources.mapNotNull { source -> columns.firstOrNull { it.source == source && it.words.isNotEmpty() } }
+    // Keep all four platform columns visible even when one provider temporarily has no data.
+    val visibleColumns = orderedSources.mapNotNull { source -> columns.firstOrNull { it.source == source } }
     Column(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
         SectionHeader("熱門搜尋")
         Row(
@@ -406,7 +407,14 @@ private fun HotSearchGrid(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(bottom = 8.dp, start = 4.dp),
                     )
-                    LazyColumn(
+                    if (col.words.isEmpty()) {
+                        Text(
+                            "暫無熱門搜尋資料",
+                            color = AppColors.TextMuted,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(start = 4.dp, top = 8.dp),
+                        )
+                    } else LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         // Keep room around scaled TV focus surfaces so their green border is
                         // not clipped by LazyColumn's viewport at the first/last rows or edges.
