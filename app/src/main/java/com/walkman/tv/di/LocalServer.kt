@@ -237,7 +237,7 @@ class LocalServer private constructor(
               <h2>為歌單命名</h2>
               <p>使用手機輸入法（支援中英文），送出後名稱會顯示在電視的對話框中。</p>
               <form class="card" method="POST" action="/api/playlist-name">
-                <input name="name" placeholder="例如：开车听的歌" maxlength="24" autofocus>
+                <input name="name" placeholder="例如：開車時聽的歌曲" maxlength="24" autofocus>
                 <button>傳送至電視</button>
               </form>
             </body></html>
@@ -263,7 +263,7 @@ class LocalServer private constructor(
             <title>自訂音源 · 隨便聽</title>$PAGE_CSS</head>
             <body>
               <h2>匯入自訂音源</h2>
-              <p>支持两种方式：貼上指令碼 URL，或直接上傳 .js 檔案。送出後電視會自動載入。</p>
+              <p>支援兩種方式：貼上指令碼 URL，或直接上傳 .js 檔案。送出後電視會自動載入。</p>
               <form class="card" method="POST" action="/api/script-url">
                 <input name="url" placeholder="指令碼 URL（例如 https://.../source.js）">
                 <button>傳送 URL</button>
