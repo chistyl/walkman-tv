@@ -15,7 +15,7 @@ import java.io.File
  * any invalid-filename surprises.
  */
 internal fun relativePath(track: Track, ext: String, trackNumber: Int?): String {
-    val artist = sanitise(track.singer.ifBlank { "未知歌手" })
+    val artist = sanitise(track.singer.ifBlank { "未知演唱者" })
     val title = sanitise(track.name.ifBlank { "未知" })
     val album = track.albumName?.takeIf { it.isNotBlank() }?.let(::sanitise)
     return when {
