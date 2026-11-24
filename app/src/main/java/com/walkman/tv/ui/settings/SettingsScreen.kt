@@ -24,6 +24,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Diamond
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.HighQuality
+import androidx.compose.material.icons.filled.SurroundSound
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.UploadFile
