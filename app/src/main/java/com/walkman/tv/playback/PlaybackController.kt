@@ -209,6 +209,7 @@ class PlaybackController(
                 }
             }
                 .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+                .setEnableDecoderFallback(true)
                 .setMediaCodecSelector { mimeType, secure, tunneling ->
                     val all = MediaCodecSelector.DEFAULT.getDecoderInfos(mimeType, secure, tunneling)
                     // 只管音频；MV 视频仍走硬解，软解 1080p 在盒子上会卡。没有可用的软件解码器时退回
