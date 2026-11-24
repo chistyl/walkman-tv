@@ -19,9 +19,9 @@ import kotlinx.coroutines.launch
 data class SonglistRef(val source: SourceID, val id: String)
 
 sealed class ImportError(message: String) : Throwable(message) {
-    object UnrecognizedURL : ImportError("无法识别歌单链接，请粘贴酷我 / 酷狗 / QQ / 网易云的歌单分享链接")
-    class FetchFailed(detail: String) : ImportError("获取歌单失败：$detail")
-    object EmptyPlaylist : ImportError("歌单为空、私密或暂时无法读取（私密歌单需创建者设为公开后才能导入）")
+    object UnrecognizedURL : ImportError("無法辨識歌單連結，請貼上酷我／酷狗／QQ／網易雲音樂的歌單分享連結")
+    class FetchFailed(detail: String) : ImportError("取得歌單失敗：$detail")
+    object EmptyPlaylist : ImportError("歌單是空的、設為私人或暫時無法讀取（私人歌單需由建立者設為公開後才能匯入）")
 }
 
 data class ImportResult(val playlistId: String, val count: Int)
@@ -94,7 +94,7 @@ object SonglistImporter {
         val name = when {
             trimmed.isNotEmpty() -> trimmed
             detail.info.name.isNotEmpty() -> detail.info.name
-            else -> "导入的歌单"
+            else -> "匯入的歌單"
         }
         val playlist = library.createList(name, PlaylistOrigin(ref.source, ref.id, detail.tracks.map { it.id }))
         // Batch write: one StateFlow update + one library.json save for the whole songlist.
@@ -124,13 +124,13 @@ object SonglistImporter {
         scope.launch {
             val msg = try {
                 val r = refreshPlaylist(playlist, songlists, library)
-                if (r.added == 0 && r.removed == 0) "「${playlist.name}」已是最新（${r.total} 首）"
+                if (r.added == 0 && r.removed == 0) "「${playlist.name}」已是最新版本（${r.total} 首）"
                 else "「${playlist.name}」已更新：共 ${r.total} 首，新增 ${r.added}，移除 ${r.removed}" +
-                    if (r.kept > 0) "（保留手动添加的 ${r.kept} 首）" else ""
+                    if (r.kept > 0) "（保留手動加入的 ${r.kept} 首）" else ""
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                "「${playlist.name}」更新失败：${e.localizedMessage ?: e}"
+                "「${playlist.name}」更新失敗：${e.localizedMessage ?: e}"
             } finally {
                 _refreshing.update { it - playlist.id }
             }
@@ -154,7 +154,7 @@ object SonglistImporter {
         val detail = fetch(SonglistRef(origin.source, origin.id), songlists)
         // Re-read after the (slow) fetch so edits made meanwhile aren't lost.
         val live = library.userLists.value.firstOrNull { it.id == playlist.id }
-            ?: throw IllegalStateException("歌单已被删除")
+            ?: throw IllegalStateException("歌單已遭刪除")
         val snapshot = origin.platformTrackIds?.toHashSet()
         val (fromPlatform, byHand) = live.tracks.partition { t ->
             if (snapshot != null) t.id in snapshot else t.source == origin.source
