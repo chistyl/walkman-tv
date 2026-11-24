@@ -598,11 +598,20 @@ class PlaybackController(
         }
     }
 
-    /** Start the MediaSessionService once, so background audio + remote controls work. */
+    /**
+     * Attach MediaSessionService before playback state changes.
+     *
+     * Do not use startForegroundService() here: track resolution can take several seconds,
+     * while Media3 only promotes the service after playback becomes active. Android 9
+     * requires a service started with startForegroundService() to call startForeground()
+     * within a short deadline, so starting it while the player is still idle can crash with
+     * RemoteServiceException. A normal service start is sufficient while this foreground
+     * app is preparing playback; Media3 will promote it when playback actually starts.
+     */
     private fun ensureService() {
         if (serviceStarted) return
         runCatching {
-            ContextCompat.startForegroundService(appContext, Intent(appContext, PlaybackService::class.java))
+            appContext.startService(Intent(appContext, PlaybackService::class.java))
             serviceStarted = true
         }.onFailure {
             serviceStarted = false
