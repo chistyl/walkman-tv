@@ -41,6 +41,9 @@ import kotlinx.coroutines.launch
 
 private val songlistSources = listOf(SourceID.KW, SourceID.WY, SourceID.KG, SourceID.TX)
 
+// Small in-memory cache for previously visited songlist pages.
+private val songlistPageCache = LinkedHashMap<String, List<SonglistInfo>>()
+
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun SonglistScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
@@ -70,8 +73,16 @@ fun SonglistScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     }
     LaunchedEffect(source, order, tag) {
         val o = order ?: return@LaunchedEffect
-        loading = true
-        lists = fetchOr(emptyList()) { service?.fetchRecommended(o, tag, 1) ?: emptyList() }
+        val cacheKey = source.key + ":" + o.id + ":" + tag.id + ":" + tag.name
+        val cached = songlistPageCache[cacheKey].orEmpty()
+        lists = cached
+        loading = cached.isEmpty()
+        val fresh = fetchOr(emptyList()) { service?.fetchRecommended(o, tag, 1) ?: emptyList() }
+        if (fresh.isNotEmpty()) {
+            songlistPageCache[cacheKey] = fresh
+            while (songlistPageCache.size > 32) songlistPageCache.remove(songlistPageCache.keys.first())
+            lists = fresh
+        }
         loading = false
     }
 
