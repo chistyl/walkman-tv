@@ -62,18 +62,18 @@ object LocalPlaylistRescan {
                 val removed = playlist.tracks.size - kept.size
                 // Re-read the live list so songs added/removed by the user during the scan survive.
                 val live = library.userLists.value.firstOrNull { it.id == playlist.id }
-                    ?: throw IllegalStateException("歌单已被删除")
+                    ?: throw IllegalStateException("歌單已遭刪除")
                 val liveKept = live.tracks.filter { t ->
                     val folder = local.folderIdOf(t)
                     folder == null || folder !in scanned || t.id in onDisk
                 }
                 library.replaceTracks(playlist.id, liveKept + added)
                 if (added.isEmpty() && removed == 0) "「${playlist.name}」已是最新"
-                else "「${playlist.name}」扫描完成：新增 ${added.size}，移除 $removed"
+                else "「${playlist.name}」掃描完成：新增 ${added.size} 首，移除 $removed 首"
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                "「${playlist.name}」扫描失败：${e.message ?: e}"
+                "「${playlist.name}」掃描失敗：${e.message ?: e}"
             } finally {
                 _progress.update { it - playlist.id }
             }
