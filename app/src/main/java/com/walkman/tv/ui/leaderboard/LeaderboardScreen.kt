@@ -46,29 +46,40 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var loadingTracks by remember { mutableStateOf(false) }
 
-    // fetchOr (not runCatching): a cancelled effect must die at the fetch, not swallow the
-    // CancellationException and stomp state its restarted replacement already wrote.
+    // Show the built-in board catalogue immediately; refresh remote names/covers in parallel.
+    // The old flow waited for fetchBoards() before it even started fetching the first board's songs.
     LaunchedEffect(source) {
-        boards = fetchOr(emptyList()) { appContainer.boards.serviceFor(source)?.fetchBoards() ?: emptyList() }
-        selected = boards.firstOrNull()
+        val service = appContainer.boards.serviceFor(source)
+        val initial = service?.list.orEmpty()
+        boards = initial
+        selected = initial.firstOrNull()
     }
-    LaunchedEffect(selected) {
-        val b = selected ?: return@LaunchedEffect
+    LaunchedEffect(source) {
+        val refreshed = fetchOr(emptyList()) {
+            appContainer.boards.serviceFor(source)?.fetchBoards() ?: emptyList()
+        }
+        if (refreshed.isNotEmpty()) boards = refreshed
+    }
+    // Key by source + bangid, not BoardInfo equality: refreshing display metadata must not
+    // trigger a second identical song request.
+    LaunchedEffect(selected?.source, selected?.bangid) {
+        val board = selected ?: return@LaunchedEffect
         loadingTracks = true
-        tracks = fetchOr(emptyList()) { appContainer.boards.serviceFor(b.source)?.fetchTracks(b.bangid, 1) ?: emptyList() }
+        tracks = emptyList()
+        tracks = fetchOr(emptyList()) {
+            appContainer.boards.serviceFor(board.source)?.fetchTracks(board.bangid, 1) ?: emptyList()
+        }
         loadingTracks = false
     }
 
     Row(modifier = modifier.fillMaxSize().padding(top = 8.dp)) {
         Column(modifier = Modifier.width(150.dp).fillMaxHeight()) {
-            // Wrap to 2x2 — 4 platform chips can't fit horizontally in a 150dp column
-            // (QQ音乐 alone is ~52dp; the row total ~175dp would clip the last chip).
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 boardSources.chunked(2).forEach { rowChips ->
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         rowChips.forEach { s ->
                             TvPill(
-                                onClick = { source = s },
+                                onClick = { if (source != s) source = s },
                                 selected = source == s,
                                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                             ) { Text(s.displayName, fontSize = 11.sp) }
