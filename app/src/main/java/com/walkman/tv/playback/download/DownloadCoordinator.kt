@@ -235,10 +235,10 @@ class DownloadCoordinator(
                                 }
                                 store.markPresent(track.id)
                             } else {
-                                fail(track.id, "写入所选文件夹失败，请重试或更换下载目录")
+                                fail(track.id, "寫入所選資料夾失敗，請重試或更換下載目錄")
                             }
                         },
-                        onFailure = { fail(track.id, it.message ?: "下载失败") },
+                        onFailure = { fail(track.id, it.message ?: "下載失敗") },
                     )
                 } else {
                     // ── File target ── Write straight to the pinned root; tag in place (async).
@@ -264,17 +264,17 @@ class DownloadCoordinator(
                             store.updateRecord(track.id) {
                                 it.copy(status = DownloadStatus.COMPLETED, quality = resolved.quality)
                             }
-                            store.markPresent(track.id) // clear any stale "文件缺失" flag
+                            store.markPresent(track.id) // clear any stale "檔案遺失" flag
                             scope.launch { embedTags(track, dest, details) }
                         },
-                        onFailure = { fail(track.id, it.message ?: "下载失败") },
+                        onFailure = { fail(track.id, it.message ?: "下載失敗") },
                     )
                 }
             }
         } catch (ce: kotlinx.coroutines.CancellationException) {
             throw ce
         } catch (e: Exception) {
-            fail(track.id, e.message ?: e::class.simpleName ?: "未知错误")
+            fail(track.id, e.message ?: e::class.simpleName ?: "未知錯誤")
         } finally {
             jobs.remove(track.id)
         }
