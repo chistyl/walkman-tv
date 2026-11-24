@@ -351,18 +351,6 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             )
         }
 
-        Section("批次下載") {
-            ToggleRow("已下載的歌曲也依新音質重新下載", settings.redownloadOnQualityChange) {
-                scope.launch { appContainer.settingsStore.update { it.copy(redownloadOnQualityChange = !it.redownloadOnQualityChange) } }
-            }
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "開啟後，對歌單執行「全部下載」時，已下載但音質與所選設定不同的歌曲會依新音質重新下載（例如從 128 kbps 升級為 FLAC）；關閉後則一律略過已下載的歌曲。預設為開啟。",
-                color = AppColors.TextMuted,
-                fontSize = 11.sp,
-            )
-        }
-
         Section("自訂音源") {
             Text(
                 "貼上 URL 可自動從遠端載入；直接貼上指令碼則會以 JS 程式碼匯入；也可上傳 .js 檔案，或掃描 QR Code 透過手機／電腦操作。",
