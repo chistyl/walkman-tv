@@ -125,7 +125,7 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                     shape = androidx.compose.foundation.shape.CircleShape,
                     contentPadding = PaddingValues(10.dp),
                 ) {
-                    Icon(Icons.Filled.QrCode2, contentDescription = "扫码搜索", modifier = Modifier.size(22.dp))
+                    Icon(Icons.Filled.QrCode2, contentDescription = "掃碼搜尋", modifier = Modifier.size(22.dp))
                 }
             }
             Spacer(Modifier.padding(top = 12.dp))
@@ -134,7 +134,7 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                 onBackspace = { if (query.isNotEmpty()) query = query.dropLast(1) },
                 onClear = { query = "" },
                 onConfirm = { runSearch() },
-                confirmLabel = "搜索",
+                confirmLabel = "搜尋",
             )
         }
 
@@ -177,8 +177,8 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
         if (ip != null && port != null) {
             QrDialog(
                 url = "http://$ip:$port/search",
-                title = "扫码搜索",
-                subtitle = "手机扫码、电脑直接打开地址都可以，输入关键词后会自动回到电视搜索",
+                title = "掃碼搜尋",
+                subtitle = "手机扫码、电脑直接打开地址都可以，輸入關鍵字后会自动回到电视搜尋",
                 onDismiss = { showQr = false },
             )
         } else {
@@ -191,8 +191,8 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
 private fun QrUnavailableDialog(onDismiss: () -> Unit) {
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("无法启动扫码") },
-        text = { Text("请确认电视已连接 Wi-Fi 且本地服务已启动后再试。") },
+        title = { Text("無法啟動掃碼") },
+        text = { Text("請確認電視已連線至 Wi-Fi，且本機服務已啟動後再試。") },
         confirmButton = {
             androidx.compose.material3.TextButton(onClick = onDismiss) {
                 Text("好", color = AppColors.AccentGreen)
@@ -216,7 +216,7 @@ private fun SearchInputBox(query: String) {
             .padding(horizontal = 14.dp, vertical = 14.dp),
     ) {
         Text(
-            text = query.ifEmpty { "输入关键词" },
+            text = query.ifEmpty { "輸入關鍵字" },
             color = if (query.isEmpty()) AppColors.TextMuted else AppColors.TextPrimary,
             fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold,
@@ -234,8 +234,8 @@ private val PLATFORMS_LABELS: List<Pair<SourceID?, String>> = listOf(
     null to "全部",
     SourceID.KW to "酷我",
     SourceID.KG to "酷狗",
-    SourceID.TX to "QQ音乐",
-    SourceID.WY to "网易云",
+    SourceID.TX to "QQ 音樂",
+    SourceID.WY to "網易雲音樂",
 )
 
 @Composable
@@ -278,15 +278,15 @@ private fun ResultsPane(
                 if (hotColumns.any { it.words.isNotEmpty() }) {
                     HotSearchGrid(columns = hotColumns, onPick = onPickHot)
                 } else if (history.isEmpty()) {
-                    EmptyHint("输入关键词开始搜索", Modifier.fillMaxSize())
+                    EmptyHint("輸入關鍵字开始搜尋", Modifier.fillMaxSize())
                 }
             }
         }
         songlists.isEmpty() && tracks.isEmpty() ->
-            EmptyHint("没有找到结果", Modifier.fillMaxSize())
+            EmptyHint("找不到搜尋結果", Modifier.fillMaxSize())
         else -> Column(modifier = Modifier.fillMaxSize()) {
             if (songlists.isNotEmpty()) {
-                SectionHeader("歌单 (${songlists.size})")
+                SectionHeader("歌單 (${songlists.size})")
                 val uniqueSonglists = remember(songlists) { songlists.distinctBy { it.id + "_" + it.source.key } }
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -350,7 +350,7 @@ private fun HotSearchGrid(
     onPick: (String) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        SectionHeader("热门搜索")
+        SectionHeader("热门搜尋")
         Row(
             modifier = Modifier.fillMaxWidth().weight(1f),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -411,7 +411,7 @@ private fun SearchHistoryPane(history: List<String>, onPick: (String) -> Unit) {
     Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "最近搜索",
+                "最近搜尋",
                 color = AppColors.AccentGreen,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
@@ -422,7 +422,7 @@ private fun SearchHistoryPane(history: List<String>, onPick: (String) -> Unit) {
                 accent = AppColors.Danger,
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
             ) {
-                Text("清空", fontSize = 12.sp)
+                Text("清除", fontSize = 12.sp)
             }
         }
         Spacer(Modifier.padding(top = 8.dp))
