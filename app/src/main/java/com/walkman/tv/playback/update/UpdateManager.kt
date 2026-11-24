@@ -77,7 +77,7 @@ class UpdateManager(
                         .build()
                     val body = http.newCall(req).execute().use { resp ->
                         if (!resp.isSuccessful) throw IOException("HTTP ${resp.code}")
-                        resp.body?.string() ?: throw IOException("空响应")
+                        resp.body?.string() ?: throw IOException("空白回應")
                     }
                     parseRelease(JSONObject(body))
                 }
@@ -91,7 +91,7 @@ class UpdateManager(
                 lastError = result.exceptionOrNull()?.message
                 Log.w(TAG, "check via $url failed: $lastError")
             }
-            UpdateState.Failed(lastError ?: "检查更新失败")
+            UpdateState.Failed(lastError ?: "檢查更新失敗")
         }
     }
 
@@ -111,7 +111,7 @@ class UpdateManager(
                 lastError = result.exceptionOrNull()?.message
                 Log.w(TAG, "download attempt ${idx + 1}/${candidates.size} via $url failed: $lastError")
             }
-            UpdateState.Failed(lastError ?: "下载失败")
+            UpdateState.Failed(lastError ?: "下載失敗")
         }
     }
 
@@ -153,14 +153,14 @@ class UpdateManager(
     // MARK: - internals
 
     private fun parseRelease(json: JSONObject): AppRelease {
-        val tag = json.optString("tag_name").ifEmpty { throw IOException("无有效发布") }
+        val tag = json.optString("tag_name").ifEmpty { throw IOException("沒有有效的版本發佈") }
         val version = tag.trimStart('v', 'V')
         val notes = json.optString("body").trim()
         val assets = json.optJSONArray("assets") ?: JSONArray()
         val apks = (0 until assets.length())
             .mapNotNull { assets.optJSONObject(it) }
             .filter { it.optString("name").endsWith(".apk", ignoreCase = true) }
-        if (apks.isEmpty()) throw IOException("该版本没有可用的 APK")
+        if (apks.isEmpty()) throw IOException("此版本沒有可用的 APK")
         // Prefer an APK matching the device's ABI (highest-priority ABI first); the asset names
         // are like walkman-tv-1.3.2-arm64-v8a-release.apk. Fall back to the universal build.
         val chosen = Build.SUPPORTED_ABIS.firstNotNullOfOrNull { abi ->
@@ -186,7 +186,7 @@ class UpdateManager(
         val req = Request.Builder().url(url).header("User-Agent", UA).build()
         client.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) throw IOException("HTTP ${resp.code}")
-            val body = resp.body ?: throw IOException("空响应")
+            val body = resp.body ?: throw IOException("空白回應")
             val total = body.contentLength()
             dest.parentFile?.mkdirs()
             val tmp = File(dest.parentFile, dest.name + ".part")
