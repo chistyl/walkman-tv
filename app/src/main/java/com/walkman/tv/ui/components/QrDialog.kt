@@ -70,7 +70,7 @@ fun QrDialog(
     val debug = appContainer.settingsStore.settings.collectAsState().value.showDebugInfo
     val context = androidx.compose.ui.platform.LocalContext.current
     fun dismiss(reason: String) {
-        if (debug) android.widget.Toast.makeText(context, "QR Code 彈出視窗關閉：$reason", android.widget.Toast.LENGTH_SHORT).show()
+        if (debug) android.widget.Toast.makeText(context, "QR Code 彈出視窗已關閉：$reason", android.widget.Toast.LENGTH_SHORT).show()
         onDismiss()
     }
     LaunchedEffect(Unit) {
@@ -78,7 +78,7 @@ fun QrDialog(
     }
 
     Dialog(
-        onDismissRequest = { dismiss("返回键") },
+        onDismissRequest = { dismiss("返回鍵") },
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Box(
@@ -150,11 +150,11 @@ fun QrDialog(
                 }
                 Spacer(Modifier.height(12.dp))
                 TvPill(
-                    onClick = { dismiss("关闭按钮") },
+                    onClick = { dismiss("關閉按鈕") },
                     selected = true,
                     contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp),
                 ) {
-                    Text("关闭", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text("關閉", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
