@@ -146,11 +146,7 @@ fun BatchDownloadDialog(playlistName: String, tracks: List<Track>, onDismiss: ()
 
             Spacer(Modifier.size(10.dp))
             Text(
-                if (settings.redownloadOnQualityChange) {
-                    "已下載且音質相同的歌曲會略過；音質不同的歌曲將依新音質重新下載（可在設定中關閉）。"
-                } else {
-                    "已下載的歌曲將全部略過（可在設定中開啟「依新音質重新下載」）。"
-                },
+                "已下載的歌曲一律略過；尚未下載或原檔案已遺失的歌曲會加入下載。",
                 color = AppColors.TextMuted,
                 fontSize = 11.sp,
             )
