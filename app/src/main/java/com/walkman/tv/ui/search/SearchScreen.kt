@@ -178,7 +178,7 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
             QrDialog(
                 url = "http://$ip:$port/search",
                 title = "掃碼搜尋",
-                subtitle = "手机扫码、电脑直接打开地址都可以，輸入關鍵字后会自动回到电视搜尋",
+                subtitle = "手機掃碼或直接在電腦開啟網址皆可；輸入關鍵字後會自動返回電視搜尋頁",
                 onDismiss = { showQr = false },
             )
         } else {
@@ -278,7 +278,7 @@ private fun ResultsPane(
                 if (hotColumns.any { it.words.isNotEmpty() }) {
                     HotSearchGrid(columns = hotColumns, onPick = onPickHot)
                 } else if (history.isEmpty()) {
-                    EmptyHint("輸入關鍵字开始搜尋", Modifier.fillMaxSize())
+                    EmptyHint("輸入關鍵字開始搜尋", Modifier.fillMaxSize())
                 }
             }
         }
@@ -350,7 +350,7 @@ private fun HotSearchGrid(
     onPick: (String) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        SectionHeader("热门搜尋")
+        SectionHeader("熱門搜尋")
         Row(
             modifier = Modifier.fillMaxWidth().weight(1f),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
