@@ -77,20 +77,20 @@ class JsScriptRuntime(
                 c.evaluate(script.rawScript)
             } catch (e: Exception) {
                 // A throw after a successful init is non-fatal; otherwise fail init.
-                if (!inited) failInit(e.message ?: "脚本执行错误")
+                if (!inited) failInit(e.message ?: "指令碼執行錯誤")
             }
             Unit // force lambda return type to Unit; avoids if-without-else type-check error
         }
         return try {
             withTimeout(timeoutMs) { deferred.await() }
         } catch (e: TimeoutCancellationException) {
-            throw ScriptException("脚本响应超时")
+            throw ScriptException("指令碼回應逾時")
         }
     }
 
     /** Ask the script to perform an action (musicUrl / lyric / pic). */
     suspend fun requestAction(source: SourceID, action: String, info: JSONObject, timeoutMs: Long = 15_000): Any? {
-        if (!inited) throw ScriptException("脚本尚未初始化")
+        if (!inited) throw ScriptException("指令碼尚未初始化")
         val requestKey = UUID.randomUUID().toString()
         val deferred = CompletableDeferred<Any?>()
         pending[requestKey] = deferred
@@ -103,7 +103,7 @@ class JsScriptRuntime(
         return try {
             withTimeout(timeoutMs) { deferred.await() }
         } catch (e: TimeoutCancellationException) {
-            throw ScriptTimeoutException("脚本调用超时")
+            throw ScriptTimeoutException("指令碼呼叫逾時")
         } finally {
             pending.remove(requestKey)
         }
@@ -223,7 +223,7 @@ class JsScriptRuntime(
 
     private fun failInit(message: String) {
         inited = true
-        initDeferred?.completeExceptionally(ScriptException("加载脚本失败: $message"))
+        initDeferred?.completeExceptionally(ScriptException("載入指令碼失敗： $message"))
         initDeferred = null
     }
 
