@@ -63,7 +63,7 @@ data class Settings(
     val maxConcurrentDownloads: Int = 3,
     /** Batch "下载全部": when a track is already downloaded but at a different quality than the
      *  chosen target, re-download it to match (true) vs. always skip already-downloaded (false). */
-    val redownloadOnQualityChange: Boolean = true,
+    val redownloadOnQualityChange: Boolean = false,
     /** Sources that feed the discover (home) page. Spec docs/discover-page-spec-android-tv.md §2:
      *  fixed 4 in order kw → wy → kg → tx, default all enabled. */
     val homeSources: Set<com.walkman.tv.data.model.SourceID> = setOf(
@@ -94,6 +94,7 @@ class SettingsStore(context: Context) {
             fallbackEnabled = false,
             audioOffloadEnabled = false,
             forceSoftwareDecoding = false,
+            redownloadOnQualityChange = false,
         )
         _settings.value = normalized
         if (normalized != loaded) {
