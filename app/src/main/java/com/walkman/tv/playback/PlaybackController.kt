@@ -299,7 +299,7 @@ class PlaybackController(
                         "format reject @ ${current.key} (${error.errorCodeName}); re-cascading from ${below.key}",
                     )
                     _state.value = _state.value.copy(
-                        warning = "${current.displayName} 格式不支持，降级到 ${below.displayName}",
+                        warning = "${current.displayName} 格式不支援，已降低音質至 ${below.displayName}",
                     )
                     networkRetryCount = 0 // format error path — separate from the network counter
                     playAt(_state.value.index, qualityCap = below)
@@ -316,7 +316,7 @@ class PlaybackController(
                             "network error (${error.errorCodeName}); retry ${networkRetryCount}/$MAX_NETWORK_RETRIES in ${delayMs}ms",
                         )
                         _state.value = _state.value.copy(
-                            warning = "网络不稳定，正在重试 ($networkRetryCount/$MAX_NETWORK_RETRIES)…",
+                            warning = "網路不穩定，正在重試 ($networkRetryCount/$MAX_NETWORK_RETRIES)…",
                             resolving = true,
                             error = null,
                         )
@@ -336,7 +336,7 @@ class PlaybackController(
                         "PlaybackController",
                         "network retries exhausted on ${track.name}; skipping to next",
                     )
-                    failAndAdvance("网络不稳定")
+                    failAndAdvance("網路不穩定")
                     return
                 }
                 // Any other error — this track failed; auto-skip (or stop after too many in a row).
@@ -390,7 +390,7 @@ class PlaybackController(
             networkRetryCount = 0
             // Silence the previous song right away. Resolving can take a long time with a slow or
             // dead source (every quality tier × 15s script timeout, then other-platform lookups),
-            // and the old track playing on under the new title looked like "切歌没成功".
+            // and the old track playing on under the new title looked like "切換歌曲未成功".
             runCatching { player.stop() }
             _state.value = _state.value.copy(positionMs = 0)
         }
@@ -420,7 +420,7 @@ class PlaybackController(
             runCatching { playResolvedOrFail(track, resolved) }
                 .onFailure { e ->
                     android.util.Log.e("PlaybackController", "playAt crashed", e)
-                    failAndAdvance(e.message ?: e::class.simpleName ?: "播放出错")
+                    failAndAdvance(e.message ?: e::class.simpleName ?: "播放時發生錯誤")
                 }
         }
     }
@@ -478,7 +478,7 @@ class PlaybackController(
                 // (lyrics already loaded in playAt when the track switched)
             }.onFailure { e ->
                 // Couldn't get a play URL for this track — auto-skip (or stop after too many).
-                failAndAdvance(e.message ?: "无法播放")
+                failAndAdvance(e.message ?: "無法播放")
             }
     }
 
@@ -497,14 +497,14 @@ class PlaybackController(
         if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
             consecutiveFailures = 0
             _state.value = _state.value.copy(
-                error = "连续 $MAX_CONSECUTIVE_FAILURES 首播放失败，已停止（$reason）",
+                error = "連續 $MAX_CONSECUTIVE_FAILURES 首歌曲播放失敗，已停止播放（$reason）",
                 resolving = false,
                 warning = null,
             )
             return
         }
         _state.value = _state.value.copy(
-            warning = "播放失败，自动播放下一首（$reason）",
+            warning = "播放失敗，將自動播放下一首（$reason）",
             resolving = false,
             error = null,
         )
