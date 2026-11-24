@@ -465,12 +465,10 @@ class PlaybackController(
                         }
                     }
                 }
-                // NOTE: MediaSessionService startup is currently disabled — Android 12+ kills
-                // the process via ForegroundServiceDidNotStartInTimeException if the service
-                // doesn't post a media notification within 5s, which races with our URL-resolve
-                // path. Re-enable once a proper MediaNotification.Provider is in place.
-                // ensureService()
+                // Start the MediaSessionService only after URL resolution and media preparation.
+                // Media3 owns the media notification and promotes the service when playback starts.
                 player.playWhenReady = true
+                ensureService()
                 _state.value = _state.value.copy(
                     resolving = false,
                     warning = r.warning,
@@ -555,6 +553,7 @@ class PlaybackController(
             playAt(s.index)
         } else {
             player.play()
+            ensureService()
         }
     }
 
@@ -603,6 +602,7 @@ class PlaybackController(
         player.setMediaItem(MediaItem.fromUri(url))
         player.prepare()
         player.playWhenReady = true
+        ensureService()
         _state.value = _state.value.copy(isMv = true, resolving = false, error = null)
     }
 
@@ -633,10 +633,18 @@ class PlaybackController(
     /** Start the MediaSessionService once, so background audio + remote controls work. */
     private fun ensureService() {
         if (serviceStarted) return
-        serviceStarted = true
         runCatching {
             ContextCompat.startForegroundService(appContext, Intent(appContext, PlaybackService::class.java))
+            serviceStarted = true
+        }.onFailure {
+            serviceStarted = false
+            android.util.Log.e("PlaybackController", "Unable to start playback session service", it)
         }
+    }
+
+    /** Called by PlaybackService.onDestroy so a later resume can start a fresh service instance. */
+    fun onPlaybackServiceDestroyed() {
+        serviceStarted = false
     }
 
     private fun randomOther(current: Int, size: Int): Int {
