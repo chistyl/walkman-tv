@@ -102,7 +102,7 @@ private class KuwoSearch(private val http: CatalogHttp) : SongCatalog {
         return Track(
             id = Track.makeID(SourceID.KW, songmid),
             name = decode(d.optString("SONGNAME", "未知")),
-            singer = decode(d.optString("ARTIST")).replace("&", "、").ifEmpty { "未知歌手" },
+            singer = decode(d.optString("ARTIST")).replace("&", "、").ifEmpty { "未知演唱者" },
             albumName = decode(d.optString("ALBUM")).ifEmpty { null },
             albumId = albumId,
             source = SourceID.KW,
@@ -166,7 +166,7 @@ private class KugouSearch(private val http: CatalogHttp) : SongCatalog {
         return Track(
             id = Track.makeID(SourceID.KG, songmid),
             name = decode(d.optString("SongName", "未知")),
-            singer = decode(d.optString("SingerName")).ifEmpty { "未知歌手" },
+            singer = decode(d.optString("SingerName")).ifEmpty { "未知演唱者" },
             albumName = decode(d.optString("AlbumName")).ifEmpty { null },
             albumId = albumId,
             source = SourceID.KG,
@@ -260,7 +260,7 @@ private class NetEaseSearch(private val http: CatalogHttp) : SongCatalog {
         return Track(
             id = Track.makeID(SourceID.WY, id),
             name = d.optString("name", "未知"),
-            singer = singer.ifEmpty { "未知歌手" },
+            singer = singer.ifEmpty { "未知演唱者" },
             albumName = album?.optString("name")?.ifEmpty { null },
             albumId = album?.opt("id")?.toString(),
             source = SourceID.WY,
