@@ -71,32 +71,32 @@ class LocalServer private constructor(
             "/api/search" -> {
                 val q = params["q"]?.firstOrNull().orEmpty().trim()
                 if (q.isNotEmpty()) events.postQrSearchKeyword(q)
-                html(donePage("已发送到电视：$q"))
+                html(donePage("已傳送至電視：$q"))
             }
             "/api/script-url" -> {
                 val url = params["url"]?.firstOrNull().orEmpty().trim()
                 if (url.isNotEmpty()) events.postQrScriptUrl(url)
-                html(donePage("URL 已发送：$url"))
+                html(donePage("URL 已傳送：$url"))
             }
             "/api/script-file" -> {
                 val tmpPath = files["file"]
                 val text = tmpPath?.let { runCatching { File(it).readText() }.getOrNull() }
                 if (!text.isNullOrEmpty()) {
                     events.postQrScriptText(text)
-                    html(donePage("已上传 ${text.length} 字符的脚本"))
+                    html(donePage("已上傳長度 ${text.length} 字元的指令碼"))
                 } else {
-                    html(donePage("未收到文件"))
+                    html(donePage("未收到檔案"))
                 }
             }
             "/api/playlist-name" -> {
                 val name = params["name"]?.firstOrNull().orEmpty().trim()
                 if (name.isNotEmpty()) events.postQrPlaylistName(name)
-                html(donePage("已发送：$name"))
+                html(donePage("已傳送：$name"))
             }
             "/api/songlist-url" -> {
                 val url = params["url"]?.firstOrNull().orEmpty().trim()
                 if (url.isNotEmpty()) events.postQrSonglistUrl(url)
-                html(donePage("已发送歌单链接"))
+                html(donePage("已傳送歌單連結"))
             }
             else -> notFound()
         }
@@ -144,21 +144,21 @@ class LocalServer private constructor(
         private val INDEX_HTML = """
             <!doctype html><html><head><meta charset="utf-8">
             <meta name="viewport" content="width=device-width,initial-scale=1">
-            <title>随便听 - 手机助手</title>$PAGE_CSS</head>
+            <title>隨便聽 - 手機小幫手</title>$PAGE_CSS</head>
             <body>
-              <h2>随便听</h2>
-              <p>选择要在电视上做的事：</p>
-              <div class="card"><a href="/search"><h2>🔍 搜索歌曲</h2></a></div>
-              <div class="card"><a href="/script"><h2>📜 导入自定义音源</h2></a></div>
-              <div class="card"><a href="/playlist-name"><h2>✏️ 输入歌单名</h2></a></div>
-              <div class="card"><a href="/songlist-url"><h2>🔗 推送歌单链接</h2></a></div>
+              <h2>隨便聽</h2>
+              <p>選擇要在電視上執行的操作：</p>
+              <div class="card"><a href="/search"><h2>🔍 搜尋歌曲</h2></a></div>
+              <div class="card"><a href="/script"><h2>📜 匯入自訂音源</h2></a></div>
+              <div class="card"><a href="/playlist-name"><h2>✏️ 輸入歌單名稱</h2></a></div>
+              <div class="card"><a href="/songlist-url"><h2>🔗 傳送歌單連結</h2></a></div>
             </body></html>
         """.trimIndent()
 
         private val SEARCH_HTML = """
             <!doctype html><html><head><meta charset="utf-8">
             <meta name="viewport" content="width=device-width,initial-scale=1">
-            <title>搜索 · 随便听</title>$PAGE_CSS
+            <title>搜尋 · 隨便聽</title>$PAGE_CSS
             <style>
               .toast{position:fixed;left:50%;top:24px;transform:translateX(-50%);
                      background:#4ADE80;color:#0A0D14;font-weight:700;font-size:15px;
@@ -177,11 +177,11 @@ class LocalServer private constructor(
             </style></head>
             <body>
               <div id="toast" class="toast"></div>
-              <h2>搜索歌曲</h2>
-              <p>输入关键词点发送，电视会自动开始搜索，发送后可继续搜下一个。也可点下方热搜词。</p>
+              <h2>搜尋歌曲</h2>
+              <p>輸入關鍵字後點選傳送，電視便會自動開始搜尋；傳送後可繼續搜尋下一首，也可以點選下方熱門搜尋詞。</p>
               <div class="card">
-                <input id="q" placeholder="歌曲名 / 歌手 / 歌单" autofocus>
-                <button onclick="send()">发送到电视</button>
+                <input id="q" placeholder="歌曲名稱／歌手／歌單" autofocus>
+                <button onclick="send()">傳送至電視</button>
               </div>
               <div id="hot"></div>
               <script>
@@ -196,8 +196,8 @@ class LocalServer private constructor(
                   if(!q) return;
                   var body='q='+encodeURIComponent(q);
                   fetch('/api/search',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body})
-                    .then(function(){toast('已发送到电视：'+q);})
-                    .catch(function(){toast('发送失败，请重试');});
+                    .then(function(){toast('已傳送至電視：'+q);})
+                    .catch(function(){toast('傳送失敗，請重試');});
                 }
                 function pick(w){
                   document.getElementById('q').value=w;
@@ -209,7 +209,7 @@ class LocalServer private constructor(
                 fetch('/api/hotsearch').then(function(r){return r.json();}).then(function(cols){
                   var wrap=document.getElementById('hot');
                   if(!cols||!cols.length) return;
-                  var h='<div class="card"><h2 style="margin-bottom:6px">热门搜索</h2><div class="hotgrid">';
+                  var h='<div class="card"><h2 style="margin-bottom:6px">熱門搜尋</h2><div class="hotgrid">';
                   cols.forEach(function(c){
                     if(!c.words||!c.words.length) return;
                     var tint=TINT[c.source]||'#4ADE80';
@@ -232,13 +232,13 @@ class LocalServer private constructor(
         private val PLAYLIST_NAME_HTML = """
             <!doctype html><html><head><meta charset="utf-8">
             <meta name="viewport" content="width=device-width,initial-scale=1">
-            <title>歌单名 · 随便听</title>$PAGE_CSS</head>
+            <title>歌單名稱 · 隨便聽</title>$PAGE_CSS</head>
             <body>
-              <h2>给歌单起个名字</h2>
-              <p>用手机输入法（中英文都行），提交后名字会出现在电视的对话框里。</p>
+              <h2>為歌單命名</h2>
+              <p>使用手機輸入法（支援中英文），送出後名稱會顯示在電視的對話框中。</p>
               <form class="card" method="POST" action="/api/playlist-name">
                 <input name="name" placeholder="例如：开车听的歌" maxlength="24" autofocus>
-                <button>发送到电视</button>
+                <button>傳送至電視</button>
               </form>
             </body></html>
         """.trimIndent()
@@ -246,13 +246,13 @@ class LocalServer private constructor(
         private val SONGLIST_URL_HTML = """
             <!doctype html><html><head><meta charset="utf-8">
             <meta name="viewport" content="width=device-width,initial-scale=1">
-            <title>推送歌单 · 随便听</title>$PAGE_CSS</head>
+            <title>傳送歌單 · 隨便聽</title>$PAGE_CSS</head>
             <body>
-              <h2>推送歌单链接</h2>
-              <p>从酷我 / 酷狗 / QQ 音乐 / 网易云分享一个歌单链接（或纯数字 ID），粘进来发送给电视，电视会自动识别并导入。</p>
+              <h2>傳送歌單連結</h2>
+              <p>從酷我／酷狗／QQ 音樂／網易雲音樂分享歌單連結（或純數字 ID），貼上後傳送至電視，電視會自動辨識並匯入。</p>
               <form class="card" method="POST" action="/api/songlist-url">
                 <textarea name="url" placeholder="例如 https://music.163.com/playlist?id=2034742057" rows="3" autofocus></textarea>
-                <button>发送到电视</button>
+                <button>傳送至電視</button>
               </form>
             </body></html>
         """.trimIndent()
@@ -260,17 +260,17 @@ class LocalServer private constructor(
         private val SCRIPT_HTML = """
             <!doctype html><html><head><meta charset="utf-8">
             <meta name="viewport" content="width=device-width,initial-scale=1">
-            <title>自定义音源 · 随便听</title>$PAGE_CSS</head>
+            <title>自訂音源 · 隨便聽</title>$PAGE_CSS</head>
             <body>
-              <h2>导入自定义音源</h2>
-              <p>支持两种方式：粘贴脚本 URL，或直接上传 .js 文件。提交后电视会自动加载。</p>
+              <h2>匯入自訂音源</h2>
+              <p>支持两种方式：貼上指令碼 URL，或直接上傳 .js 檔案。送出後電視會自動載入。</p>
               <form class="card" method="POST" action="/api/script-url">
-                <input name="url" placeholder="脚本 URL（例如 https://.../source.js）">
-                <button>发送 URL</button>
+                <input name="url" placeholder="指令碼 URL（例如 https://.../source.js）">
+                <button>傳送 URL</button>
               </form>
               <form class="card" method="POST" action="/api/script-file" enctype="multipart/form-data">
                 <input type="file" name="file">
-                <button>上传脚本文件</button>
+                <button>上傳指令碼檔案</button>
               </form>
             </body></html>
         """.trimIndent()
@@ -278,12 +278,12 @@ class LocalServer private constructor(
         private fun donePage(message: String): String = """
             <!doctype html><html><head><meta charset="utf-8">
             <meta name="viewport" content="width=device-width,initial-scale=1">
-            <title>已发送 · 随便听</title>$PAGE_CSS</head>
+            <title>已傳送 · 隨便聽</title>$PAGE_CSS</head>
             <body>
               <div class="card" style="text-align:center;padding:32px 18px;">
                 <div class="ok">✓ ${escapeHtml(message)}</div>
-                <p style="margin-top:18px;">可以回到电视查看结果。</p>
-                <p><a href="/">返回首页</a></p>
+                <p style="margin-top:18px;">可以返回電視查看結果。</p>
+                <p><a href="/">返回首頁</a></p>
               </div>
             </body></html>
         """.trimIndent()
