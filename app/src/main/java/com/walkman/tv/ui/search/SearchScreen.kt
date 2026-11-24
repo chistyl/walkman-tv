@@ -135,7 +135,7 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             PlatformChipRow(filter, onSelect = { filter = it })
             Spacer(Modifier.weight(1f))
@@ -369,7 +369,7 @@ private fun HotSearchGrid(
 ) {
     val orderedSources = listOf(SourceID.KW, SourceID.WY, SourceID.KG, SourceID.TX)
     val visibleColumns = orderedSources.mapNotNull { source -> columns.firstOrNull { it.source == source && it.words.isNotEmpty() } }
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 22.dp, end = 8.dp)) {
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp)) {
         SectionHeader("熱門搜尋")
         Row(
             modifier = Modifier.fillMaxWidth().weight(1f),
@@ -382,7 +382,7 @@ private fun HotSearchGrid(
                         color = sourceTint(col.source),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 8.dp, start = 6.dp),
+                        modifier = Modifier.padding(bottom = 8.dp, start = 4.dp),
                     )
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
