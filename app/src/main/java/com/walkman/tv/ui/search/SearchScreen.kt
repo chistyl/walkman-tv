@@ -66,7 +66,7 @@ import kotlinx.coroutines.launch
 fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     var queryValue by remember { mutableStateOf(TextFieldValue("")) }
-    val traditionalizer = remember { Transliterator.getInstance("Simplified-Traditional") }
+    val simplifier = remember { Transliterator.getInstance("Traditional-Simplified") }
     var filter by remember { mutableStateOf<SourceID?>(null) }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var songlists by remember { mutableStateOf<List<SonglistInfo>>(emptyList()) }
@@ -87,7 +87,9 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
             loading = true
             searched = true
             val f = filter
-            val q = currentQuery
+            // Keep the entered Traditional Chinese visible and in history; normalize only
+            // the provider query to Simplified Chinese for broader source-side matching.
+            val q = simplifier.transliterate(currentQuery)
             // Record into history before kicking off the request so it shows up on the next
             // empty-query render even if the result list ends up empty.
             appContainer.searchHistoryStore.record(q)
@@ -131,12 +133,9 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                 OutlinedTextField(
                     value = queryValue,
                     onValueChange = { entered ->
-                        // Keep IME composing text untouched; convert only after a Chinese
-                        // candidate is committed so Pinyin input is not interrupted.
-                        queryValue = if (entered.composition == null) {
-                            val converted = traditionalizer.transliterate(entered.text)
-                            entered.copy(text = converted)
-                        } else entered
+                        // Preserve the user's Traditional Chinese input as displayed.
+                        // Simplified Chinese conversion happens only when submitting search.
+                        queryValue = entered
                     },
                     modifier = Modifier.weight(1f),
                     singleLine = true,
