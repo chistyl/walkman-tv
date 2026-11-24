@@ -47,7 +47,7 @@ private const val KG_CONCEPT_SIGNKEY = "NVPh5oo715z5DIWAeQlhMDsWXXQV4hwt"
 
 private class KuwoSonglist(private val http: CatalogHttp) : SonglistService {
     override val source = SourceID.KW
-    override val orders = listOf(SonglistOrder("new", "最新"), SonglistOrder("hot", "最热"))
+    override val orders = listOf(SonglistOrder("new", "最新"), SonglistOrder("hot", "最熱門"))
 
     override suspend fun fetchRecommended(order: SonglistOrder, tag: SonglistTag, page: Int): List<SonglistInfo> {
         val url = if (tag.id.isEmpty())
@@ -92,7 +92,7 @@ private class KuwoSonglist(private val http: CatalogHttp) : SonglistService {
             val plays = d.optString("playcnt").toLongOrNull() ?: d.optLong("playcnt")
             SonglistInfo(
                 id = id, source = SourceID.KW,
-                name = d.optString("name", "未知歌单").decodeHtmlEntities(),
+                name = d.optString("name", "未知歌單").decodeHtmlEntities(),
                 author = d.optString("nickname").decodeHtmlEntities(),
                 picURL = d.optString("pic").ifEmpty { null },
                 trackCount = d.optString("songnum").toIntOrNull() ?: d.optInt("songnum").takeIf { it > 0 },
@@ -108,7 +108,7 @@ private class KuwoSonglist(private val http: CatalogHttp) : SonglistService {
         val plays = d.optString("listencnt").toLongOrNull() ?: d.optLong("listencnt")
         return SonglistInfo(
             id = id, source = SourceID.KW,
-            name = d.optString("name", "未知歌单").decodeHtmlEntities(),
+            name = d.optString("name", "未知歌單").decodeHtmlEntities(),
             author = d.optString("uname").decodeHtmlEntities(),
             picURL = d.optString("img").ifEmpty { null },
             trackCount = total,
@@ -168,7 +168,7 @@ private class KuwoSonglist(private val http: CatalogHttp) : SonglistService {
 
 private class NetEaseSonglist(private val http: CatalogHttp) : SonglistService {
     override val source = SourceID.WY
-    override val orders = listOf(SonglistOrder("hot", "最热"))
+    override val orders = listOf(SonglistOrder("hot", "最熱門"))
 
     override suspend fun fetchRecommended(order: SonglistOrder, tag: SonglistTag, page: Int): List<SonglistInfo> {
         val limit = 36
@@ -197,7 +197,7 @@ private class NetEaseSonglist(private val http: CatalogHttp) : SonglistService {
         val creator = d.optJSONObject("creator")
         return SonglistInfo(
             id = id, source = SourceID.WY,
-            name = d.optString("name", "未知歌单").decodeHtmlEntities(),
+            name = d.optString("name", "未知歌單").decodeHtmlEntities(),
             author = (creator?.optString("nickname") ?: "").decodeHtmlEntities(),
             picURL = d.optString("coverImgUrl").ifEmpty { null },
             trackCount = d.optInt("trackCount").takeIf { it > 0 },
@@ -270,11 +270,11 @@ private class NetEaseSonglist(private val http: CatalogHttp) : SonglistService {
     private fun refererHeaders() = mapOf("Referer" to "https://music.163.com/", "User-Agent" to UA)
 
     private val staticTags = listOf(
-        group("语种", listOf("华语", "欧美", "日语", "韩语", "粤语", "小语种")),
-        group("风格", listOf("流行", "摇滚", "民谣", "电子", "舞曲", "说唱", "轻音乐", "爵士", "乡村", "R&B/Soul", "古典", "民族", "英伦", "金属", "朋克", "蓝调", "雷鬼", "世界音乐", "拉丁", "另类/独立", "New Age", "古风", "后摇", "Bossa Nova")),
-        group("场景", listOf("清晨", "夜晚", "学习", "工作", "午休", "下午茶", "地铁", "驾车", "运动", "旅行", "散步", "酒吧")),
-        group("情感", listOf("怀旧", "清新", "浪漫", "性感", "伤感", "治愈", "放松", "孤独", "感动", "兴奋", "快乐", "安静", "思念")),
-        group("主题", listOf("影视原声", "ACG", "儿童", "校园", "游戏", "70后", "80后", "90后", "网络歌曲", "KTV", "经典", "翻唱", "吉他", "钢琴", "器乐", "榜单", "00后")),
+        group("語言", listOf("华语", "歐美", "日語", "韓語", "粵語", "小語言")),
+        group("风格", listOf("流行", "摇滚", "民謠", "電子", "舞曲", "饒舌", "輕音樂", "爵士", "鄉村", "R&B/Soul", "古典", "民族", "英伦", "金屬", "龐克", "藍調", "雷鬼", "世界音樂", "拉丁", "另類／獨立", "New Age", "古風", "後搖", "Bossa Nova")),
+        group("情境", listOf("清晨", "夜晚", "學習", "工作", "午休", "下午茶", "捷運", "開車", "運動", "旅行", "散步", "酒吧")),
+        group("情緒", listOf("懷舊", "清新", "浪漫", "性感", "感傷", "療癒", "放鬆", "孤獨", "感動", "興奮", "快樂", "安靜", "思念")),
+        group("主題", listOf("影視原聲", "ACG", "兒童", "校園", "遊戲", "70后", "80后", "90后", "網路歌曲", "KTV", "經典", "翻唱", "吉他", "钢琴", "器樂", "排行榜", "00后")),
     )
 
     private fun group(name: String, names: List<String>) = SonglistTagGroup(name, names.map { SonglistTag(it, it) })
@@ -284,7 +284,7 @@ private class NetEaseSonglist(private val http: CatalogHttp) : SonglistService {
 
 private class QQSonglist(private val http: CatalogHttp) : SonglistService {
     override val source = SourceID.TX
-    override val orders = listOf(SonglistOrder("5", "最热"), SonglistOrder("2", "最新"))
+    override val orders = listOf(SonglistOrder("5", "最熱門"), SonglistOrder("2", "最新"))
 
     override suspend fun fetchRecommended(order: SonglistOrder, tag: SonglistTag, page: Int): List<SonglistInfo> {
         val size = 36
@@ -334,7 +334,7 @@ private class QQSonglist(private val http: CatalogHttp) : SonglistService {
         val plays = d.optLong("access_num").takeIf { it > 0 } ?: d.optLong("play_cnt")
         return SonglistInfo(
             id = id, source = SourceID.TX,
-            name = d.optString("title", "未知歌单").decodeHtmlEntities(),
+            name = d.optString("title", "未知歌單").decodeHtmlEntities(),
             author = (creator?.optString("nick") ?: "").decodeHtmlEntities(),
             picURL = pic.ifEmpty { null },
             trackCount = d.optJSONArray("song_ids")?.length(),
@@ -386,8 +386,8 @@ private class QQSonglist(private val http: CatalogHttp) : SonglistService {
 private class KugouSonglist(private val http: CatalogHttp) : SonglistService {
     override val source = SourceID.KG
     override val orders = listOf(
-        SonglistOrder("5", "推荐"), SonglistOrder("6", "最热"), SonglistOrder("7", "最新"),
-        SonglistOrder("3", "热藏"), SonglistOrder("8", "飙升"),
+        SonglistOrder("5", "推薦"), SonglistOrder("6", "最熱門"), SonglistOrder("7", "最新"),
+        SonglistOrder("3", "熱門收藏"), SonglistOrder("8", "飆升"),
     )
     private val kgUA = "Mozilla/5.0 (iPhone; CPU iPhone OS 9_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13B143 Safari/601.1"
 
@@ -401,7 +401,7 @@ private class KugouSonglist(private val http: CatalogHttp) : SonglistService {
             val img = d.optString("img").ifEmpty { d.optString("imgurl") }
             SonglistInfo(
                 id = id, source = SourceID.KG,
-                name = d.optString("specialname", "未知歌单").decodeHtmlEntities(),
+                name = d.optString("specialname", "未知歌單").decodeHtmlEntities(),
                 author = d.optString("nickname").decodeHtmlEntities(),
                 picURL = img.ifEmpty { null }?.replace("{size}", "240"),
                 trackCount = d.optInt("songcount").takeIf { it > 0 },
@@ -437,7 +437,7 @@ private class KugouSonglist(private val http: CatalogHttp) : SonglistService {
             val img = item.optString("imgurl").ifEmpty { item.optString("img") }
             SonglistInfo(
                 id = id, source = SourceID.KG,
-                name = item.optString("specialname", "未知歌单").decodeHtmlEntities(),
+                name = item.optString("specialname", "未知歌單").decodeHtmlEntities(),
                 author = item.optString("nickname").decodeHtmlEntities(),
                 picURL = img.ifEmpty { null }?.replace("{size}", "240"),
                 trackCount = item.optInt("songcount").takeIf { it > 0 },
@@ -474,7 +474,7 @@ private class KugouSonglist(private val http: CatalogHttp) : SonglistService {
      * Fetch all song hashes of a 概念版 collection via the signed `get_other_list_file` endpoint.
      * Paginates until `count` is covered. Signature = md5(signkey + sortedKV.join + signkey) with
      * the fixed 概念版 params (srcappid=2919 / clientver=20000). The `module` param is required —
-     * without it the server returns 参数错误.
+     * without it the server returns 參數錯誤.
      */
     private suspend fun fetchConceptHashes(collectionId: String): List<String> {
         val out = mutableListOf<String>()
