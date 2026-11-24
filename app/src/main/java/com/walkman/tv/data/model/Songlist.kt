@@ -1,5 +1,7 @@
 package com.walkman.tv.data.model
 
+import com.walkman.tv.util.ChineseText
+
 /** A playlist/歌单 summary (iOS `SonglistInfo`). [id] is the platform-side playlist id. */
 data class SonglistInfo(
     val id: String,
@@ -9,7 +11,10 @@ data class SonglistInfo(
     val picURL: String? = null,
     val trackCount: Int? = null,
     val playCount: String? = null,
-)
+) {
+    val displayName: String get() = ChineseText.toTaiwanTraditional(name)
+    val displayAuthor: String get() = ChineseText.toTaiwanTraditional(author)
+}
 
 data class SonglistDetail(
     val info: SonglistInfo,
