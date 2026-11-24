@@ -50,8 +50,8 @@ import kotlinx.coroutines.launch
  *   1. User pastes a share URL (or scans the QR to push from phone). Every keystroke runs
  *      [SonglistImporter.parse] / [SonglistImporter.pureIdOrNull] so the recognition status
  *      flips between "✓ 已识别" / source picker / nothing in real time.
- *   2. Optional 歌单名 override — same control as PlaylistNameDialog (with QR fallback).
- *   3. 确定导入 → [SonglistImporter.importPlaylist] off the UI thread. 900ms confirmation, then
+ *   2. Optional 歌單名稱 override — same control as PlaylistNameDialog (with QR fallback).
+ *   3. 確認匯入 → [SonglistImporter.importPlaylist] off the UI thread. 900ms confirmation, then
  *      dismiss. Errors render inline as red text so the user can correct and retry.
  *
  * BACK closes the dialog *except* while importing — partial state would orphan a half-filled
@@ -100,16 +100,16 @@ fun SonglistImportDialog(onDismiss: () -> Unit) {
                 .background(AppColors.BgPanel)
                 .padding(horizontal = 22.dp, vertical = 20.dp),
         ) {
-            Text("导入歌单", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("匯入歌單", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.size(4.dp))
             Text(
-                "粘贴酷我 / 酷狗 / QQ 音乐 / 网易云分享的歌单链接，导入后会在「我的列表」里多一个歌单。",
+                "貼上酷我／酷狗／QQ 音樂／網易雲音樂分享的歌單連結，匯入後會在「我的清單」中新增一份歌單。",
                 color = AppColors.TextSecondary,
                 fontSize = 12.sp,
             )
             Spacer(Modifier.size(14.dp))
 
-            Text("歌单链接", color = AppColors.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text("歌單連結", color = AppColors.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.size(6.dp))
             TvTextFieldHost(modifier = Modifier.fillMaxWidth()) { fieldModifier ->
                 BasicTextField(
@@ -138,7 +138,7 @@ fun SonglistImportDialog(onDismiss: () -> Unit) {
                         Box {
                             if (raw.isEmpty()) {
                                 Text(
-                                    "粘贴链接或纯数字 ID（手机扫码更省事）",
+                                    "貼上連結或純數字 ID（使用手機掃碼更方便）",
                                     color = AppColors.TextMuted,
                                     fontSize = 14.sp,
                                     maxLines = 1,
@@ -153,13 +153,13 @@ fun SonglistImportDialog(onDismiss: () -> Unit) {
             Spacer(Modifier.size(6.dp))
             when {
                 parsedRef != null -> Text(
-                    "✓ 已识别：${parsedRef.source.displayName}歌单 · ${parsedRef.id}",
+                    "✓ 已辨識：${parsedRef.source.displayName}歌單 · ${parsedRef.id}",
                     color = AppColors.AccentGreen,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 pureId != null -> {
-                    Text("识别为纯 ID，请选择来源平台：", color = AppColors.TextSecondary, fontSize = 12.sp)
+                    Text("已辨識為純 ID，請選擇來源平台：", color = AppColors.TextSecondary, fontSize = 12.sp)
                     Spacer(Modifier.size(6.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf(SourceID.WY, SourceID.TX, SourceID.KG, SourceID.KW).forEach { s ->
@@ -174,7 +174,7 @@ fun SonglistImportDialog(onDismiss: () -> Unit) {
                     }
                 }
                 raw.isNotBlank() -> Text(
-                    "未识别 — 请粘贴酷我 / 酷狗 / QQ / 网易云的歌单分享链接",
+                    "無法辨識，請貼上酷我／酷狗／QQ／網易雲音樂的歌單分享連結",
                     color = AppColors.TextMuted,
                     fontSize = 12.sp,
                 )
@@ -182,14 +182,14 @@ fun SonglistImportDialog(onDismiss: () -> Unit) {
             }
 
             Spacer(Modifier.size(14.dp))
-            Text("歌单名（可选）", color = AppColors.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text("歌單名稱（選填）", color = AppColors.TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.size(6.dp))
             TvPill(
                 onClick = { showNameDialog = true },
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
             ) {
                 Text(
-                    if (customName.isBlank()) "（留空则用原歌单名）" else customName,
+                    if (customName.isBlank()) "（留空則使用原歌單名稱）" else customName,
                     fontSize = 13.sp,
                     color = if (customName.isBlank()) AppColors.TextMuted else AppColors.TextPrimary,
                     maxLines = 1,
@@ -200,7 +200,7 @@ fun SonglistImportDialog(onDismiss: () -> Unit) {
             if (importing) {
                 Spacer(Modifier.size(12.dp))
                 Text(
-                    "正在拉取曲目…",
+                    "正在取得歌曲清單…",
                     color = AppColors.AccentGreen,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -209,7 +209,7 @@ fun SonglistImportDialog(onDismiss: () -> Unit) {
             doneCount?.let {
                 Spacer(Modifier.size(12.dp))
                 Text(
-                    "✓ 导入完成，共 $it 首",
+                    "✓ 匯入完成，共 $it 首",
                     color = AppColors.AccentGreen,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -230,7 +230,7 @@ fun SonglistImportDialog(onDismiss: () -> Unit) {
                     onClick = { showQr = true },
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                 ) {
-                    Text("手机扫码输入", fontSize = 13.sp)
+                    Text("手機掃碼輸入", fontSize = 13.sp)
                 }
                 Spacer(Modifier.weight(1f))
                 TvPill(
@@ -273,7 +273,7 @@ fun SonglistImportDialog(onDismiss: () -> Unit) {
                         contentPadding = PaddingValues(horizontal = 22.dp, vertical = 8.dp),
                     ) {
                         Text(
-                            if (importing) "导入中…" else "确定导入",
+                            if (importing) "匯入中…" else "確認匯入",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -289,8 +289,8 @@ fun SonglistImportDialog(onDismiss: () -> Unit) {
         if (ip != null && port != null) {
             QrDialog(
                 url = "http://$ip:$port/songlist-url",
-                title = "扫码推送歌单链接",
-                subtitle = "在手机上粘贴歌单链接，发送后自动填入电视端输入框",
+                title = "扫码推送歌單連結",
+                subtitle = "在手机上粘贴歌單連結，发送后自动填入电视端输入框",
                 onDismiss = { showQr = false },
             )
         } else {
@@ -301,7 +301,7 @@ fun SonglistImportDialog(onDismiss: () -> Unit) {
     if (showNameDialog) {
         PlaylistNameDialog(
             initial = customName,
-            title = "歌单名",
+            title = "歌單名稱",
             onDismiss = { showNameDialog = false },
             onConfirm = { value ->
                 customName = value
