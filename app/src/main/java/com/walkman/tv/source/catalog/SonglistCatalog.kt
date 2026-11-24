@@ -149,7 +149,7 @@ private class KuwoSonglist(private val http: CatalogHttp) : SonglistService {
         return Track(
             id = Track.makeID(SourceID.KW, id),
             name = decode(d.optString("name", "未知")),
-            singer = decode(d.optString("artist")).ifEmpty { "未知歌手" },
+            singer = decode(d.optString("artist")).ifEmpty { "未知演唱者" },
             albumName = decode(d.optString("album")).ifEmpty { null },
             albumId = d.optString("albumid").ifEmpty { null },
             source = SourceID.KW,
@@ -591,7 +591,7 @@ private class KugouSonglist(private val http: CatalogHttp) : SonglistService {
         return Track(
             id = Track.makeID(SourceID.KG, audioId),
             name = decode(d.optString("songname").ifEmpty { d.optString("ori_audio_name", "未知") }),
-            singer = decode(d.optString("author_name")).ifEmpty { "未知歌手" },
+            singer = decode(d.optString("author_name")).ifEmpty { "未知演唱者" },
             albumName = albumInfo?.optString("album_name")?.let { decode(it) }?.ifEmpty { null },
             albumId = albumId,
             source = SourceID.KG,
