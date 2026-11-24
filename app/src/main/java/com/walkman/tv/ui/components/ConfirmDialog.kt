@@ -26,13 +26,13 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Text
 import com.walkman.tv.ui.theme.AppColors
 
-/** Generic destructive-action confirm (删除下载 / 清空历史 …). Same look as the exit dialog:
+/** 通用的破壞性操作確認視窗（刪除下載／清空紀錄 …). Same look as the exit dialog:
  *  focus starts on 取消 so a stray OK never deletes anything. */
 @Composable
 fun ConfirmDialog(
     title: String,
     message: String,
-    confirmLabel: String = "删除",
+    confirmLabel: String = "刪除",
     onCancel: () -> Unit,
     onConfirm: () -> Unit,
 ) {
