@@ -290,7 +290,7 @@ fun SonglistImportDialog(onDismiss: () -> Unit) {
             QrDialog(
                 url = "http://$ip:$port/songlist-url",
                 title = "扫码推送歌單連結",
-                subtitle = "在手机上粘贴歌單連結，发送后自动填入电视端输入框",
+                subtitle = "在手機上貼上歌單連結，送出後會自動填入電視端的輸入框",
                 onDismiss = { showQr = false },
             )
         } else {
