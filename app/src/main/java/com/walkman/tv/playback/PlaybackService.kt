@@ -28,6 +28,7 @@ class PlaybackService : MediaSessionService() {
         // Do not release the player here — it is app-owned by PlaybackController.
         session?.release()
         session = null
+        runCatching { App.container.playbackController.onPlaybackServiceDestroyed() }
         super.onDestroy()
     }
 }
