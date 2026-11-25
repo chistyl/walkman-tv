@@ -115,8 +115,7 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
             appContainer.searchHistoryStore.record(currentQuery)
             // Render each section as soon as its own providers finish instead of waiting for
             // the slower of the song and songlist requests.
-            try {
-                coroutineScope {
+            coroutineScope {
                     launch {
                         val result = try {
                             if (f == null) appContainer.catalogs.searchAll(q)
@@ -139,10 +138,8 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                         }
                         songlists = result
                     }
-                }
-            } finally {
-                loading = false
             }
+            loading = false
         }
     }
 
