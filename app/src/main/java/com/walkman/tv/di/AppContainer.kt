@@ -223,16 +223,12 @@ class AppContainer(val appContext: Context) {
         }
         appScope.launch {
             settingsStore.loadAll()
-            settingsStore.settings.onEach { s ->
-                playbackController.preferredQuality = s.preferredQuality
-                // 硬件直通会把未解码的数据直接交给音频硬件，绕过解码器；强制软解时一并关掉。
-                playbackController.setAudioOffloadEnabled(s.audioOffloadEnabled && !s.forceSoftwareDecoding)
-                playbackController.forceSoftwareDecoding = s.forceSoftwareDecoding
-                sourceManager.fallbackEnabled = s.fallbackEnabled
-                downloadStore.configuredRoot = s.customDownloadDir?.let { java.io.File(it) }
-                downloadStore.downloadTreeUri = s.customDownloadTreeUri?.let { runCatching { android.net.Uri.parse(it) }.getOrNull() }
-                downloadCoordinator.setMaxConcurrent(s.maxConcurrentDownloads)
-            }.launchIn(appScope)
+
+            // Apply the loaded settings synchronously before starting dependent store reads.
+            // In particular, DownloadStore.loadAll() must see the user's configured root/tree
+            // URI; relying only on launchIn(StateFlow) can race the parallel startup jobs below.
+            applySettings(settingsStore.settings.value)
+            settingsStore.settings.onEach(::applySettings).launchIn(appScope)
 
             // These stores are independent at startup. Load them concurrently instead of
             // serially waiting for each disk read; custom scripts still finish before snapshot
@@ -272,6 +268,17 @@ class AppContainer(val appContext: Context) {
                 .onEach { playbackSnapshotStore.save(playbackController.snapshot()) }
                 .launchIn(appScope)
         }
+    }
+
+    private fun applySettings(s: com.walkman.tv.data.store.Settings) {
+        playbackController.preferredQuality = s.preferredQuality
+        // 硬件直通会把未解码的数据直接交给音频硬件，绕过解码器；强制软解时一并关掉。
+        playbackController.setAudioOffloadEnabled(s.audioOffloadEnabled && !s.forceSoftwareDecoding)
+        playbackController.forceSoftwareDecoding = s.forceSoftwareDecoding
+        sourceManager.fallbackEnabled = s.fallbackEnabled
+        downloadStore.configuredRoot = s.customDownloadDir?.let { java.io.File(it) }
+        downloadStore.downloadTreeUri = s.customDownloadTreeUri?.let { runCatching { android.net.Uri.parse(it) }.getOrNull() }
+        downloadCoordinator.setMaxConcurrent(s.maxConcurrentDownloads)
     }
 
     /** Synchronous final save — called right before the process is killed on user-confirmed exit. */
