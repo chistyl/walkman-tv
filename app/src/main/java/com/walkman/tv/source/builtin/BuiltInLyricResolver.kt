@@ -6,6 +6,7 @@ import com.walkman.tv.data.model.Track
 import com.walkman.tv.playback.LyricLine
 import com.walkman.tv.playback.LyricParser
 import com.walkman.tv.source.catalog.CatalogHttp
+import kotlinx.coroutines.CancellationException
 import org.json.JSONObject
 
 /**
@@ -25,7 +26,7 @@ class BuiltInLyricResolver(private val http: CatalogHttp) {
     }
 
     private suspend fun kuwo(songmid: String): List<LyricLine>? {
-        val json = runCatching {
+        val json = attempt {
             JSONObject(http.getText("http://m.kuwo.cn/newh5/singles/songinfoandlrc?musicId=$songmid", ua))
         }.getOrNull() ?: return null
         val lrclist = json.optJSONObject("data")?.optJSONArray("lrclist") ?: return null
@@ -77,11 +78,20 @@ class BuiltInLyricResolver(private val http: CatalogHttp) {
         val id = first.opt("id")?.toString() ?: return null
         val accessKey = first.optString("accesskey").ifEmpty { return null }
         val dlUrl = "http://lyrics.kugou.com/download?ver=1&client=pc&id=$id&accesskey=$accessKey&fmt=lrc&charset=utf8"
-        val dJson = runCatching { JSONObject(http.getText(dlUrl, headers)) }.getOrNull() ?: return null
+        val dJson = attempt { JSONObject(http.getText(dlUrl, headers)) }.getOrNull() ?: return null
         if (dJson.optInt("status") != 200 || dJson.optString("fmt") != "lrc") return null
         val lrc = decodeB64(dJson.optString("content")) ?: return null
         return LyricParser.parse(lrc).ifEmpty { null }
     }
+
+    private suspend fun <T> attempt(block: suspend () -> T): T? =
+        try {
+            block()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
 
     private fun decodeB64(b64: String): String? =
         runCatching { String(Base64.decode(b64, Base64.DEFAULT), Charsets.UTF_8) }.getOrNull()?.ifEmpty { null }
