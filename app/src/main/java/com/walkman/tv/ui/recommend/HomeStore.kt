@@ -1,5 +1,6 @@
 package com.walkman.tv.ui.recommend
 
+import android.os.SystemClock
 import com.walkman.tv.data.model.BoardInfo
 import com.walkman.tv.data.model.SonglistInfo
 import com.walkman.tv.data.model.SonglistTag
@@ -39,28 +40,48 @@ data class HomeState(
  *   3. Recommendations row = drop-first interleave across sources, take 12.
  *   4. Boards row = quota-balanced across sources, target total 12.
  *
- * Re-runs only when the set of enabled sources actually changed (sorted-joined keys), so flipping
- * an unrelated setting doesn't refetch.
+ * Results are cached in-process for five minutes. Expired entries are shown immediately while
+ * the refresh runs, so returning to the home page does not wait for provider network requests.
  */
 class HomeStore(
     private val songlists: Songlists,
     private val boards: Boards,
 ) {
+    private data class CachedHome(val state: HomeState, val cachedAt: Long)
+
     private val _state = MutableStateFlow(HomeState())
     val state: StateFlow<HomeState> = _state.asStateFlow()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var loadJob: Job? = null
+    private val cache = mutableMapOf<String, CachedHome>()
 
-    /** Identity of the last load — sorted joined source keys. Re-loading the same set is a no-op. */
+    /** Identity of the last requested source set. */
     private var lastSourcesKey: String = ""
 
     fun loadIfNeeded(homeSources: Set<SourceID>, force: Boolean = false) {
         val srcs = SourceID.homePageOrder.filter { it in homeSources }
         val key = srcs.joinToString(",") { it.key }
-        if (!force && key == lastSourcesKey && !_state.value.isLoading) return
+        val now = SystemClock.elapsedRealtime()
+        val cached = cache[key]
+        val cacheFresh = cached != null && now - cached.cachedAt < CACHE_TTL_MS
+
+        if (!force && key == lastSourcesKey && !_state.value.isLoading && cacheFresh) return
+        if (!force && key == lastSourcesKey && _state.value.isLoading) return
+
         lastSourcesKey = key
-        load(srcs)
+        if (srcs.isEmpty()) {
+            loadJob?.cancel()
+            _state.value = HomeState()
+            return
+        }
+
+        // Serve cached content immediately, including stale content during a background refresh.
+        if (!force && cached != null) {
+            _state.value = cached.state.copy(isLoading = !cacheFresh, sources = srcs)
+            if (cacheFresh) return
+        }
+        load(srcs, key)
     }
 
     private suspend fun <T> fetchOrEmpty(block: suspend () -> List<T>): List<T> =
@@ -72,23 +93,13 @@ class HomeStore(
             emptyList()
         }
 
-    private fun load(srcs: List<SourceID>) {
+    private fun load(srcs: List<SourceID>, key: String) {
         loadJob?.cancel()
-        if (srcs.isEmpty()) {
-            _state.update {
-                it.copy(
-                    isLoading = false, heroes = emptyList(), recommendations = emptyList(),
-                    boards = emptyList(), sources = emptyList(),
-                )
-            }
-            return
-        }
         loadJob = scope.launch {
             _state.update { it.copy(isLoading = true, sources = srcs) }
 
-            // Start recommendations and boards together. Publish the recommendation section
-            // as soon as its requests finish; don't make the first useful home content wait for
-            // slower ranking endpoints.
+            // Start recommendations and boards together. Publish useful home content as soon as
+            // recommendations finish; do not make the hero section wait for ranking endpoints.
             coroutineScope {
                 val recommendationsJob = async {
                     srcs.map { s ->
@@ -112,11 +123,8 @@ class HomeStore(
                 }
 
                 val groups = recommendationsJob.await()
-
-                // Hero pool — 1 per enabled source (the first of its recommendations).
                 val heroes = srcs.mapNotNull { s -> groups[s]?.firstOrNull()?.let { HeroItem(it, s) } }
 
-                // Recommendation tail interleave — never two in a row from the same source.
                 val tails = srcs.associateWith { groups[it].orEmpty().drop(1).take(8) }
                 val recs = mutableListOf<SonglistInfo>()
                 val maxSize = tails.values.maxOfOrNull { it.size } ?: 0
@@ -125,30 +133,26 @@ class HomeStore(
                 }
 
                 _state.update {
-                    it.copy(
-                        heroes = heroes,
-                        recommendations = recs.take(12),
-                        sources = srcs,
-                    )
+                    it.copy(heroes = heroes, recommendations = recs.take(12), sources = srcs)
                 }
 
-                // Rankings remain in flight while the hero/recommendation UI becomes usable.
                 val boardList = balanceBoards(srcs, boardsJob.await(), totalTarget = 12)
-                _state.update {
-                    it.copy(
-                        isLoading = false,
-                        boards = boardList,
-                        sources = srcs,
-                    )
-                }
+                val completed = HomeState(
+                    isLoading = false,
+                    heroes = heroes,
+                    recommendations = recs.take(12),
+                    boards = boardList,
+                    sources = srcs,
+                )
+                cache[key] = CachedHome(completed, SystemClock.elapsedRealtime())
+                _state.value = completed
             }
         }
     }
 
     /**
      * Quota algorithm (spec §3): each source gets `totalTarget / n` slots; remaining slots are
-     * round-robin'd to whichever source still has more to offer. Bail after 2n cursor laps to
-     * avoid infinite loops when every source is exhausted.
+     * round-robin'd to whichever source still has more to offer. Bail after 2n cursor laps.
      */
     private fun balanceBoards(
         srcs: List<SourceID>,
@@ -173,7 +177,10 @@ class HomeStore(
                 remaining--
             }
         }
-        // Stable per-source order then flatten.
         return srcs.flatMap { picked[it].orEmpty() }
+    }
+
+    private companion object {
+        const val CACHE_TTL_MS = 5 * 60 * 1000L
     }
 }
