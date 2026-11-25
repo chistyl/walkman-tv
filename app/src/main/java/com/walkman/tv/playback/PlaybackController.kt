@@ -21,6 +21,7 @@ import com.walkman.tv.data.model.Track
 import com.walkman.tv.source.ResolveOrigin
 import com.walkman.tv.source.ResolvedTrack
 import com.walkman.tv.source.SourceManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -381,7 +382,13 @@ class PlaybackController(
                     ),
                 )
             } else {
-                runCatching { sources.resolveMusicURL(track, effectivePreferred) }
+                try {
+                    Result.success(sources.resolveMusicURL(track, effectivePreferred))
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    Result.failure(error)
+                }
             }
             runCatching { playResolvedOrFail(track, resolved) }
                 .onFailure { e ->
@@ -556,6 +563,8 @@ class PlaybackController(
     fun toggleShuffle() { _state.value = _state.value.copy(shuffle = !_state.value.shuffle) }
 
     fun stop() {
+        resolveJob?.cancel()
+        lyricsJob?.cancel()
         player.stop()
         player.clearMediaItems()
         _state.value = PlaybackState()
@@ -655,6 +664,7 @@ class PlaybackController(
     fun release() {
         resolveJob?.cancel()
         lyricsJob?.cancel()
+        probeJob?.cancel()
         player.release()
     }
 
