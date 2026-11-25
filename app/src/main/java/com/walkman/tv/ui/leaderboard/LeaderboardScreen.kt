@@ -18,6 +18,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -49,6 +52,24 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     var selected by remember { mutableStateOf<BoardInfo?>(null) }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var loadingTracks by remember { mutableStateOf(false) }
+
+    // Preload the first chart from other providers concurrently while the current chart is shown.
+    // This avoids waiting for the first network round-trip when users switch leaderboard sources.
+    LaunchedEffect(Unit) {
+        coroutineScope {
+            boardSources.filter { it != source }.map { sourceId ->
+                async {
+                    val svc = appContainer.boards.serviceFor(sourceId) ?: return@async
+                    val firstBoard = svc.list.firstOrNull() ?: return@async
+                    val key = firstBoard.source.key + ":" + firstBoard.bangid
+                    if (leaderboardTrackCache[key].isNullOrEmpty()) {
+                        val result = fetchOr(emptyList()) { svc.fetchTracks(firstBoard.bangid, 1) }
+                        if (result.isNotEmpty()) leaderboardTrackCache[key] = result
+                    }
+                }
+            }.awaitAll()
+        }
+    }
 
     // Show the built-in board catalogue immediately; refresh remote names/covers in parallel.
     // The old flow waited for fetchBoards() before it even started fetching the first board's songs.
