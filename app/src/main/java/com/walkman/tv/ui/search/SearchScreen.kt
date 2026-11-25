@@ -69,6 +69,8 @@ import com.walkman.tv.ui.components.TvPill
 import com.walkman.tv.ui.playList
 import com.walkman.tv.ui.theme.AppColors
 import com.walkman.tv.util.ChineseText
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -87,6 +89,7 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     var searched by remember { mutableStateOf(false) }
     var showQr by remember { mutableStateOf(false) }
     var hotColumns by remember { mutableStateOf<List<com.walkman.tv.source.catalog.HotSearchColumn>>(emptyList()) }
+    var searchJob by remember { mutableStateOf<Job?>(null) }
 
     // Load hot-search words once when the screen first appears (before any search).
     LaunchedEffect(Unit) {
@@ -96,9 +99,13 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     fun runSearch(searchText: String = queryValue.text) {
         val currentQuery = searchText
         if (currentQuery.isBlank()) return
-        scope.launch {
+        // Cancel an older keyword/filter request so late responses cannot replace newer results.
+        searchJob?.cancel()
+        searchJob = scope.launch {
             loading = true
             searched = true
+            tracks = emptyList()
+            songlists = emptyList()
             val f = filter
             // Keep the entered Traditional Chinese visible and in history; normalize only
             // the provider query to Simplified Chinese for broader source-side matching.
@@ -106,22 +113,36 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
             // Record into history before kicking off the request so it shows up on the next
             // empty-query render even if the result list ends up empty.
             appContainer.searchHistoryStore.record(currentQuery)
-            val pair = runCatching {
+            // Render each section as soon as its own providers finish instead of waiting for
+            // the slower of the song and songlist requests.
+            try {
                 coroutineScope {
-                    val tracksJob = async {
-                        if (f == null) appContainer.catalogs.searchAll(q)
-                        else appContainer.catalogs.search(f, q)
+                    launch {
+                        val result = try {
+                            if (f == null) appContainer.catalogs.searchAll(q)
+                            else appContainer.catalogs.search(f, q)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            emptyList()
+                        }
+                        tracks = result
                     }
-                    val songlistsJob = async {
-                        if (f == null) appContainer.songlists.searchAll(q)
-                        else appContainer.songlists.serviceFor(f)?.search(q, 1) ?: emptyList()
+                    launch {
+                        val result = try {
+                            if (f == null) appContainer.songlists.searchAll(q)
+                            else appContainer.songlists.serviceFor(f)?.search(q, 1) ?: emptyList()
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            emptyList()
+                        }
+                        songlists = result
                     }
-                    tracksJob.await() to songlistsJob.await()
                 }
-            }.getOrDefault(emptyList<Track>() to emptyList<SonglistInfo>())
-            tracks = pair.first
-            songlists = pair.second
-            loading = false
+            } finally {
+                loading = false
+            }
         }
     }
 
@@ -307,7 +328,7 @@ private fun ResultsPane(
 ) {
     val history by appContainer.searchHistoryStore.items.collectAsState()
     when {
-        loading -> LoadingState(Modifier.fillMaxSize())
+        loading && songlists.isEmpty() && tracks.isEmpty() -> LoadingState(Modifier.fillMaxSize())
         !searched -> {
             // Before searching: recent-search chips (if any) on top, then the 4-column hot lists.
             Column(modifier = modifier.fillMaxSize().padding(top = 4.dp)) {
