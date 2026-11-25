@@ -57,7 +57,7 @@ class BuiltInLyricResolver(private val http: CatalogHttp) {
     private suspend fun netease(songmid: String): List<LyricLine>? {
         val json = attempt {
             JSONObject(http.getText("https://music.163.com/api/song/lyric?id=$songmid&lv=1&kv=1&tv=-1", ua + mapOf("Referer" to "https://music.163.com/")))
-        }.getOrNull() ?: return null
+        } ?: return null
         val lyric = json.optJSONObject("lrc")?.optString("lyric") ?: ""
         if (lyric.isEmpty()) return null
         val tlyric = json.optJSONObject("tlyric")?.optString("lyric")?.ifEmpty { null }
@@ -74,7 +74,7 @@ class BuiltInLyricResolver(private val http: CatalogHttp) {
         val searchUrl = "http://lyrics.kugou.com/search?ver=1&man=yes&client=pc&keyword=$nameEnc&hash=$hash&timelength=$durationMs&lrctxt=1"
         val first = attempt {
             JSONObject(http.getText(searchUrl, headers)).optJSONArray("candidates")?.optJSONObject(0)
-        }.getOrNull() ?: return null
+        } ?: return null
         val id = first.opt("id")?.toString() ?: return null
         val accessKey = first.optString("accesskey").ifEmpty { return null }
         val dlUrl = "http://lyrics.kugou.com/download?ver=1&client=pc&id=$id&accesskey=$accessKey&fmt=lrc&charset=utf8"
