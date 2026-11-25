@@ -21,11 +21,33 @@ class LyricsFetcher(
 
     suspend fun fetch(track: Track): List<LyricLine> {
         cache[track.id]?.let { return it }
-        tryScript(track)?.let { cache[track.id] = it; return it }
-        tryBuiltIn(track)?.let { cache[track.id] = it; return it }
+
+        // A script's ordinary LRC must not short-circuit the native timed-lyrics
+        // endpoint. Try every native provider first and only use untimed LRC as fallback.
+        val scriptLyrics = tryScript(track)
+        if (scriptLyrics.hasWordTiming()) {
+            cache[track.id] = scriptLyrics.orEmpty()
+            return scriptLyrics.orEmpty()
+        }
+
+        val nativeLyrics = tryBuiltIn(track)
+        if (nativeLyrics.hasWordTiming()) {
+            cache[track.id] = nativeLyrics.orEmpty()
+            return nativeLyrics.orEmpty()
+        }
+
+        val fallback = nativeLyrics ?: scriptLyrics
+        if (fallback != null) {
+            cache[track.id] = fallback
+            return fallback
+        }
+
         tryOtherSources(track)?.let { cache[track.id] = it; return it }
         return emptyList()
     }
+
+    private fun List<LyricLine>?.hasWordTiming(): Boolean =
+        this?.any { it.words.isNotEmpty() } == true
 
     private suspend fun tryScript(track: Track): List<LyricLine>? {
         val result = runCatching { sources.requestLyric(track) }.getOrNull() ?: return null
