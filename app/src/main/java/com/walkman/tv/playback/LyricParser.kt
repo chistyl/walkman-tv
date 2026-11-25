@@ -21,8 +21,10 @@ data class LyricLine(
 /** Parses standard LRC plus enhanced YRC/QRC-style word timing when supplied by a source. */
 object LyricParser {
     private val timeTag = Regex("""\[(\d{1,2}):(\d{1,2})(?:[.:](\d{1,3}))?]""")
-    private val enhancedLine = Regex("""^\[([0-9]{1,12})[,，]([0-9]{1,12})](.*)$""")
-    private val timedWord = Regex("""\(([^,()]*)[,]([0-9]{1,12})[,]([0-9]{1,12})\)""")
+    private val enhancedLine = Regex("""^\\[([0-9]{1,12})[,，]([0-9]{1,12})](.*)$""")
+    // YRC/KRC-style word marker: <offset,duration,flag>text
+    // Some providers wrap the same tuple in parentheses.
+    private val timedWord = Regex("""[<(]([0-9]{1,12})[,，]([0-9]{1,12})(?:[,，]-?[0-9]{1,12})?[>)]([^<(]*)""")
 
     fun parse(raw: String, translation: String? = null): List<LyricLine> {
         val enhanced = parseEnhanced(raw)
@@ -56,19 +58,19 @@ object LyricParser {
      */
     private fun parseEnhanced(raw: String): List<LyricLine> {
         val result = mutableListOf<LyricLine>()
-        for (rawLine in raw.replace("\r\n", "\n").replace("\r", "\n").split("\n")) {
+        for (rawLine in raw.replace("\\r\\n", "\\n").replace("\\r", "\\n").split("\\n")) {
             val header = enhancedLine.find(rawLine.trim()) ?: continue
             val lineStart = header.groupValues[1].toLongOrNull() ?: continue
             val body = header.groupValues[3]
             val matches = timedWord.findAll(body).toList()
             if (matches.isEmpty()) continue
             val words = matches.mapNotNull { match ->
-                val start = match.groupValues[2].toLongOrNull() ?: return@mapNotNull null
-                val duration = match.groupValues[3].toLongOrNull() ?: return@mapNotNull null
-                val text = match.groupValues[1]
+                val offset = match.groupValues[1].toLongOrNull() ?: return@mapNotNull null
+                val duration = match.groupValues[2].toLongOrNull() ?: return@mapNotNull null
+                val text = match.groupValues[3]
                 if (text.isEmpty()) null else LyricWord(
                     text = ChineseText.toTaiwanTraditional(text),
-                    startMs = start,
+                    startMs = lineStart + offset,
                     durationMs = duration.coerceAtLeast(1),
                 )
             }
