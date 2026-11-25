@@ -94,7 +94,7 @@ fun SonglistScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     // the grid alive (state, focus, fetched lists), so back-navigation is instant and preserves
     // the selection.
     Box(modifier = modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize().padding(top = 15.dp)) {
+        Column(modifier = Modifier.fillMaxSize().padding(top = 25.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 songlistSources.forEach { s ->
                     TvPill(onClick = { source = s }, selected = source == s) { Text(s.displayName, fontSize = 12.sp) }
