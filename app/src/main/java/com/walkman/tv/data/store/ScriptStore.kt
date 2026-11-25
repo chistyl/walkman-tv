@@ -9,6 +9,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 import java.io.File
@@ -20,6 +22,8 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
         ListSerializer(UserScript.serializer()),
         emptyList(),
     )
+
+    private val mutationMutex = Mutex()
 
     private val _scripts = MutableStateFlow<List<UserScript>>(emptyList())
     val scripts: StateFlow<List<UserScript>> = _scripts.asStateFlow()
@@ -43,7 +47,7 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
         installBundledYehuaIfMissing()
     }
 
-    private suspend fun installBundledYehuaIfMissing() {
+    private suspend fun installBundledYehuaIfMissing() = mutationMutex.withLock {
         // Treat either historical display name as an existing installation. This also protects
         // a user's manually imported copy, even if its author metadata differs.
         if (_scripts.value.any { it.name.trim() in BUNDLED_YEHUA_NAMES }) return
@@ -60,7 +64,7 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
 
         // Do not block startup indefinitely on a third-party source's init/network requests.
         val imported = try {
-            withTimeoutOrNull(BUNDLED_IMPORT_TIMEOUT_MS) { import(raw) }
+            withTimeoutOrNull(BUNDLED_IMPORT_TIMEOUT_MS) { importUnlocked(raw) }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
@@ -90,7 +94,12 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
      * stayed loaded in [SourceManager] invisibly — and same-named scripts by different authors
      * are kept side by side instead of silently overwriting each other.
      */
-    suspend fun import(raw: String): Result<Imported> {
+    suspend fun import(raw: String): Result<Imported> = mutationMutex.withLock {
+        importUnlocked(raw)
+    }
+
+    /** Caller must hold [mutationMutex] so bundled and user imports cannot race. */
+    private suspend fun importUnlocked(raw: String): Result<Imported> {
         val meta = parseHeader(raw)
         val script = UserScript(
             name = meta["name"] ?: "未命名脚本",
@@ -118,14 +127,14 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
         )
     }
 
-    suspend fun setEnabled(id: String, enabled: Boolean) {
+    suspend fun setEnabled(id: String, enabled: Boolean) = mutationMutex.withLock {
         val script = _scripts.value.firstOrNull { it.id == id } ?: return
         _scripts.value = _scripts.value.map { if (it.id == id) it.copy(enabled = enabled) else it }
         if (enabled) sourceManager.load(script.copy(enabled = true)) else sourceManager.unload(id)
         persist()
     }
 
-    suspend fun remove(id: String) {
+    suspend fun remove(id: String) = mutationMutex.withLock {
         sourceManager.unload(id)
         _scripts.value = _scripts.value.filter { it.id != id }
         persist()
