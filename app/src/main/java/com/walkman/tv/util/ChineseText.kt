@@ -33,6 +33,8 @@ object ChineseText {
         "护发" to "護髮",
         "洗发" to "洗髮",
         "吹风机吹发" to "吹風機吹髮",
+        // Song title / poetic phrase: 周杰倫《髮如雪》.
+        "发如雪" to "髮如雪",
         "范围" to "範圍",
         "模范" to "模範",
         "规范" to "規範",
