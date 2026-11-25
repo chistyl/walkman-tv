@@ -238,7 +238,7 @@ class AppContainer(val appContext: Context) {
             // serially waiting for each disk read; custom scripts still finish before snapshot
             // restoration because the saved queue may need those sources to resolve.
             coroutineScope {
-                val scripts = async { scriptStore.loadAll() }
+                val scripts = async { scriptStore.loadAll(installBundled = false) }
                 val library = async { libraryStore.loadAll() }
                 val history = async { searchHistoryStore.load() }
                 val covers = async { coverCache.loadAll() }
@@ -257,6 +257,11 @@ class AppContainer(val appContext: Context) {
             // any custom-source needed to resolve URLs is ready.
             val snapshot = playbackSnapshotStore.load()
             playbackController.restoreSnapshot(snapshot)
+
+            // The bundled third-party source is optional for restoring the previous session.
+            // Initialize it in the background so its network startup timeout cannot delay first
+            // interaction or playback restoration.
+            appScope.launch { scriptStore.installBundledIfMissing() }
 
             // Auto-save the snapshot whenever queue/index/isPlaying changes. distinctUntilChanged
             // already coalesces the high-frequency position ticks since we only project the three
