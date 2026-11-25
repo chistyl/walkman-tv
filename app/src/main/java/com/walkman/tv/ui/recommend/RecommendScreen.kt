@@ -29,6 +29,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.runtime.Composable
@@ -145,6 +148,27 @@ private fun NowPlayingPanel(onOpenPlayer: () -> Unit, modifier: Modifier = Modif
       horizontalArrangement = Arrangement.Center,
       verticalAlignment = Alignment.CenterVertically,
     ) {
+      val repeatIcon = when {
+        state.shuffle -> Icons.Filled.Shuffle
+        state.repeatMode == com.walkman.tv.playback.RepeatMode.ONE -> Icons.Filled.RepeatOne
+        else -> Icons.Filled.Repeat
+      }
+      CircleControl(repeatIcon) {
+        when {
+          state.repeatMode == com.walkman.tv.playback.RepeatMode.ALL && !state.shuffle -> {
+            controller.setRepeatMode(com.walkman.tv.playback.RepeatMode.ONE)
+          }
+          state.repeatMode == com.walkman.tv.playback.RepeatMode.ONE && !state.shuffle -> {
+            controller.setRepeatMode(com.walkman.tv.playback.RepeatMode.ALL)
+            if (!state.shuffle) controller.toggleShuffle()
+          }
+          else -> {
+            controller.setRepeatMode(com.walkman.tv.playback.RepeatMode.ALL)
+            if (state.shuffle) controller.toggleShuffle()
+          }
+        }
+      }
+      Spacer(Modifier.width(20.dp))
       CircleControl(Icons.Filled.SkipPrevious) { controller.prev() }
       Spacer(Modifier.width(20.dp))
       CircleControl(if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow) { controller.togglePlay() }
