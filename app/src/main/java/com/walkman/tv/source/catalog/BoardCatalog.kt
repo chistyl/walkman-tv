@@ -7,6 +7,9 @@ import com.walkman.tv.data.model.Track
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.CancellationException
 import org.json.JSONObject
 
 interface BoardService {
@@ -26,14 +29,26 @@ class Boards(private val http: CatalogHttp) {
     fun servicesAll(): List<BoardService> = services
 }
 
-/** Fill per-song covers via Kuwo's artistpicserver (plain-text URL body). */
+/** Fill per-song covers via Kuwo's artistpicserver (plain-text URL body).
+ * Limit parallel lookups so a 100-song chart does not flood the platform endpoint.
+ * A failed artwork lookup must not fail the chart, but coroutine cancellation must propagate.
+ */
 internal suspend fun fillKuwoCovers(http: CatalogHttp, tracks: List<Track>): List<Track> = coroutineScope {
-    tracks.map { t ->
+    val requests = Semaphore(6)
+    tracks.map { track ->
         async {
-            if (t.picURL != null) return@async t
-            val url = "http://artistpicserver.kuwo.cn/pic.web?corp=kuwo&type=rid_pic&pictype=500&size=500&rid=${t.songmid}"
-            val pic = runCatching { http.getText(url).trim() }.getOrNull()
-            if (pic != null && pic.startsWith("http")) t.copy(picURL = pic) else t
+            if (!track.picURL.isNullOrBlank()) return@async track
+            requests.withPermit {
+                val url = "http://artistpicserver.kuwo.cn/pic.web?corp=kuwo&type=rid_pic&pictype=500&size=500&rid=${track.songmid}"
+                val pic = try {
+                    http.getText(url).trim()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    null
+                }
+                if (!pic.isNullOrBlank() && pic.startsWith("http")) track.copy(picURL = pic) else track
+            }
         }
     }.awaitAll()
 }
