@@ -21,6 +21,17 @@ class ChineseTextTest {
     }
 
     @Test
+    fun preservesFanSurnameButConvertsFanInCommonWords() {
+        assertEquals("范先生", ChineseText.toTaiwanTraditional("范先生"))
+        assertEquals("范冰冰", ChineseText.toTaiwanTraditional("范冰冰"))
+        assertEquals("範圍", ChineseText.toTaiwanTraditional("范围"))
+        assertEquals("模範", ChineseText.toTaiwanTraditional("模范"))
+        assertEquals("規範", ChineseText.toTaiwanTraditional("规范"))
+        assertEquals("範例與範本", ChineseText.toTaiwanTraditional("范例与范本"))
+        assertEquals("防範與示範", ChineseText.toTaiwanTraditional("防范与示范"))
+    }
+
+    @Test
     fun keepsFaInDevelopmentAndDiscoveryAs發() {
         assertEquals("發展與發現", ChineseText.toTaiwanTraditional("发展与发现"))
         assertEquals("開發", ChineseText.toTaiwanTraditional("开发"))
