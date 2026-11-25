@@ -60,13 +60,12 @@ class VocalRemovalProcessor : BaseAudioProcessor() {
 
     companion object {
         /**
-         * Center cancellation with headroom: L' = 0.75 * (L - R), R' = 0.75 * (R - L).
-         * The gain reduces clipping risk while preserving the anti-phase stereo difference.
+         * Center cancellation with headroom. The side difference is duplicated to both
+         * output channels so mono/downmixed TV outputs do not cancel the entire signal.
          */
         fun cancelCenter(left: Int, right: Int): Pair<Int, Int> {
             val outLeft = ((left - right) * 0.75f).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
-            val outRight = ((right - left) * 0.75f).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
-            return outLeft to outRight
+            return outLeft to outLeft
         }
     }
 }
