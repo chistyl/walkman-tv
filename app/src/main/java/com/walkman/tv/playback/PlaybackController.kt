@@ -548,7 +548,11 @@ class PlaybackController(
         playAt(prevIdx)
     }
 
-    fun seekTo(ms: Long) = player.seekTo(ms.coerceAtLeast(0))
+    fun seekTo(ms: Long) {
+        val target = ms.coerceAtLeast(0)
+        player.seekTo(target)
+        _state.value = _state.value.copy(positionMs = target)
+    }
 
     fun setRepeatMode(mode: RepeatMode) { _state.value = _state.value.copy(repeatMode = mode) }
 
@@ -638,7 +642,8 @@ class PlaybackController(
                         durationMs = player.duration.coerceAtLeast(0),
                     )
                 }
-                delay(1000)
+                // 50 ms cadence keeps karaoke word highlighting fluid.
+                delay(50)
             }
         }
     }
