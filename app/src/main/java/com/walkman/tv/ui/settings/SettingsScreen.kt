@@ -157,7 +157,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
     }
 
     Column(
-        modifier = modifier.fillMaxSize().padding(top = 8.dp).verticalScroll(rememberScrollState()),
+        modifier = modifier.fillMaxSize().padding(top = 8.dp).verticalScroll(rememberScrollState()).padding(bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Section("播放音質") {
