@@ -55,16 +55,31 @@ object ChineseText {
     // Protect Taiwan-specific 髮 from OpenCC4j character normalization.
     private const val PRESERVE_HAIR = "\uE001"
 
+    // UI labels and provider metadata are converted repeatedly during Compose recomposition.
+    // Keep a small access-ordered cache so identical strings avoid repeated replacement passes
+    // and OpenCC conversion, while bounding memory use for long browsing sessions.
+    private val conversionCache = object : LinkedHashMap<String, String>(256, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean =
+            size > MAX_CACHE_ENTRIES
+    }
+
+    @Synchronized
     fun toTaiwanTraditional(value: String): String {
         if (value.isEmpty()) return value
+        conversionCache[value]?.let { return it }
+
         val contextNormalized = sourceContextCorrections.entries.fold(value) { text, (source, target) ->
             text.replace(source, target)
         }
         val protected = contextNormalized
             .replace("范", PRESERVE_FAN)
             .replace("髮", PRESERVE_HAIR)
-        return ZhTwConverterUtil.toTraditional(protected)
+        val converted = ZhTwConverterUtil.toTraditional(protected)
             .replace(PRESERVE_FAN, "范")
             .replace(PRESERVE_HAIR, "髮")
+        conversionCache[value] = converted
+        return converted
     }
+
+    private const val MAX_CACHE_ENTRIES = 4096
 }
