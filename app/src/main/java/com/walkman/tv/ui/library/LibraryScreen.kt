@@ -685,7 +685,7 @@ private fun DownloadedTab(
     confirmDelete?.let { t ->
         com.walkman.tv.ui.components.ConfirmDialog(
             title = "刪除下載",
-            message = "確定要刪除「${t.name}」的下載檔案嗎？刪除後必須重新下載才能離線播放。",
+            message = "確定要刪除「${ChineseText.toTaiwanTraditional(t.name)}」的下載檔案嗎？刪除後必須重新下載才能離線播放。",
             onCancel = { confirmDelete = null },
             onConfirm = {
                 confirmDelete = null
