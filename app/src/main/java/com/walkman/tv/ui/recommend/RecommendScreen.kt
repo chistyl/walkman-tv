@@ -12,6 +12,9 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.withStyle
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -118,8 +121,23 @@ private fun NowPlayingPanel(onOpenPlayer: () -> Unit, modifier: Modifier = Modif
       Text(ChineseText.toTaiwanTraditional(track.displaySinger), color = AppColors.TextSecondary, fontSize = 13.sp, maxLines = 1)
       Spacer(Modifier.height(8.dp))
       val active = LyricParser.activeIndex(state.positionMs / 1000.0, lyrics)
-      val line = lyrics.getOrNull(active)?.text ?: if (state.resolving) "解析中…" else ""
-      Text(ChineseText.toTaiwanTraditional(line), color = AppColors.LyricIdle, fontSize = 13.sp, maxLines = 1)
+      val line = lyrics.getOrNull(active)
+      val lyricText = if (line?.words?.isNotEmpty() == true) {
+        buildAnnotatedString {
+          line.words.forEach { word ->
+            val lit = state.positionMs >= word.startMs
+            withStyle(SpanStyle(
+              color = if (lit) AppColors.LyricActive else AppColors.LyricIdle,
+              fontWeight = if (lit) FontWeight.Bold else FontWeight.Normal,
+            )) { append(ChineseText.toTaiwanTraditional(word.text)) }
+          }
+        }
+      } else {
+        androidx.compose.ui.text.AnnotatedString(
+          ChineseText.toTaiwanTraditional(line?.text ?: if (state.resolving) "解析中…" else ""),
+        )
+      }
+      Text(lyricText, color = AppColors.LyricIdle, fontSize = 13.sp, maxLines = 1)
     } else {
       Text("目前沒有播放內容，前往推薦頁選擇歌曲即可開始播放", color = AppColors.TextSecondary, fontSize = 14.sp)
     }

@@ -63,6 +63,9 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -890,11 +893,28 @@ private fun LyricPane(
       val distance = if (active >= 0) abs(i - active) else 0
       val a = if (isActive) 1f else (1f - distance * 0.22f).coerceAtLeast(0.18f)
       Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        val baseColor = if (isActive) AppColors.LyricActive else AppColors.TextSecondary
+        val lyricText = remember(line, positionMs) {
+          if (line.words.isEmpty()) {
+            androidx.compose.ui.text.AnnotatedString(ChineseText.toTaiwanTraditional(line.text))
+          } else {
+            buildAnnotatedString {
+              line.words.forEach { word ->
+                val played = positionMs >= word.startMs + word.durationMs
+                val singing = positionMs >= word.startMs && positionMs < word.startMs + word.durationMs
+                val wordColor = if (played || singing) AppColors.LyricActive else AppColors.TextSecondary
+                withStyle(SpanStyle(color = wordColor, fontWeight = if (played || singing) FontWeight.Bold else FontWeight.Medium)) {
+                  append(ChineseText.toTaiwanTraditional(word.text))
+                }
+              }
+            }
+          }
+        }
         Text(
-          ChineseText.toTaiwanTraditional(line.text),
-          color = if (isActive) AppColors.LyricActive else AppColors.TextSecondary,
+          lyricText,
+          color = baseColor,
           fontSize = if (isActive) lyricSize.activeSp.sp else lyricSize.inactiveSp.sp,
-          // 显式行高：默认行高跟不上大字号，长歌词换行时上下两行会重叠（#21）。
+          // Keep line metrics stable while individual timed words change color.
           lineHeight = ((if (isActive) lyricSize.activeSp else lyricSize.inactiveSp) * 1.3f).sp,
           fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
           textAlign = TextAlign.Center,

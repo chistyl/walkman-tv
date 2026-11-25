@@ -21,18 +21,47 @@ class LyricsFetcher(
 
     suspend fun fetch(track: Track): List<LyricLine> {
         cache[track.id]?.let { return it }
-        tryScript(track)?.let { cache[track.id] = it; return it }
-        tryBuiltIn(track)?.let { cache[track.id] = it; return it }
+
+        // A script's ordinary LRC must not short-circuit the native timed-lyrics
+        // endpoint. Try every native provider first and only use untimed LRC as fallback.
+        val scriptLyrics = tryScript(track)
+        if (scriptLyrics.hasWordTiming()) {
+            cache[track.id] = scriptLyrics.orEmpty()
+            return scriptLyrics.orEmpty()
+        }
+
+        val nativeLyrics = tryBuiltIn(track)
+        if (nativeLyrics.hasWordTiming()) {
+            cache[track.id] = nativeLyrics.orEmpty()
+            return nativeLyrics.orEmpty()
+        }
+
+        val fallback = nativeLyrics ?: scriptLyrics
+        if (fallback != null) {
+            cache[track.id] = fallback
+            return fallback
+        }
+
         tryOtherSources(track)?.let { cache[track.id] = it; return it }
         return emptyList()
     }
 
+    private fun List<LyricLine>?.hasWordTiming(): Boolean =
+        this?.any { it.words.isNotEmpty() } == true
+
     private suspend fun tryScript(track: Track): List<LyricLine>? {
         val result = runCatching { sources.requestLyric(track) }.getOrNull() ?: return null
-        // Some compatible scripts expose enhanced LRC as lxlyric instead of lyric.
-        val lyric = result.optString("lyric").ifEmpty { result.optString("lxlyric") }
-        val tlyric = result.optString("tlyric").ifEmpty { null }
-        return LyricParser.parse(lyric, tlyric).ifEmpty { null }
+        // Prefer the richest timing payload. Compatible sources may expose YRC/QRC as
+        // yrc/qrc/lxlyric while retaining ordinary LRC in lyric.
+        val translation = result.optString("tlyric").ifEmpty { null }
+        val candidates = listOf("yrc", "qrc", "krc", "lxlyric", "lyric", "lrc")
+            .mapNotNull { key -> result.optString(key).takeIf { it.isNotBlank() } }
+            .distinct()
+        val parsed = candidates.mapNotNull { payload ->
+            LyricParser.parse(payload, translation).takeIf { it.isNotEmpty() }
+        }
+        return parsed.firstOrNull { lines -> lines.any { it.words.isNotEmpty() } }
+            ?: parsed.firstOrNull()
     }
 
     /** Retry a transient direct-endpoint failure once before moving to cross-source search. */
