@@ -10,6 +10,8 @@ import com.walkman.tv.playback.EqualizerManager
 import com.walkman.tv.playback.LyricsFetcher
 import com.walkman.tv.playback.PlaybackController
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -221,7 +223,6 @@ class AppContainer(val appContext: Context) {
         }
         appScope.launch {
             settingsStore.loadAll()
-            libraryStore.loadAll()
             settingsStore.settings.onEach { s ->
                 playbackController.preferredQuality = s.preferredQuality
                 // 硬件直通会把未解码的数据直接交给音频硬件，绕过解码器；强制软解时一并关掉。
@@ -232,11 +233,25 @@ class AppContainer(val appContext: Context) {
                 downloadStore.downloadTreeUri = s.customDownloadTreeUri?.let { runCatching { android.net.Uri.parse(it) }.getOrNull() }
                 downloadCoordinator.setMaxConcurrent(s.maxConcurrentDownloads)
             }.launchIn(appScope)
-            scriptStore.loadAll()
-            searchHistoryStore.load()
-            coverCache.loadAll()
-            downloadStore.loadAll()
-            localFolderStore.loadAll()
+
+            // These stores are independent at startup. Load them concurrently instead of
+            // serially waiting for each disk read; custom scripts still finish before snapshot
+            // restoration because the saved queue may need those sources to resolve.
+            coroutineScope {
+                val scripts = async { scriptStore.loadAll() }
+                val library = async { libraryStore.loadAll() }
+                val history = async { searchHistoryStore.load() }
+                val covers = async { coverCache.loadAll() }
+                val downloads = async { downloadStore.loadAll() }
+                val localFolders = async { localFolderStore.loadAll() }
+
+                scripts.await()
+                library.await()
+                history.await()
+                covers.await()
+                downloads.await()
+                localFolders.await()
+            }
 
             // Restore last session's queue + index + playing state. Run after scripts load so
             // any custom-source needed to resolve URLs is ready.
