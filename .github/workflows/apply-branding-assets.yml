@@ -1,0 +1,45 @@
+name: Apply Walkman TV Branding Assets
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-branding:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout selected branding branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/lyrics-fetch-reliability
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify and extract branding package
+        shell: bash
+        run: |
+          set -euo pipefail
+          PACKAGE="branding-assets/walkman-tv-branding-ready-to-apply.zip"
+          test -f "$PACKAGE"
+          mkdir -p /tmp/walkman-branding
+          unzip -q "$PACKAGE" -d /tmp/walkman-branding
+          SOURCE="/tmp/walkman-branding/walkman-tv-branding/app/src/main/res"
+          test -d "$SOURCE"
+          test -f /tmp/walkman-branding/walkman-tv-branding/README.txt
+          echo "素材包檔案數：$(find "$SOURCE" -type f | wc -l)"
+          cp -R "$SOURCE/." app/src/main/res/
+
+      - name: Commit branding assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/res
+          if git diff --cached --quiet; then
+            echo "沒有素材差異，停止提交。"
+            exit 0
+          fi
+          git commit -m "Replace app icon and banner with supplied branding"
+          git push origin HEAD:fix/lyrics-fetch-reliability
