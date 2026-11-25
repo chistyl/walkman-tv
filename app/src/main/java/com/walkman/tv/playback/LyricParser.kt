@@ -18,13 +18,14 @@ data class LyricLine(
     val words: List<LyricWord> = emptyList(),
 )
 
-/** Parses standard LRC plus enhanced YRC/QRC-style word timing when supplied by a source. */
+/** Parses standard LRC and native YRC, KRC and QRC word-timing records. */
 object LyricParser {
     private val timeTag = Regex("""\[(\d{1,2}):(\d{1,2})(?:[.:](\d{1,3}))?]""")
     private val enhancedLine = Regex("""^\[([0-9]{1,12})[,，]([0-9]{1,12})](.*)$""")
-    // YRC/KRC-style word marker: <offset,duration,flag>text
-    // Some providers wrap the same tuple in parentheses.
-    private val timedWord = Regex("""[<(]([0-9]{1,12})[,，]([0-9]{1,12})(?:[,，]-?[0-9]{1,12})?[>)]([^<(]*)""")
+    // NetEase YRC and Kugou KRC: (or <)absoluteStart,duration,flag( or >)text
+    private val yrcKrcWord = Regex("""[<(]([0-9]{1,12})[,，]([0-9]{1,12})[,，]-?[0-9]{1,12}[>)]([^<(]*)""")
+    // QQ QRC: text(absoluteStart,duration); the tuple timestamps the text before it.
+    private val qrcWord = Regex("""([^()]*)\(([0-9]{1,12})[,，]([0-9]{1,12})\)""")
 
     fun parse(raw: String, translation: String? = null): List<LyricLine> {
         val enhanced = parseEnhanced(raw)
@@ -51,29 +52,41 @@ object LyricParser {
         return lines
     }
 
-    /**
-     * YRC records use [lineStart,lineDuration](word,wordStart,wordDuration).
-     * QRC-like payloads are accepted only when they expose the same explicit timed-word tuple;
-     * unrecognised formats deliberately fall back to ordinary line lyrics.
-     */
     private fun parseEnhanced(raw: String): List<LyricLine> {
         val result = mutableListOf<LyricLine>()
-        for (rawLine in raw.replace("\r\n", "\n").replace("\r", "\n").split("\n")) {
+        val normalised = raw.replace("\r\n", "\n").replace("\r", "\n")
+        for (rawLine in normalised.split("\n")) {
             val header = enhancedLine.find(rawLine.trim()) ?: continue
             val lineStart = header.groupValues[1].toLongOrNull() ?: continue
             val body = header.groupValues[3]
-            val matches = timedWord.findAll(body).toList()
-            if (matches.isEmpty()) continue
-            val words = matches.mapNotNull { match ->
-                val offset = match.groupValues[1].toLongOrNull() ?: return@mapNotNull null
-                val duration = match.groupValues[2].toLongOrNull() ?: return@mapNotNull null
-                val text = match.groupValues[3]
-                if (text.isEmpty()) null else LyricWord(
-                    text = ChineseText.toTaiwanTraditional(text),
-                    startMs = lineStart + offset,
-                    durationMs = duration.coerceAtLeast(1),
-                )
+
+            val yrcMatches = yrcKrcWord.findAll(body).toList()
+            val words = if (yrcMatches.isNotEmpty()) {
+                // YRC/KRC word starts are already absolute media timestamps; do not add lineStart.
+                yrcMatches.mapNotNull { match ->
+                    val start = match.groupValues[1].toLongOrNull() ?: return@mapNotNull null
+                    val duration = match.groupValues[2].toLongOrNull() ?: return@mapNotNull null
+                    val text = match.groupValues[3]
+                    if (text.isEmpty()) null else LyricWord(
+                        ChineseText.toTaiwanTraditional(text),
+                        start,
+                        duration.coerceAtLeast(1),
+                    )
+                }
+            } else {
+                // QRC stores each word's absolute timing after the word itself.
+                qrcWord.findAll(body).mapNotNull { match ->
+                    val text = match.groupValues[1]
+                    val start = match.groupValues[2].toLongOrNull() ?: return@mapNotNull null
+                    val duration = match.groupValues[3].toLongOrNull() ?: return@mapNotNull null
+                    if (text.isEmpty()) null else LyricWord(
+                        ChineseText.toTaiwanTraditional(text),
+                        start,
+                        duration.coerceAtLeast(1),
+                    )
+                }.toList()
             }
+
             if (words.isEmpty()) continue
             val text = words.joinToString("") { it.text }
             result.add(LyricLine(-1, lineStart / 1000.0, text, words = words))
