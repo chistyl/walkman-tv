@@ -18,6 +18,9 @@ class ChineseTextTest {
         assertEquals("髮型設計", ChineseText.toTaiwanTraditional("发型设计"))
         assertEquals("染髮和燙髮", ChineseText.toTaiwanTraditional("染发和烫发"))
         assertEquals("吹風機吹髮", ChineseText.toTaiwanTraditional("吹风机吹发"))
+        assertEquals("頭髮與髮型", ChineseText.toTaiwanTraditional("頭髮與髮型"))
+        assertEquals("髮質、髮絲、髮根與髮尾", ChineseText.toTaiwanTraditional("髮質、髮絲、髮根與髮尾"))
+        assertEquals("頭髮不能變成頭發", ChineseText.toTaiwanTraditional("頭髮不能變成頭发"))
     }
 
     @Test
