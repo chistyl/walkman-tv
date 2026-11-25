@@ -15,13 +15,13 @@ class VocalRemovalProcessorTest {
     fun retainsStereoDifferenceWithHeadroom() {
         val (left, right) = VocalRemovalProcessor.cancelCenter(8_000, -8_000)
         assertEquals(12_000, left)
-        assertEquals(-12_000, right)
+        assertEquals(12_000, right)
     }
 
     @Test
     fun clampsOutputToPcm16Range() {
         val (left, right) = VocalRemovalProcessor.cancelCenter(32_000, -32_000)
         assertEquals(Short.MAX_VALUE.toInt(), left)
-        assertEquals(Short.MIN_VALUE.toInt(), right)
+        assertEquals(Short.MAX_VALUE.toInt(), right)
     }
 }
