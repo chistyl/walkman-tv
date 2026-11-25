@@ -65,7 +65,6 @@ class SourceManager(
     /** Resolve a play URL — mirrors `resolveMusicURL`. */
     suspend fun resolveMusicURL(track: Track, quality: Quality? = null): ResolvedTrack {
         val preferred = quality ?: Quality.K320
-
         val scripts = scriptsFor(track.source, "musicUrl")
         scripts.forEachIndexed { scriptIdx, ls ->
             val scriptQs = ls.capabilities.sources[track.source]?.qualities?.toSet() ?: emptySet()
@@ -86,21 +85,16 @@ class SourceManager(
                         Log.d(TAG, "script '${ls.script.name}' @${q.key} failed: ${it.message}")
                         timedOut = it is JsScriptRuntime.ScriptTimeoutException
                     }
-                // An unresponsive script won't answer at a lower tier either; don't wait out the
-                // timeout once per tier (that was up to a minute of silence per song).
                 if (timedOut) break
             }
         }
-
         tryOtherSources(track, preferred)?.let { return it }
-
         if (fallbackEnabled) {
             val qForFallback = if (track.qualities.contains(preferred)) preferred else (track.qualities.firstOrNull() ?: Quality.K128)
             runCatching { builtIn.resolve(track, qForFallback) }.getOrNull()?.let { res ->
                 return ResolvedTrack(res.url, ResolveOrigin.DirectFallback, qForFallback, res.warning)
             }
         }
-
         if (scriptFor(track.source, "musicUrl") == null) {
             throw SourceException("沒有指令碼提供 ${track.source.displayName} 音源，請前往「設定」→「自訂音源」匯入指令碼")
         }
@@ -113,8 +107,7 @@ class SourceManager(
         for (alt in alternatives.take(5)) {
             val altLS = scriptFor(alt.source, "musicUrl") ?: continue
             val q = pickPlayQuality(
-                preferred,
-                alt.qualities.toSet(),
+                preferred, alt.qualities.toSet(),
                 altLS.capabilities.sources[alt.source]?.qualities?.toSet() ?: emptySet(),
             )
             runCatching { resolveViaScript(alt, q, altLS) }.getOrNull()?.let { url ->
@@ -126,9 +119,7 @@ class SourceManager(
     }
 
     private suspend fun resolveViaScript(track: Track, quality: Quality, ls: LoadedScript): String {
-        val info = JSONObject()
-            .put("type", quality.key)
-            .put("musicInfo", makeOldMusicInfo(track))
+        val info = JSONObject().put("type", quality.key).put("musicInfo", makeOldMusicInfo(track))
         val result = ls.runtime.requestAction(track.source, "musicUrl", info)
         val obj = result as? JSONObject
         val url = obj?.optJSONObject("data")?.optString("url")?.ifEmpty { null }
@@ -136,12 +127,10 @@ class SourceManager(
         return url ?: throw SourceException("指令碼傳回無效結果")
     }
 
-    /** Ask a user script for lyric data — raw `{lyric, tlyric, rlyric, lxlyric}` (iOS `requestLyric`). */
+    /** Ask a user script for lyric data, including native word-timed formats. */
     suspend fun requestLyric(track: Track): JSONObject? {
         val scripts = scriptsFor(track.source, "lyric")
-        if (scripts.isEmpty()) {
-            throw SourceException("沒有指令碼提供 ${track.source.displayName} 歌詞")
-        }
+        if (scripts.isEmpty()) throw SourceException("沒有指令碼提供 ${track.source.displayName} 歌詞")
         val info = JSONObject().put("type", "").put("musicInfo", makeOldMusicInfo(track))
         for (ls in scripts) {
             val result = try {
@@ -153,10 +142,15 @@ class SourceManager(
                 null
             } ?: continue
 
-            // A script may advertise lyric support but return an empty payload for a
-            // particular song. Continue to the next matching script instead of stopping.
-            val hasLyrics = listOf("lyric", "lxlyric", "tlyric")
-                .any { result.optString(it).isNotBlank() }
+            // Enhanced-only responses were previously rejected here because this gate
+            // checked only lyric/lxlyric/tlyric. The fetcher then fell back to plain LRC.
+            val hasLyrics = LYRIC_PAYLOAD_KEYS.any { key ->
+                when (val value = result.opt(key)) {
+                    is String -> value.isNotBlank()
+                    is JSONObject, is JSONArray -> value.length() > 0
+                    else -> false
+                }
+            }
             if (hasLyrics) return result
             Log.d(TAG, "lyric script '${ls.script.name}' returned no lyric data")
         }
@@ -170,14 +164,13 @@ class SourceManager(
     }
 
     fun supportedSources(): List<SourceID> {
-        val set = mutableSetOf<SourceID>()
+        val set = mutableSetOf<Quality>()
         _loaded.value.forEach { ls ->
             ls.capabilities.sources.forEach { (src, cap) -> if (cap.actions.contains("musicUrl")) set.add(src) }
         }
         return SourceID.entries.filter { set.contains(it) }
     }
 
-    /** Build the v4 "old format" musicInfo a script expects (iOS `makeOldMusicInfo`). */
     fun makeOldMusicInfo(track: Track): JSONObject {
         val types = JSONArray()
         val typesObj = JSONObject()
@@ -186,62 +179,39 @@ class SourceManager(
             typesObj.put(q.key, JSONObject().put("size", ""))
         }
         val info = JSONObject()
-            .put("name", track.name)
-            .put("singer", track.singer)
-            .put("source", track.source.key)
-            .put("songmid", track.songmid)
-            .put("interval", track.intervalText)
-            .put("albumName", track.albumName ?: "")
-            .put("img", track.picURL ?: "")
-            .put("typeUrl", JSONObject())
-            .put("albumId", track.albumId ?: "")
-            .put("types", types)
-            .put("_types", typesObj)
+            .put("name", track.name).put("singer", track.singer)
+            .put("source", track.source.key).put("songmid", track.songmid)
+            .put("interval", track.intervalText).put("albumName", track.albumName ?: "")
+            .put("img", track.picURL ?: "").put("typeUrl", JSONObject())
+            .put("albumId", track.albumId ?: "").put("types", types).put("_types", typesObj)
         track.extras.forEach { (k, v) -> info.put(k, v) }
         return info
     }
 
     companion object {
         private const val TAG = "SourceManager"
+        private val LYRIC_PAYLOAD_KEYS = listOf(
+            "yrc", "qrc", "krc", "lxlyric", "lyric", "lrc", "tlyric", "rlyric",
+        )
 
-        /**
-         * Pick the effective playback tier — spec §3.
-         *
-         * Walks [Quality.orderedHighToLow] starting at [preferred], returns the first tier
-         * that satisfies the per-tier eligibility rule. Falls through to [Quality.K128] —
-         * the universal floor — when nothing higher passes.
-         *
-         * Eligibility:
-         *  - Regular tiers (128k/320k/flac/flac24bit): script declares it AND the search
-         *    metadata listed it.
-         *  - Extended tiers (hires/atmos/atmos_plus/master): script declares it. Catalog
-         *    metadata almost never reports these, so the trackQs check is bypassed.
-         */
         fun pickPlayQuality(preferred: Quality, trackQs: Set<Quality>, scriptQs: Set<Quality>): Quality {
             val full = Quality.orderedHighToLow
             val startIdx = full.indexOf(preferred).coerceAtLeast(0)
             for (i in startIdx until full.size) {
                 val q = full[i]
-                if (q == Quality.K128) return Quality.K128 // always reachable
+                if (q == Quality.K128) return Quality.K128
                 if (scriptQs.contains(q) && (q.isExtendedTier || trackQs.contains(q))) return q
             }
             return Quality.K128
         }
 
-        /**
-         * Build the descending cascade from [first] to [Quality.K128] — spec §3 last paragraph.
-         * Each step uses the same per-tier rule as [pickPlayQuality]; 128k is appended
-         * unconditionally so we always have a final fallback to try.
-         */
         fun qualityCascade(first: Quality, trackQs: Set<Quality>, scriptQs: Set<Quality>): List<Quality> {
             val full = Quality.orderedHighToLow
             val startIdx = full.indexOf(first).coerceAtLeast(0)
             val out = mutableListOf<Quality>()
             for (i in startIdx until full.size) {
                 val q = full[i]
-                val eligible = q == Quality.K128 ||
-                    (scriptQs.contains(q) && (q.isExtendedTier || trackQs.contains(q)))
-                if (eligible) out.add(q)
+                if (q == Quality.K128 || (scriptQs.contains(q) && (q.isExtendedTier || trackQs.contains(q)))) out.add(q)
             }
             return out.ifEmpty { listOf(first) }
         }
