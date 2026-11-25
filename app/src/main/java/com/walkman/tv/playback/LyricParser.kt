@@ -46,10 +46,15 @@ object LyricParser {
             for (m in matches) {
                 val mins = m.groupValues[1].toDoubleOrNull() ?: 0.0
                 val secs = m.groupValues[2].toDoubleOrNull() ?: 0.0
-                var msStr = m.groupValues.getOrNull(3)?.ifEmpty { "0" } ?: "0"
-                if (msStr.length == 2) msStr += "0"
-                val ms = msStr.toDoubleOrNull() ?: 0.0
-                out.add(Parsed(mins * 60 + secs + ms / 1000.0, ChineseText.toTaiwanTraditional(text)))
+                val fraction = m.groupValues.getOrNull(3).orEmpty()
+                // LRC fractions are decimal fractions of a second: .5 = 500 ms,
+                // .05 = 50 ms, .005 = 5 ms.
+                val millis = when (fraction.length) {
+                    1 -> fraction.toIntOrNull()?.times(100) ?: 0
+                    2 -> fraction.toIntOrNull()?.times(10) ?: 0
+                    else -> fraction.take(3).toIntOrNull() ?: 0
+                }
+                out.add(Parsed(mins * 60 + secs + millis / 1000.0, ChineseText.toTaiwanTraditional(text)))
             }
         }
         return out.sortedBy { it.time }
