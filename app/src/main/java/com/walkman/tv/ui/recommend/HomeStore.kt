@@ -76,18 +76,34 @@ class HomeStore(
         loadJob = scope.launch {
             _state.update { it.copy(isLoading = true, sources = srcs) }
 
-            // Section 3 step 1: parallel songlist fetch per source.
-            val groups: Map<SourceID, List<SonglistInfo>> = coroutineScope {
-                srcs.map { s ->
-                    async {
-                        val svc = songlists.serviceFor(s)
-                        if (svc == null) return@async s to emptyList()
-                        val order = svc.orders.firstOrNull() ?: return@async s to emptyList()
-                        val list = runCatching { svc.fetchRecommended(order, SonglistTag.ALL, 1) }
-                            .getOrDefault(emptyList())
-                        s to list
-                    }
-                }.awaitAll().toMap()
+            // Start recommendations and boards together. Previously board requests only began
+            // after every recommendation provider had completed, adding two network phases.
+            val (groups, boardsBySource): Pair<
+                Map<SourceID, List<SonglistInfo>>,
+                Map<SourceID, List<BoardInfo>>,
+            > = coroutineScope {
+                val recommendationsJob = async {
+                    srcs.map { s ->
+                        async {
+                            val svc = songlists.serviceFor(s)
+                            if (svc == null) return@async s to emptyList()
+                            val order = svc.orders.firstOrNull() ?: return@async s to emptyList()
+                            val list = runCatching { svc.fetchRecommended(order, SonglistTag.ALL, 1) }
+                                .getOrDefault(emptyList())
+                            s to list
+                        }
+                    }.awaitAll().toMap()
+                }
+                val boardsJob = async {
+                    srcs.map { s ->
+                        async {
+                            val svc = boards.serviceFor(s)
+                            if (svc == null) return@async s to emptyList()
+                            s to runCatching { svc.fetchBoards() }.getOrDefault(emptyList())
+                        }
+                    }.awaitAll().toMap()
+                }
+                recommendationsJob.await() to boardsJob.await()
             }
 
             // Step 2: hero pool — 1 per enabled source (the first of its recommendations).
@@ -102,16 +118,7 @@ class HomeStore(
             }
             val recommendations = recs.take(12)
 
-            // Step 4: boards — parallel fetch, then quota-balance across enabled sources.
-            val boardsBySource: Map<SourceID, List<BoardInfo>> = coroutineScope {
-                srcs.map { s ->
-                    async {
-                        val svc = boards.serviceFor(s)
-                        if (svc == null) return@async s to emptyList()
-                        s to runCatching { svc.fetchBoards() }.getOrDefault(emptyList())
-                    }
-                }.awaitAll().toMap()
-            }
+            // Step 4: quota-balance the board responses fetched alongside recommendations.
             val boardList = balanceBoards(srcs, boardsBySource, totalTarget = 12)
 
             _state.update {
