@@ -32,7 +32,7 @@ class LyricsFetcher(
         // Prefer the richest timing payload. Compatible sources may expose YRC/QRC as
         // yrc/qrc/lxlyric while retaining ordinary LRC in lyric.
         val translation = result.optString("tlyric").ifEmpty { null }
-        val candidates = listOf("yrc", "qrc", "lxlyric", "lyric", "lrc")
+        val candidates = listOf("yrc", "qrc", "krc", "lxlyric", "lyric", "lrc")
             .mapNotNull { key -> result.optString(key).takeIf { it.isNotBlank() } }
             .distinct()
         val parsed = candidates.mapNotNull { payload ->
