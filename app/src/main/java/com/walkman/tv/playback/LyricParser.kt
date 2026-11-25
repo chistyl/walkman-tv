@@ -65,8 +65,9 @@ object LyricParser {
             val lineStart = header.groupValues[1].toLongOrNull() ?: continue
             val body = header.groupValues[3]
 
-            val yrcMatches = yrcKrcWord.findAll(body).toList()
-            val words = if (yrcMatches.isNotEmpty()) {
+            val usesPrefixTiming = body.trimStart().startsWith("(") || body.trimStart().startsWith("<")
+            val yrcMatches = if (usesPrefixTiming) yrcKrcWord.findAll(body).toList() else emptyList()
+            val words = if (usesPrefixTiming && yrcMatches.isNotEmpty()) {
                 // YRC uses absolute timestamps; KRC word offsets are relative to the line header.
                 yrcMatches.mapNotNull { match ->
                     val start = match.groupValues[1].toLongOrNull() ?: return@mapNotNull null
