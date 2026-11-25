@@ -685,6 +685,7 @@ private fun TransportBar(
         onClick = onToggleFav,
         modifier = Modifier.focusProperties {
           left = nextFocus
+          right = queueFocus
         },
       )
     }
@@ -698,6 +699,7 @@ private fun TransportBar(
         focusRequester = queueFocus,
         onClick = onShowQueue,
         modifier = Modifier.focusProperties {
+          left = faveFocus
           right = FocusRequester.Cancel
         },
       )
