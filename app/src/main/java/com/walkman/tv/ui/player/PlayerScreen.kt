@@ -891,7 +891,7 @@ private fun LyricPane(
       val a = if (isActive) 1f else (1f - distance * 0.22f).coerceAtLeast(0.18f)
       Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-          line.text,
+          ChineseText.toTaiwanTraditional(line.text),
           color = if (isActive) AppColors.LyricActive else AppColors.TextSecondary,
           fontSize = if (isActive) lyricSize.activeSp.sp else lyricSize.inactiveSp.sp,
           // 显式行高：默认行高跟不上大字号，长歌词换行时上下两行会重叠（#21）。
@@ -902,7 +902,7 @@ private fun LyricPane(
         )
         line.translation?.takeIf { showTranslation }?.let {
           Text(
-            it,
+            ChineseText.toTaiwanTraditional(it),
             color = if (isActive) AppColors.LyricActive.copy(alpha = 0.7f) else AppColors.TextMuted,
             fontSize = lyricSize.translationSp.sp,
             lineHeight = (lyricSize.translationSp * 1.3f).sp,
