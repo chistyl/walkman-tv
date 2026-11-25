@@ -10,7 +10,6 @@ class LyricParserTest {
         val lines = LyricParser.parse(
             "[00:01.5]one\n[00:02.05]two\n[00:03.005]three",
         )
-
         assertEquals(3, lines.size)
         assertEquals(1.5, lines[0].time, 0.0001)
         assertEquals(2.05, lines[1].time, 0.0001)
@@ -20,7 +19,6 @@ class LyricParserTest {
     @Test
     fun parsesMultipleTimestampsOnOneLine() {
         val lines = LyricParser.parse("[00:01.00][00:02.00]same line")
-
         assertEquals(2, lines.size)
         assertEquals(1.0, lines[0].time, 0.0001)
         assertEquals(2.0, lines[1].time, 0.0001)
@@ -31,7 +29,6 @@ class LyricParserTest {
     @Test
     fun keepsPlainTextLyricsWhenNoTimeTagsExist() {
         val lines = LyricParser.parse("first line\nsecond line")
-
         assertEquals(2, lines.size)
         assertTrue(lines.all { it.time == -1.0 })
         assertEquals("first line", lines[0].text)
@@ -39,11 +36,10 @@ class LyricParserTest {
     }
 
     @Test
-    fun parsesYrcWordOffsetsIntoAbsolutePlaybackTimes() {
+    fun parsesNativeYrcWithAbsoluteWordTimes() {
         val lines = LyricParser.parse(
-            "[1000,1200]<0,300,0>你<300,250,0>好",
+            "[1000,1200](1000,300,0)你(1300,250,0)好",
         )
-
         assertEquals(1, lines.size)
         assertEquals("你好", lines[0].text)
         assertEquals(2, lines[0].words.size)
@@ -56,12 +52,18 @@ class LyricParserTest {
     }
 
     @Test
-    fun parsesParenthesizedWordTimingAndKeepsPlainLrcAsLineLyrics() {
-        val timed = LyricParser.parse("[2000,500](0,200,0)A(200,300,0)B")
-        assertEquals("AB", timed.single().text)
-        assertEquals(2000L, timed.single().words[0].startMs)
-        assertEquals(2200L, timed.single().words[1].startMs)
+    fun parsesNativeQrcTextThenTimingTuples() {
+        val lines = LyricParser.parse("[1000,500]你(1000,200)好(1200,300)")
+        assertEquals(1, lines.size)
+        assertEquals("你好", lines.single().text)
+        assertEquals(1000L, lines.single().words[0].startMs)
+        assertEquals(200L, lines.single().words[0].durationMs)
+        assertEquals(1200L, lines.single().words[1].startMs)
+        assertEquals(300L, lines.single().words[1].durationMs)
+    }
 
+    @Test
+    fun keepsPlainLrcAsLineLyrics() {
         val plain = LyricParser.parse("[00:02.00]AB")
         assertTrue(plain.single().words.isEmpty())
         assertEquals("AB", plain.single().text)
