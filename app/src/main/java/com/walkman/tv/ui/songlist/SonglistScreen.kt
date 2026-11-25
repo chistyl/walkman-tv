@@ -76,6 +76,9 @@ fun SonglistScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     }
     LaunchedEffect(source, order, tag) {
         val o = order ?: return@LaunchedEffect
+        // When switching platforms, the previous platform's order can briefly remain in state.
+        // Skip that transient request instead of starting a fetch that will immediately be cancelled.
+        if (service?.orders?.none { it.id == o.id } == true) return@LaunchedEffect
         val cacheKey = source.key + ":" + o.id + ":" + tag.id + ":" + tag.name
         val cached = songlistPageCache[cacheKey].orEmpty()
         lists = cached
