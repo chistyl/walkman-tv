@@ -112,12 +112,15 @@ class PlaybackController(
     private val audioLevelProcessor = AudioLevelProcessor { level ->
         _audioLevel.value = level
     }
+    private val vocalRemovalProcessor = VocalRemovalProcessor()
+    private val _vocalRemovalEnabled = MutableStateFlow(false)
+    val vocalRemovalEnabled: StateFlow<Boolean> = _vocalRemovalEnabled.asStateFlow()
 
     /** 强制软件解码：只用系统自带的软件解码器（c2.android.* / OMX.google.*），绕开部分电视、盒子
      *  厂商硬件解码器的闪退或无声问题。解码器在每次准备新歌时挑选，所以切换后从下一首开始生效。 */
     @Volatile var forceSoftwareDecoding: Boolean = false
 
-    val player: ExoPlayer = buildPlayer(context.applicationContext, audioLevelProcessor, { forceSoftwareDecoding })
+    val player: ExoPlayer = buildPlayer(context.applicationContext, audioLevelProcessor, vocalRemovalProcessor, { forceSoftwareDecoding })
 
     private val appContext = context.applicationContext
 
@@ -161,6 +164,7 @@ class PlaybackController(
         fun buildPlayer(
             appContext: android.content.Context,
             levelProcessor: AudioLevelProcessor,
+            vocalProcessor: VocalRemovalProcessor,
             softwareOnly: () -> Boolean,
         ): ExoPlayer {
             val loadControl = DefaultLoadControl.Builder()
@@ -175,7 +179,17 @@ class PlaybackController(
 
             // Use Media3's stock audio sink and PCM conversion path. Keep decoder fallback
             // enabled so a device-specific hardware decoder rejection can fall back safely.
-            val renderersFactory = DefaultRenderersFactory(appContext)
+            val renderersFactory = object : DefaultRenderersFactory(appContext) {
+                override fun buildAudioSink(
+                    context: Context,
+                    enableFloatOutput: Boolean,
+                    enableAudioOutputPlaybackParams: Boolean,
+                ): AudioSink = DefaultAudioSink.Builder(context)
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
+                    .setAudioProcessors(arrayOf(levelProcessor, vocalProcessor))
+                    .build()
+            }
                 .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
                 .setEnableDecoderFallback(true)
                 .setMediaCodecSelector { mimeType, secure, tunneling ->
@@ -557,6 +571,13 @@ class PlaybackController(
     fun setRepeatMode(mode: RepeatMode) { _state.value = _state.value.copy(repeatMode = mode) }
 
     fun toggleShuffle() { _state.value = _state.value.copy(shuffle = !_state.value.shuffle) }
+
+    /** Toggle center-channel cancellation for stereo tracks. Mono tracks remain unchanged. */
+    fun toggleVocalRemoval() {
+        val enabled = !_vocalRemovalEnabled.value
+        vocalRemovalProcessor.enabled = enabled
+        _vocalRemovalEnabled.value = enabled
+    }
 
     fun stop() {
         player.stop()
