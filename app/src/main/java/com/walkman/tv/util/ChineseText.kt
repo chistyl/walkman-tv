@@ -12,6 +12,7 @@ import com.github.houbb.opencc4j.util.ZhTwConverterUtil
 object ChineseText {
     private val sourceContextCorrections = linkedMapOf(
         "头发" to "頭髮",
+        "頭发" to "頭髮",
         "理发" to "理髮",
         "发型" to "髮型",
         "发质" to "髮質",
