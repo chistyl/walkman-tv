@@ -227,6 +227,7 @@ class PlaybackController(
     var preferredQuality: Quality = Quality.K320
 
     private var resolveJob: Job? = null
+    private var lyricsJob: Job? = null
 
     init {
         player.addListener(object : Player.Listener {
@@ -590,9 +591,17 @@ class PlaybackController(
     }
 
     private fun loadLyrics(track: Track) {
+        // A previous track's slow lyric fallback must not keep consuming network capacity.
+        lyricsJob?.cancel()
         _lyrics.value = emptyList()
-        scope.launch {
-            val lines = runCatching { lyricsFetcher.fetch(track) }.getOrDefault(emptyList())
+        lyricsJob = scope.launch {
+            val lines = try {
+                lyricsFetcher.fetch(track).orEmpty()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                emptyList()
+            }
             if (_state.value.currentTrack?.id == track.id) _lyrics.value = lines
         }
     }
@@ -645,6 +654,7 @@ class PlaybackController(
 
     fun release() {
         resolveJob?.cancel()
+        lyricsJob?.cancel()
         player.release()
     }
 
