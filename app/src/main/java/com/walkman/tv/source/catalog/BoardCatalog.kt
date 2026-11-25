@@ -79,9 +79,10 @@ private class KuwoBoard(private val http: CatalogHttp) : BoardService {
         val pn = maxOf(0, page - 1)
         val url = "http://kbangserver.kuwo.cn/ksong.s?from=pc&fmt=json&pn=$pn&rn=100&type=bang&data=content&id=$bangid&show_copyright_off=0&pcmp4=1&isbang=1"
         val ml = runCatching { JSONObject(http.getText(url)).optJSONArray("musiclist") }.getOrNull() ?: return emptyList()
-        // Do not block the leaderboard on up to 100 extra per-track cover requests.
-        // Track rows can render immediately; artwork can remain a placeholder until available.
-        return (0 until ml.length()).mapNotNull { build(ml.optJSONObject(it)) }
+        val tracks = (0 until ml.length()).mapNotNull { build(ml.optJSONObject(it)) }
+        // Kuwo's chart-song response omits artwork URLs. Resolve each track's cover from
+        // artistpicserver so leaderboard rows can display real thumbnails instead of placeholders.
+        return fillKuwoCovers(http, tracks)
     }
 
     private fun build(d: JSONObject?): Track? {
