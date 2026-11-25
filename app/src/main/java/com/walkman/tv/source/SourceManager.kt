@@ -9,6 +9,7 @@ import com.walkman.tv.data.model.UserScript
 import com.walkman.tv.source.builtin.BuiltInResolver
 import com.walkman.tv.source.js.JsScriptRuntime
 import com.walkman.tv.source.js.ScriptHttpClient
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,6 +46,8 @@ class SourceManager(
             _loaded.value = _loaded.value.filter { it.script.id != script.id } +
                 LoadedScript(script, runtime, caps)
             Result.success(caps)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Log.e(TAG, "load failed: ${e.message}")
             Result.failure(e)
@@ -55,6 +58,15 @@ class SourceManager(
         _loaded.value.firstOrNull { it.script.id == scriptId }?.runtime?.destroy()
         _loaded.value = _loaded.value.filter { it.script.id != scriptId }
     }
+
+    private suspend fun <T> attempt(block: suspend () -> T): Result<T> =
+        try {
+            Result.success(block())
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
 
     private fun scriptsFor(source: SourceID, action: String): List<LoadedScript> =
         _loaded.value.filter { it.capabilities.sources[source]?.actions?.contains(action) == true }
@@ -73,7 +85,7 @@ class SourceManager(
             val cascade = qualityCascade(first, track.qualities.toSet(), scriptQs)
             for ((idx, q) in cascade.withIndex()) {
                 var timedOut = false
-                runCatching { resolveViaScript(track, q, ls) }
+                attempt { resolveViaScript(track, q, ls) }
                     .onSuccess { url ->
                         val warn = when {
                             scriptIdx > 0 -> "已切換至音源「${ls.script.name}」"
@@ -96,7 +108,7 @@ class SourceManager(
 
         if (fallbackEnabled) {
             val qForFallback = if (track.qualities.contains(preferred)) preferred else (track.qualities.firstOrNull() ?: Quality.K128)
-            runCatching { builtIn.resolve(track, qForFallback) }.getOrNull()?.let { res ->
+            attempt { builtIn.resolve(track, qForFallback) }.getOrNull()?.let { res ->
                 return ResolvedTrack(res.url, ResolveOrigin.DirectFallback, qForFallback, res.warning)
             }
         }
@@ -117,7 +129,7 @@ class SourceManager(
                 alt.qualities.toSet(),
                 altLS.capabilities.sources[alt.source]?.qualities?.toSet() ?: emptySet(),
             )
-            runCatching { resolveViaScript(alt, q, altLS) }.getOrNull()?.let { url ->
+            attempt { resolveViaScript(alt, q, altLS) }.getOrNull()?.let { url ->
                 val warn = "原本的 ${track.source.displayName} 音源無法取得播放網址，已切換至 ${alt.source.displayName}"
                 return ResolvedTrack(url, ResolveOrigin.OtherSource(alt.source), q, warn)
             }
