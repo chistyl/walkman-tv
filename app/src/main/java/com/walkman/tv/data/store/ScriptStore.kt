@@ -4,7 +4,8 @@ import android.content.Context
 import com.walkman.tv.data.model.UserScript
 import com.walkman.tv.source.SourceManager
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,10 +31,15 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
      * The bundled script performs network requests during initialization. Keep that operation
      * bounded and best-effort so an unavailable third-party service cannot prevent app startup.
      */
-    suspend fun loadAll() {
+    suspend fun loadAll(installBundled: Boolean = true) {
         val persisted = withContext(Dispatchers.IO) { store.load() }
         _scripts.value = persisted
         persisted.filter { it.enabled }.forEach { sourceManager.load(it) }
+        if (installBundled) installBundledYehuaIfMissing()
+    }
+
+    /** Optional first-run source setup; callers may defer this network work until after startup. */
+    suspend fun installBundledIfMissing() {
         installBundledYehuaIfMissing()
     }
 
@@ -42,17 +48,26 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
         // a user's manually imported copy, even if its author metadata differs.
         if (_scripts.value.any { it.name.trim() in BUNDLED_YEHUA_NAMES }) return
 
-        val raw = runCatching {
+        val raw = try {
             withContext(Dispatchers.IO) {
                 context.assets.open(BUNDLED_YEHUA_ASSET).bufferedReader(Charsets.UTF_8).use { it.readText() }
             }
-        }.getOrNull() ?: return
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            return
+        }
 
         // Do not block startup indefinitely on a third-party source's init/network requests.
-        val imported = runCatching {
-            withTimeout(BUNDLED_IMPORT_TIMEOUT_MS) { import(raw) }
-        }.getOrElse {
-            android.util.Log.w(TAG, "Bundled 野花 v1 source import timed out or failed: ${it.message}")
+        val imported = try {
+            withTimeoutOrNull(BUNDLED_IMPORT_TIMEOUT_MS) { import(raw) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            android.util.Log.w(TAG, "Bundled 野花 v1 source import failed: ${error.message}")
+            return
+        } ?: run {
+            android.util.Log.w(TAG, "Bundled 野花 v1 source import timed out")
             return
         }
         imported.onFailure {
