@@ -63,6 +63,27 @@ class LyricParserTest {
     }
 
     @Test
+    fun parsesKrcWordTimesRelativeToLineOffset() {
+        val lines = LyricParser.parse("[1000,800](0,300)你(300,500)好")
+        assertEquals(1, lines.size)
+        assertEquals("你好", lines.single().text)
+        assertEquals(1000L, lines.single().words[0].startMs)
+        assertEquals(300L, lines.single().words[0].durationMs)
+        assertEquals(1300L, lines.single().words[1].startMs)
+        assertEquals(500L, lines.single().words[1].durationMs)
+    }
+
+    @Test
+    fun parsesQrcXmlLyricContentAttribute() {
+        val xml = """<QrcInfos><LyricInfo><Lyric_1 LyricContent="[1000,500]你(1000,200)好(1200,300)" /></LyricInfo></QrcInfos>"""
+        val lines = LyricParser.parse(xml)
+        assertEquals(1, lines.size)
+        assertEquals("你好", lines.single().text)
+        assertEquals(1000L, lines.single().words[0].startMs)
+        assertEquals(1200L, lines.single().words[1].startMs)
+    }
+
+    @Test
     fun keepsPlainLrcAsLineLyrics() {
         val plain = LyricParser.parse("[00:02.00]AB")
         assertTrue(plain.single().words.isEmpty())
