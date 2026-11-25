@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -116,6 +117,7 @@ fun SonglistScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                 loading -> LoadingState(Modifier.fillMaxSize())
                 lists.isNotEmpty() -> LazyVerticalGrid(
                     columns = GridCells.Fixed(4),
+                    contentPadding = PaddingValues(top = 12.dp),
                     modifier = Modifier.fillMaxWidth().weight(1f)
                         .padding(top = 8.dp)
                         .focusRestorer(), // restore the previously-focused card on back-nav
