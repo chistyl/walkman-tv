@@ -47,7 +47,7 @@ class BuiltInLyricResolver(private val http: CatalogHttp) {
         val headers = ua + mapOf("Referer" to "https://y.qq.com/portal/player.html")
         val json = attempt {
             JSONObject(http.getText("https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid=$songmid&g_tk=5381&loginUin=0&hostUin=0&format=json&inCharset=utf8&outCharset=utf-8&platform=yqq", headers))
-        }.getOrNull() ?: return null
+        } ?: return null
         if (json.optInt("code") != 0) return null
         val lrc = decodeB64(json.optString("lyric")) ?: return null
         val trans = json.optString("trans").ifEmpty { null }?.let { decodeB64(it) }
@@ -55,7 +55,7 @@ class BuiltInLyricResolver(private val http: CatalogHttp) {
     }
 
     private suspend fun netease(songmid: String): List<LyricLine>? {
-        val json = runCatching {
+        val json = attempt {
             JSONObject(http.getText("https://music.163.com/api/song/lyric?id=$songmid&lv=1&kv=1&tv=-1", ua + mapOf("Referer" to "https://music.163.com/")))
         }.getOrNull() ?: return null
         val lyric = json.optJSONObject("lrc")?.optString("lyric") ?: ""
