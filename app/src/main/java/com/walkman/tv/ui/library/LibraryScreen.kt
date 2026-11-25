@@ -317,10 +317,14 @@ private fun PlaylistGrid(
 
 @Composable
 private fun PlaylistCard(playlist: Playlist, onClick: () -> Unit) {
+    val cachedTrackIDs by appContainer.coverCache.cachedTrackIDs.collectAsState()
+    val coverURLs = remember(playlist.tracks, cachedTrackIDs) {
+        playlist.tracks.take(4).map(appContainer.coverCache::displayCoverURL)
+    }
     TvFocusable(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(8.dp)) {
             CoverMosaic(
-                urls = playlist.tracks.take(4).map { it.picURL },
+                urls = coverURLs,
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1f)
@@ -420,6 +424,10 @@ private fun PlaylistDetailPane(
     val scope = rememberCoroutineScope()
     val rescanProgress by com.walkman.tv.playback.local.LocalPlaylistRescan.progress.collectAsState()
     val scanning = rescanProgress[playlist.id]
+    val cachedTrackIDs by appContainer.coverCache.cachedTrackIDs.collectAsState()
+    val coverURLs = remember(playlist.tracks, cachedTrackIDs) {
+        playlist.tracks.take(4).map(appContainer.coverCache::displayCoverURL)
+    }
     val canRescan = remember(playlist.tracks) {
         com.walkman.tv.playback.local.LocalPlaylistRescan
             .rescannableFolders(playlist, appContainer.localMusicStore).isNotEmpty()
@@ -428,7 +436,7 @@ private fun PlaylistDetailPane(
     Column(modifier = Modifier.fillMaxSize()) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
             CoverMosaic(
-                urls = playlist.tracks.take(4).map { it.picURL },
+                urls = coverURLs,
                 modifier = Modifier.size(96.dp).clip(RoundedCornerShape(12.dp)),
             )
             Spacer(Modifier.width(14.dp))

@@ -6,6 +6,7 @@ import com.walkman.tv.data.model.SonglistTag
 import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.source.catalog.Boards
 import com.walkman.tv.source.catalog.Songlists
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -62,6 +63,15 @@ class HomeStore(
         load(srcs)
     }
 
+    private suspend fun <T> fetchOrEmpty(block: suspend () -> List<T>): List<T> =
+        try {
+            block()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            emptyList()
+        }
+
     private fun load(srcs: List<SourceID>) {
         loadJob?.cancel()
         if (srcs.isEmpty()) {
@@ -76,52 +86,61 @@ class HomeStore(
         loadJob = scope.launch {
             _state.update { it.copy(isLoading = true, sources = srcs) }
 
-            // Section 3 step 1: parallel songlist fetch per source.
-            val groups: Map<SourceID, List<SonglistInfo>> = coroutineScope {
-                srcs.map { s ->
-                    async {
-                        val svc = songlists.serviceFor(s)
-                        if (svc == null) return@async s to emptyList()
-                        val order = svc.orders.firstOrNull() ?: return@async s to emptyList()
-                        val list = runCatching { svc.fetchRecommended(order, SonglistTag.ALL, 1) }
-                            .getOrDefault(emptyList())
-                        s to list
-                    }
-                }.awaitAll().toMap()
-            }
+            // Start recommendations and boards together. Publish the recommendation section
+            // as soon as its requests finish; don't make the first useful home content wait for
+            // slower ranking endpoints.
+            coroutineScope {
+                val recommendationsJob = async {
+                    srcs.map { s ->
+                        async sourceFetch@{
+                            val svc = songlists.serviceFor(s)
+                            if (svc == null) return@sourceFetch s to emptyList()
+                            val order = svc.orders.firstOrNull() ?: return@sourceFetch s to emptyList()
+                            val list = fetchOrEmpty { svc.fetchRecommended(order, SonglistTag.ALL, 1) }
+                            s to list
+                        }
+                    }.awaitAll().toMap()
+                }
+                val boardsJob = async {
+                    srcs.map { s ->
+                        async sourceFetch@{
+                            val svc = boards.serviceFor(s)
+                            if (svc == null) return@sourceFetch s to emptyList()
+                            s to fetchOrEmpty { svc.fetchBoards() }
+                        }
+                    }.awaitAll().toMap()
+                }
 
-            // Step 2: hero pool — 1 per enabled source (the first of its recommendations).
-            val heroes = srcs.mapNotNull { s -> groups[s]?.firstOrNull()?.let { HeroItem(it, s) } }
+                val groups = recommendationsJob.await()
 
-            // Step 3: recommendation tail interleave — never two in a row from the same source.
-            val tails = srcs.associateWith { groups[it].orEmpty().drop(1).take(8) }
-            val recs = mutableListOf<SonglistInfo>()
-            val maxSize = tails.values.maxOfOrNull { it.size } ?: 0
-            for (i in 0 until maxSize) {
-                for (s in srcs) tails[s]?.getOrNull(i)?.let { recs += it }
-            }
-            val recommendations = recs.take(12)
+                // Hero pool — 1 per enabled source (the first of its recommendations).
+                val heroes = srcs.mapNotNull { s -> groups[s]?.firstOrNull()?.let { HeroItem(it, s) } }
 
-            // Step 4: boards — parallel fetch, then quota-balance across enabled sources.
-            val boardsBySource: Map<SourceID, List<BoardInfo>> = coroutineScope {
-                srcs.map { s ->
-                    async {
-                        val svc = boards.serviceFor(s)
-                        if (svc == null) return@async s to emptyList()
-                        s to runCatching { svc.fetchBoards() }.getOrDefault(emptyList())
-                    }
-                }.awaitAll().toMap()
-            }
-            val boardList = balanceBoards(srcs, boardsBySource, totalTarget = 12)
+                // Recommendation tail interleave — never two in a row from the same source.
+                val tails = srcs.associateWith { groups[it].orEmpty().drop(1).take(8) }
+                val recs = mutableListOf<SonglistInfo>()
+                val maxSize = tails.values.maxOfOrNull { it.size } ?: 0
+                for (i in 0 until maxSize) {
+                    for (s in srcs) tails[s]?.getOrNull(i)?.let { recs += it }
+                }
 
-            _state.update {
-                it.copy(
-                    isLoading = false,
-                    heroes = heroes,
-                    recommendations = recommendations,
-                    boards = boardList,
-                    sources = srcs,
-                )
+                _state.update {
+                    it.copy(
+                        heroes = heroes,
+                        recommendations = recs.take(12),
+                        sources = srcs,
+                    )
+                }
+
+                // Rankings remain in flight while the hero/recommendation UI becomes usable.
+                val boardList = balanceBoards(srcs, boardsJob.await(), totalTarget = 12)
+                _state.update {
+                    it.copy(
+                        isLoading = false,
+                        boards = boardList,
+                        sources = srcs,
+                    )
+                }
             }
         }
     }

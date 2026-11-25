@@ -69,3 +69,14 @@ jobs:
           name: walkman-tv-debug-universal
           path: app/build/outputs/apk/debug/*-universal-debug.apk
           if-no-files-found: error
+
+      # Export the exact checked-out source snapshot for reproducible handoff.
+      - name: Create source archive
+        run: git archive --format=zip --output=walkman-tv-source.zip HEAD
+
+      - name: Upload complete source ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: walkman-tv-source
+          path: walkman-tv-source.zip
+          if-no-files-found: error

@@ -4,10 +4,13 @@ import android.content.Context
 import com.walkman.tv.data.model.UserScript
 import com.walkman.tv.source.SourceManager
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 import java.io.File
@@ -20,6 +23,8 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
         emptyList(),
     )
 
+    private val mutationMutex = Mutex()
+
     private val _scripts = MutableStateFlow<List<UserScript>>(emptyList())
     val scripts: StateFlow<List<UserScript>> = _scripts.asStateFlow()
 
@@ -30,33 +35,49 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
      * The bundled script performs network requests during initialization. Keep that operation
      * bounded and best-effort so an unavailable third-party service cannot prevent app startup.
      */
-    suspend fun loadAll() {
+    suspend fun loadAll(installBundled: Boolean = true) {
         val persisted = withContext(Dispatchers.IO) { store.load() }
         _scripts.value = persisted
         persisted.filter { it.enabled }.forEach { sourceManager.load(it) }
+        if (installBundled) installBundledYehuaIfMissing()
+    }
+
+    /** Optional first-run source setup; callers may defer this network work until after startup. */
+    suspend fun installBundledIfMissing() {
         installBundledYehuaIfMissing()
     }
 
     private suspend fun installBundledYehuaIfMissing() {
+        mutationMutex.withLock {
         // Treat either historical display name as an existing installation. This also protects
         // a user's manually imported copy, even if its author metadata differs.
         if (_scripts.value.any { it.name.trim() in BUNDLED_YEHUA_NAMES }) return
 
-        val raw = runCatching {
+        val raw = try {
             withContext(Dispatchers.IO) {
                 context.assets.open(BUNDLED_YEHUA_ASSET).bufferedReader(Charsets.UTF_8).use { it.readText() }
             }
-        }.getOrNull() ?: return
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            return
+        }
 
         // Do not block startup indefinitely on a third-party source's init/network requests.
-        val imported = runCatching {
-            withTimeout(BUNDLED_IMPORT_TIMEOUT_MS) { import(raw) }
-        }.getOrElse {
-            android.util.Log.w(TAG, "Bundled 野花 v1 source import timed out or failed: ${it.message}")
+        val imported = try {
+            withTimeoutOrNull(BUNDLED_IMPORT_TIMEOUT_MS) { importUnlocked(raw) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            android.util.Log.w(TAG, "Bundled 野花 v1 source import failed: ${error.message}")
+            return
+        } ?: run {
+            android.util.Log.w(TAG, "Bundled 野花 v1 source import timed out")
             return
         }
         imported.onFailure {
             android.util.Log.w(TAG, "Bundled 野花 v1 source was rejected: ${it.message}")
+        }
         }
     }
 
@@ -75,7 +96,12 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
      * stayed loaded in [SourceManager] invisibly — and same-named scripts by different authors
      * are kept side by side instead of silently overwriting each other.
      */
-    suspend fun import(raw: String): Result<Imported> {
+    suspend fun import(raw: String): Result<Imported> = mutationMutex.withLock {
+        importUnlocked(raw)
+    }
+
+    /** Caller must hold [mutationMutex] so bundled and user imports cannot race. */
+    private suspend fun importUnlocked(raw: String): Result<Imported> {
         val meta = parseHeader(raw)
         val script = UserScript(
             name = meta["name"] ?: "未命名脚本",
@@ -104,13 +130,15 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
     }
 
     suspend fun setEnabled(id: String, enabled: Boolean) {
-        val script = _scripts.value.firstOrNull { it.id == id } ?: return
+        mutationMutex.withLock {
+        val script = _scripts.value.firstOrNull { it.id == id } ?: return@withLock
         _scripts.value = _scripts.value.map { if (it.id == id) it.copy(enabled = enabled) else it }
         if (enabled) sourceManager.load(script.copy(enabled = true)) else sourceManager.unload(id)
         persist()
+        }
     }
 
-    suspend fun remove(id: String) {
+    suspend fun remove(id: String) = mutationMutex.withLock {
         sourceManager.unload(id)
         _scripts.value = _scripts.value.filter { it.id != id }
         persist()

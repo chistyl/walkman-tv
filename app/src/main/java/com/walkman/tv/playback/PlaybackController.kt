@@ -21,6 +21,7 @@ import com.walkman.tv.data.model.Track
 import com.walkman.tv.source.ResolveOrigin
 import com.walkman.tv.source.ResolvedTrack
 import com.walkman.tv.source.SourceManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -227,6 +228,7 @@ class PlaybackController(
     var preferredQuality: Quality = Quality.K320
 
     private var resolveJob: Job? = null
+    private var lyricsJob: Job? = null
 
     init {
         player.addListener(object : Player.Listener {
@@ -380,7 +382,13 @@ class PlaybackController(
                     ),
                 )
             } else {
-                runCatching { sources.resolveMusicURL(track, effectivePreferred) }
+                try {
+                    Result.success(sources.resolveMusicURL(track, effectivePreferred))
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    Result.failure(error)
+                }
             }
             runCatching { playResolvedOrFail(track, resolved) }
                 .onFailure { e ->
@@ -555,6 +563,8 @@ class PlaybackController(
     fun toggleShuffle() { _state.value = _state.value.copy(shuffle = !_state.value.shuffle) }
 
     fun stop() {
+        resolveJob?.cancel()
+        lyricsJob?.cancel()
         player.stop()
         player.clearMediaItems()
         _state.value = PlaybackState()
@@ -590,9 +600,17 @@ class PlaybackController(
     }
 
     private fun loadLyrics(track: Track) {
+        // A previous track's slow lyric fallback must not keep consuming network capacity.
+        lyricsJob?.cancel()
         _lyrics.value = emptyList()
-        scope.launch {
-            val lines = runCatching { lyricsFetcher.fetch(track) }.getOrDefault(emptyList())
+        lyricsJob = scope.launch {
+            val lines = try {
+                lyricsFetcher.fetch(track).orEmpty()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                emptyList()
+            }
             if (_state.value.currentTrack?.id == track.id) _lyrics.value = lines
         }
     }
@@ -645,6 +663,8 @@ class PlaybackController(
 
     fun release() {
         resolveJob?.cancel()
+        lyricsJob?.cancel()
+        probeJob?.cancel()
         player.release()
     }
 

@@ -28,7 +28,13 @@ class LyricsFetcher(
     }
 
     private suspend fun tryScript(track: Track): List<LyricLine>? {
-        val result = runCatching { sources.requestLyric(track) }.getOrNull() ?: return null
+        val result = try {
+            sources.requestLyric(track)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        } ?: return null
         // Some compatible scripts expose enhanced LRC as lxlyric instead of lyric.
         val lyric = result.optString("lyric").ifEmpty { result.optString("lxlyric") }
         val tlyric = result.optString("tlyric").ifEmpty { null }

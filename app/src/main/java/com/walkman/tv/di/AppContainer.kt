@@ -10,6 +10,8 @@ import com.walkman.tv.playback.EqualizerManager
 import com.walkman.tv.playback.LyricsFetcher
 import com.walkman.tv.playback.PlaybackController
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -165,19 +167,22 @@ class AppContainer(val appContext: Context) {
     @Volatile private var hotSearchCachedAt: Long = 0L
 
     /** Blocking hot-search JSON: [{"source":"kw","name":"酷我","words":[...]}, ...]. */
+    @Synchronized
     private fun hotSearchJsonBlocking(): String {
         val now = System.currentTimeMillis()
-        if (now - hotSearchCachedAt < 5 * 60_000L && hotSearchCache != "[]") return hotSearchCache
+        if (now - hotSearchCachedAt < 5 * 60_000L) return hotSearchCache
         val json = runCatching {
             kotlinx.coroutines.runBlocking {
                 val cols = hotSearch.fetchAll()
                 buildString {
+                    // Emit JSON punctuation as characters; provider text is escaped centrally.
                     append('[')
                     cols.forEachIndexed { i, col ->
                         if (i > 0) append(',')
-                        append("{\"source\":\"").append(col.source.key)
-                        append("\",\"name\":\"").append(col.source.displayName)
-                        append("\",\"words\":[")
+                        append('{')
+                        append('"').append("source").append('"').append(':').append('"').append(jsonEscape(col.source.key)).append('"')
+                        append(',').append('"').append("name").append('"').append(':').append('"').append(jsonEscape(col.source.displayName)).append('"')
+                        append(',').append('"').append("words").append('"').append(':').append('[')
                         col.words.forEachIndexed { j, w ->
                             if (j > 0) append(',')
                             append('"').append(jsonEscape(w)).append('"')
@@ -188,10 +193,12 @@ class AppContainer(val appContext: Context) {
                 }
             }
         }.getOrDefault("[]")
-        if (json != "[]") { hotSearchCache = json; hotSearchCachedAt = now }
+        // Cache empty/error responses too; otherwise an unavailable provider set triggers a
+        // full four-platform network fan-out on every phone-page refresh.
+        hotSearchCache = json
+        hotSearchCachedAt = System.currentTimeMillis()
         return json
     }
-
     private fun jsonEscape(s: String): String = buildString {
         for (c in s) when (c) {
             '"' -> append("\\\"")
@@ -221,27 +228,41 @@ class AppContainer(val appContext: Context) {
         }
         appScope.launch {
             settingsStore.loadAll()
-            libraryStore.loadAll()
-            settingsStore.settings.onEach { s ->
-                playbackController.preferredQuality = s.preferredQuality
-                // 硬件直通会把未解码的数据直接交给音频硬件，绕过解码器；强制软解时一并关掉。
-                playbackController.setAudioOffloadEnabled(s.audioOffloadEnabled && !s.forceSoftwareDecoding)
-                playbackController.forceSoftwareDecoding = s.forceSoftwareDecoding
-                sourceManager.fallbackEnabled = s.fallbackEnabled
-                downloadStore.configuredRoot = s.customDownloadDir?.let { java.io.File(it) }
-                downloadStore.downloadTreeUri = s.customDownloadTreeUri?.let { runCatching { android.net.Uri.parse(it) }.getOrNull() }
-                downloadCoordinator.setMaxConcurrent(s.maxConcurrentDownloads)
-            }.launchIn(appScope)
-            scriptStore.loadAll()
-            searchHistoryStore.load()
-            coverCache.loadAll()
-            downloadStore.loadAll()
-            localFolderStore.loadAll()
+
+            // Apply the loaded settings synchronously before starting dependent store reads.
+            // In particular, DownloadStore.loadAll() must see the user's configured root/tree
+            // URI; relying only on launchIn(StateFlow) can race the parallel startup jobs below.
+            applySettings(settingsStore.settings.value)
+            settingsStore.settings.onEach(::applySettings).launchIn(appScope)
+
+            // These stores are independent at startup. Load them concurrently instead of
+            // serially waiting for each disk read; custom scripts still finish before snapshot
+            // restoration because the saved queue may need those sources to resolve.
+            coroutineScope {
+                val scripts = async { scriptStore.loadAll(installBundled = false) }
+                val library = async { libraryStore.loadAll() }
+                val history = async { searchHistoryStore.load() }
+                val covers = async { coverCache.loadAll() }
+                val downloads = async { downloadStore.loadAll() }
+                val localFolders = async { localFolderStore.loadAll() }
+
+                scripts.await()
+                library.await()
+                history.await()
+                covers.await()
+                downloads.await()
+                localFolders.await()
+            }
 
             // Restore last session's queue + index + playing state. Run after scripts load so
             // any custom-source needed to resolve URLs is ready.
             val snapshot = playbackSnapshotStore.load()
             playbackController.restoreSnapshot(snapshot)
+
+            // The bundled third-party source is optional for restoring the previous session.
+            // Initialize it in the background so its network startup timeout cannot delay first
+            // interaction or playback restoration.
+            appScope.launch { scriptStore.installBundledIfMissing() }
 
             // Auto-save the snapshot whenever queue/index/isPlaying changes. distinctUntilChanged
             // already coalesces the high-frequency position ticks since we only project the three
@@ -252,6 +273,17 @@ class AppContainer(val appContext: Context) {
                 .onEach { playbackSnapshotStore.save(playbackController.snapshot()) }
                 .launchIn(appScope)
         }
+    }
+
+    private fun applySettings(s: com.walkman.tv.data.store.Settings) {
+        playbackController.preferredQuality = s.preferredQuality
+        // 硬件直通会把未解码的数据直接交给音频硬件，绕过解码器；强制软解时一并关掉。
+        playbackController.setAudioOffloadEnabled(s.audioOffloadEnabled && !s.forceSoftwareDecoding)
+        playbackController.forceSoftwareDecoding = s.forceSoftwareDecoding
+        sourceManager.fallbackEnabled = s.fallbackEnabled
+        downloadStore.configuredRoot = s.customDownloadDir?.let { java.io.File(it) }
+        downloadStore.downloadTreeUri = s.customDownloadTreeUri?.let { runCatching { android.net.Uri.parse(it) }.getOrNull() }
+        downloadCoordinator.setMaxConcurrent(s.maxConcurrentDownloads)
     }
 
     /** Synchronous final save — called right before the process is killed on user-confirmed exit. */

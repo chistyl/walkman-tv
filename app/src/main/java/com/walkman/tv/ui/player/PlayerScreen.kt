@@ -100,6 +100,10 @@ fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
   val progressFocus = remember { FocusRequester() }
 
   val track = state.currentTrack
+  val cachedTrackIDs by appContainer.coverCache.cachedTrackIDs.collectAsState()
+  val coverURL = remember(track?.id, track?.picURL, cachedTrackIDs) {
+    track?.let(appContainer.coverCache::displayCoverURL)
+  }
 
   var showEqDialog by remember { mutableStateOf(false) }
   var showPicker by remember { mutableStateOf(false) }
@@ -186,7 +190,7 @@ fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
   }
 
   Box(modifier = modifier.fillMaxSize().background(AppColors.BgDeep)) {
-    CoverBackdrop(picURL = track?.picURL)
+    CoverBackdrop(picURL = coverURL)
 
     if (track == null) {
       Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -245,7 +249,7 @@ fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
           contentAlignment = Alignment.Center,
         ) {
           VinylDisc(
-            picURL = track.picURL,
+            picURL = coverURL,
             isPlaying = state.isPlaying,
             palette = vinylPalette(settings.vinylColor),
             modifier = Modifier.fillMaxSize()
