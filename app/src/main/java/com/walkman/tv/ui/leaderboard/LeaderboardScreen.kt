@@ -39,6 +39,9 @@ import com.walkman.tv.util.ChineseText
 
 private val boardSources = listOf(SourceID.KW, SourceID.WY, SourceID.KG, SourceID.TX)
 
+// Reuse previously loaded chart tracks immediately when users revisit a leaderboard.
+private val leaderboardTrackCache = LinkedHashMap<String, List<Track>>()
+
 @Composable
 fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     var source by remember { mutableStateOf(SourceID.KW) }
@@ -65,10 +68,17 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     // trigger a second identical song request.
     LaunchedEffect(selected?.source, selected?.bangid) {
         val board = selected ?: return@LaunchedEffect
-        loadingTracks = true
-        tracks = emptyList()
-        tracks = fetchOr(emptyList()) {
+        val cacheKey = board.source.key + ":" + board.bangid
+        val cached = leaderboardTrackCache[cacheKey].orEmpty()
+        tracks = cached
+        loadingTracks = cached.isEmpty()
+        val fresh = fetchOr(cached) {
             appContainer.boards.serviceFor(board.source)?.fetchTracks(board.bangid, 1) ?: emptyList()
+        }
+        if (fresh.isNotEmpty()) {
+            leaderboardTrackCache[cacheKey] = fresh
+            while (leaderboardTrackCache.size > 24) leaderboardTrackCache.remove(leaderboardTrackCache.keys.first())
+            tracks = fresh
         }
         loadingTracks = false
     }
