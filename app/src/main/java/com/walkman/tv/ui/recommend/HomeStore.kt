@@ -6,6 +6,7 @@ import com.walkman.tv.data.model.SonglistTag
 import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.source.catalog.Boards
 import com.walkman.tv.source.catalog.Songlists
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -62,6 +63,15 @@ class HomeStore(
         load(srcs)
     }
 
+    private suspend fun <T> fetchOrEmpty(block: suspend () -> List<T>): List<T> =
+        try {
+            block()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            emptyList()
+        }
+
     private fun load(srcs: List<SourceID>) {
         loadJob?.cancel()
         if (srcs.isEmpty()) {
@@ -78,7 +88,7 @@ class HomeStore(
 
             // Start recommendations and boards together. Previously board requests only began
             // after every recommendation provider had completed, adding two network phases.
-            val (groups, boardsBySource): Pair<
+            val fetched: Pair<
                 Map<SourceID, List<SonglistInfo>>,
                 Map<SourceID, List<BoardInfo>>,
             > = coroutineScope {
@@ -88,8 +98,7 @@ class HomeStore(
                             val svc = songlists.serviceFor(s)
                             if (svc == null) return@sourceFetch s to emptyList()
                             val order = svc.orders.firstOrNull() ?: return@sourceFetch s to emptyList()
-                            val list = runCatching { svc.fetchRecommended(order, SonglistTag.ALL, 1) }
-                                .getOrDefault(emptyList())
+                            val list = fetchOrEmpty { svc.fetchRecommended(order, SonglistTag.ALL, 1) }
                             s to list
                         }
                     }.awaitAll().toMap()
@@ -99,12 +108,13 @@ class HomeStore(
                         async sourceFetch@{
                             val svc = boards.serviceFor(s)
                             if (svc == null) return@sourceFetch s to emptyList()
-                            s to runCatching { svc.fetchBoards() }.getOrDefault(emptyList())
+                            s to fetchOrEmpty { svc.fetchBoards() }
                         }
                     }.awaitAll().toMap()
                 }
                 recommendationsJob.await() to boardsJob.await()
             }
+            val (groups, boardsBySource) = fetched
 
             // Step 2: hero pool — 1 per enabled source (the first of its recommendations).
             val heroes = srcs.mapNotNull { s -> groups[s]?.firstOrNull()?.let { HeroItem(it, s) } }
