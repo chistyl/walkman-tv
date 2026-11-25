@@ -84,10 +84,10 @@ class HomeStore(
             > = coroutineScope {
                 val recommendationsJob = async {
                     srcs.map { s ->
-                        async {
+                        async sourceFetch@{
                             val svc = songlists.serviceFor(s)
-                            if (svc == null) return@async s to emptyList()
-                            val order = svc.orders.firstOrNull() ?: return@async s to emptyList()
+                            if (svc == null) return@sourceFetch s to emptyList()
+                            val order = svc.orders.firstOrNull() ?: return@sourceFetch s to emptyList()
                             val list = runCatching { svc.fetchRecommended(order, SonglistTag.ALL, 1) }
                                 .getOrDefault(emptyList())
                             s to list
@@ -96,9 +96,9 @@ class HomeStore(
                 }
                 val boardsJob = async {
                     srcs.map { s ->
-                        async {
+                        async sourceFetch@{
                             val svc = boards.serviceFor(s)
-                            if (svc == null) return@async s to emptyList()
+                            if (svc == null) return@sourceFetch s to emptyList()
                             s to runCatching { svc.fetchBoards() }.getOrDefault(emptyList())
                         }
                     }.awaitAll().toMap()
