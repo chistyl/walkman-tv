@@ -156,10 +156,9 @@ class PlaybackController(
         const val MAX_CONSECUTIVE_FAILURES = 3
 
         /**
-         * Build ExoPlayer using Media3's standard audio sink. Avoid custom PCM processor,
-         * float output and AudioTrack playback-parameter paths because several Android TV
-         * vendor audio HAL implementations are unstable with those optional paths.
-         * Audio offload remains disabled for consistent PCM output on Android 9+.
+         * Build ExoPlayer with a PCM processor chain for the level meter and optional
+         * stereo center-channel cancellation. Float output and audio offload stay disabled
+         * so the processors receive PCM on Android TV devices.
          */
         fun buildPlayer(
             appContext: android.content.Context,
@@ -177,8 +176,8 @@ class PlaybackController(
                 .setPrioritizeTimeOverSizeThresholds(true)
                 .build()
 
-            // Use Media3's stock audio sink and PCM conversion path. Keep decoder fallback
-            // enabled so a device-specific hardware decoder rejection can fall back safely.
+            // Keep Media3's standard sink and decoder fallback, adding only the PCM processors
+            // needed for the waveform meter and user-controlled vocal reduction.
             val renderersFactory = object : DefaultRenderersFactory(appContext) {
                 override fun buildAudioSink(
                     context: Context,
