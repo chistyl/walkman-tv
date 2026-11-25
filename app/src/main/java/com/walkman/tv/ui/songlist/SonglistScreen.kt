@@ -41,6 +41,9 @@ import com.walkman.tv.ui.components.LoadingState
 import com.walkman.tv.ui.components.MediaCard
 import com.walkman.tv.ui.components.TvPill
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 
 private val songlistSources = listOf(SourceID.KW, SourceID.WY, SourceID.KG, SourceID.TX)
 
@@ -67,6 +70,24 @@ fun SonglistScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     var loadingDetail by remember { mutableStateOf(false) }
 
     val service = appContainer.songlists.serviceFor(source)
+
+    // Warm the first page from the other providers in parallel so switching source feels instant.
+    // The active provider is handled by the normal screen effect and is intentionally excluded.
+    LaunchedEffect(Unit) {
+        coroutineScope {
+            songlistSources.filter { it != source }.map { sourceId ->
+                async {
+                    val svc = appContainer.songlists.serviceFor(sourceId) ?: return@async
+                    val order = svc.orders.firstOrNull() ?: return@async
+                    val key = sourceId.key + ":" + order.id + ":" + SonglistTag.ALL.id + ":" + SonglistTag.ALL.name
+                    if (songlistPageCache[key].isNullOrEmpty()) {
+                        val result = fetchOr(emptyList()) { svc.fetchRecommended(order, SonglistTag.ALL, 1) }
+                        if (result.isNotEmpty()) songlistPageCache[key] = result
+                    }
+                }
+            }.awaitAll()
+        }
+    }
 
     LaunchedEffect(source) {
         order = service?.orders?.firstOrNull()
