@@ -29,10 +29,17 @@ class LyricsFetcher(
 
     private suspend fun tryScript(track: Track): List<LyricLine>? {
         val result = runCatching { sources.requestLyric(track) }.getOrNull() ?: return null
-        // Some compatible scripts expose enhanced LRC as lxlyric instead of lyric.
-        val lyric = result.optString("lyric").ifEmpty { result.optString("lxlyric") }
-        val tlyric = result.optString("tlyric").ifEmpty { null }
-        return LyricParser.parse(lyric, tlyric).ifEmpty { null }
+        // Prefer the richest timing payload. Compatible sources may expose YRC/QRC as
+        // yrc/qrc/lxlyric while retaining ordinary LRC in lyric.
+        val translation = result.optString("tlyric").ifEmpty { null }
+        val candidates = listOf("yrc", "qrc", "lxlyric", "lyric", "lrc")
+            .mapNotNull { key -> result.optString(key).takeIf { it.isNotBlank() } }
+            .distinct()
+        val parsed = candidates.mapNotNull { payload ->
+            LyricParser.parse(payload, translation).takeIf { it.isNotEmpty() }
+        }
+        return parsed.firstOrNull { lines -> lines.any { it.words.isNotEmpty() } }
+            ?: parsed.firstOrNull()
     }
 
     /** Retry a transient direct-endpoint failure once before moving to cross-source search. */
