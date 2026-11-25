@@ -20,7 +20,7 @@ class OtherSourceFinder(private val searcher: MusicSearcher) {
                 .filter { it != track.source }
                 .map { src ->
                     async {
-                        src to (runCatching { searcher.search(src, query, 1) }.getOrDefault(emptyList()))
+                        src to (runCatching { searcher.search(src, query, 10) }.getOrDefault(emptyList()))
                     }
                 }
                 .awaitAll()
@@ -61,12 +61,17 @@ class OtherSourceFinder(private val searcher: MusicSearcher) {
                 )
             }
             val intervalFiltered = annotated.filter { intervalOk(it.fInterval) }
-            val hit1 = intervalFiltered.firstOrNull { it.fName == fName && includesSinger(it.fSinger) }
-            if (hit1 != null) { picked.add(hit1); continue }
-            val hit2 = intervalFiltered.firstOrNull { it.fSinger == fSinger && includesName(it.fName) }
-            if (hit2 != null) { picked.add(hit2); continue }
-            val hit3 = intervalFiltered.firstOrNull { equalsAlbum(it.fAlbum) && includesSinger(it.fSinger) && includesName(it.fName) }
-            if (hit3 != null) { picked.add(hit3); continue }
+            // Keep several plausible matches per source. Search APIs often rank a live,
+            // remix, or karaoke version first; taking only result[0] misses the studio track.
+            val matches = intervalFiltered.filter { candidate ->
+                val titleMatch = candidate.fName == fName || includesName(candidate.fName)
+                val singerMatch = fSinger.isEmpty() || candidate.fSinger == fSinger ||
+                    includesSinger(candidate.fSinger)
+                val albumMatch = fAlbum.isEmpty() || equalsAlbum(candidate.fAlbum)
+                (titleMatch && singerMatch) || (titleMatch && albumMatch) ||
+                    (singerMatch && albumMatch)
+            }
+            picked.addAll(matches)
         }
         if (picked.isEmpty()) return emptyList()
 
