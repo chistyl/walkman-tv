@@ -55,7 +55,11 @@ object ChineseText {
         val contextNormalized = sourceContextCorrections.entries.fold(value) { text, (source, target) ->
             text.replace(source, target)
         }
-        val protected = contextNormalized.replace("范", PRESERVE_FAN)
-        return ZhTwConverterUtil.toTraditional(protected).replace(PRESERVE_FAN, "范")
+        val protected = contextNormalized
+            .replace("范", PRESERVE_FAN)
+            .replace("髮", PRESERVE_HAIR)
+        return ZhTwConverterUtil.toTraditional(protected)
+            .replace(PRESERVE_FAN, "范")
+            .replace(PRESERVE_HAIR, "髮")
     }
 }
