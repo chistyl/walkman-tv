@@ -138,9 +138,29 @@ class SourceManager(
 
     /** Ask a user script for lyric data — raw `{lyric, tlyric, rlyric, lxlyric}` (iOS `requestLyric`). */
     suspend fun requestLyric(track: Track): JSONObject? {
-        val ls = scriptFor(track.source, "lyric") ?: throw SourceException("沒有指令碼提供 ${track.source.displayName} 歌詞")
+        val scripts = scriptsFor(track.source, "lyric")
+        if (scripts.isEmpty()) {
+            throw SourceException("沒有指令碼提供 ${track.source.displayName} 歌詞")
+        }
         val info = JSONObject().put("type", "").put("musicInfo", makeOldMusicInfo(track))
-        return ls.runtime.requestAction(track.source, "lyric", info) as? JSONObject
+        for (ls in scripts) {
+            val result = try {
+                ls.runtime.requestAction(track.source, "lyric", info, timeoutMs = 10_000) as? JSONObject
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "lyric script '${ls.script.name}' failed: ${e.message}")
+                null
+            } ?: continue
+
+            // A script may advertise lyric support but return an empty payload for a
+            // particular song. Continue to the next matching script instead of stopping.
+            val hasLyrics = listOf("lyric", "lxlyric", "tlyric")
+                .any { result.optString(it).isNotBlank() }
+            if (hasLyrics) return result
+            Log.d(TAG, "lyric script '${ls.script.name}' returned no lyric data")
+        }
+        return null
     }
 
     fun availableQualities(source: SourceID): List<Quality> {
