@@ -113,11 +113,12 @@ fun SonglistScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
             }
             Spacer(Modifier.padding(top = 6.dp))
             val uniqueLists = remember(lists) { lists.distinctBy { it.id } }
+            Spacer(Modifier.height(12.dp))
             when {
                 loading -> LoadingState(Modifier.fillMaxSize())
                 lists.isNotEmpty() -> LazyVerticalGrid(
                     columns = GridCells.Fixed(4),
-                    contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 8.dp),
+                    contentPadding = PaddingValues(top = 12.dp),
                     modifier = Modifier.fillMaxWidth().weight(1f)
                         .focusRestorer(), // restore the previously-focused card on back-nav
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
