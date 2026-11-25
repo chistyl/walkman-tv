@@ -167,9 +167,10 @@ class AppContainer(val appContext: Context) {
     @Volatile private var hotSearchCachedAt: Long = 0L
 
     /** Blocking hot-search JSON: [{"source":"kw","name":"酷我","words":[...]}, ...]. */
+    @Synchronized
     private fun hotSearchJsonBlocking(): String {
         val now = System.currentTimeMillis()
-        if (now - hotSearchCachedAt < 5 * 60_000L && hotSearchCache != "[]") return hotSearchCache
+        if (now - hotSearchCachedAt < 5 * 60_000L) return hotSearchCache
         val json = runCatching {
             kotlinx.coroutines.runBlocking {
                 val cols = hotSearch.fetchAll()
@@ -177,12 +178,12 @@ class AppContainer(val appContext: Context) {
                     append('[')
                     cols.forEachIndexed { i, col ->
                         if (i > 0) append(',')
-                        append("{\"source\":\"").append(col.source.key)
-                        append("\",\"name\":\"").append(col.source.displayName)
-                        append("\",\"words\":[")
+                        append("{\\"source\\":\\"").append(col.source.key)
+                        append("\\",\\"name\\":\\"").append(col.source.displayName)
+                        append("\\",\\"words\\":[")
                         col.words.forEachIndexed { j, w ->
                             if (j > 0) append(',')
-                            append('"').append(jsonEscape(w)).append('"')
+                            append('\\\"').append(jsonEscape(w)).append('\\\"')
                         }
                         append("]}")
                     }
@@ -190,10 +191,12 @@ class AppContainer(val appContext: Context) {
                 }
             }
         }.getOrDefault("[]")
-        if (json != "[]") { hotSearchCache = json; hotSearchCachedAt = now }
+        // Cache empty/error responses too; otherwise an unavailable provider set triggers a
+        // full four-platform network fan-out on every phone-page refresh.
+        hotSearchCache = json
+        hotSearchCachedAt = System.currentTimeMillis()
         return json
     }
-
     private fun jsonEscape(s: String): String = buildString {
         for (c in s) when (c) {
             '"' -> append("\\\"")
