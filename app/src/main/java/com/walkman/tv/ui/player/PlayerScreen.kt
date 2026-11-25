@@ -297,18 +297,6 @@ fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
               }
             },
             onToggleFav = { showPicker = true },
-            onMv = {
-              android.widget.Toast.makeText(context, "正在取得 MV…", android.widget.Toast.LENGTH_SHORT).show()
-              scope.launch {
-                val info = runCatching { appContainer.mvResolver.getMvUrl(track) }.getOrNull()
-                val url = info?.bestUrl()
-                if (url != null) {
-                  controller.playMvUrl(url)
-                } else {
-                  android.widget.Toast.makeText(context, "目前沒有可用的 MV", android.widget.Toast.LENGTH_SHORT).show()
-                }
-              }
-            },
             onShowQueue = { showMvQueue = true },
             onTuneClick = { showEqDialog = true },
             playFocusRequester = playFocus,
@@ -577,7 +565,6 @@ private fun TransportBar(
   onNext: () -> Unit,
   onCycleRepeat: () -> Unit,
   onToggleFav: () -> Unit,
-  onMv: () -> Unit,
   onShowQueue: () -> Unit,
   onTuneClick: () -> Unit,
   playFocusRequester: FocusRequester? = null,
@@ -592,7 +579,6 @@ private fun TransportBar(
   val playFocus = playFocusRequester ?: remember { FocusRequester() }
   val nextFocus = remember { FocusRequester() }
   val faveFocus = remember { FocusRequester() }
-  val mvFocus = remember { FocusRequester() }
   val queueFocus = remember { FocusRequester() }
   // 播放页盖在主界面上，主界面的控件仍在下面参与焦点查找。交给系统按位置找的话，会找到被盖住的
   // 控件（比如推荐页迷你播放条的上一曲，#24），所以控制栏每个方向都写死。
@@ -699,7 +685,6 @@ private fun TransportBar(
         onClick = onToggleFav,
         modifier = Modifier.focusProperties {
           left = nextFocus
-          right = mvFocus
         },
       )
     }
@@ -708,23 +693,11 @@ private fun TransportBar(
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-      TvPill(
-        onClick = onMv,
-        focusRequester = mvFocus,
-        modifier = Modifier.focusProperties {
-          left = faveFocus
-          right = queueFocus
-        },
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-      ) {
-        Text("MV", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-      }
       IconPill(
         Icons.AutoMirrored.Filled.QueueMusic,
         focusRequester = queueFocus,
         onClick = onShowQueue,
         modifier = Modifier.focusProperties {
-          left = mvFocus
           right = FocusRequester.Cancel
         },
       )
