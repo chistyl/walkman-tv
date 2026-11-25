@@ -95,9 +95,9 @@ fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
   val lyrics by controller.lyrics.collectAsState()
   val love by appContainer.libraryStore.love.collectAsState()
   val settings by appContainer.settingsStore.settings.collectAsState()
+  val vocalRemovalEnabled by controller.vocalRemovalEnabled.collectAsState()
   val lyricSize = settings.lyricSize
   val scope = rememberCoroutineScope()
-  val context = androidx.compose.ui.platform.LocalContext.current
   var showMvQueue by remember { mutableStateOf(false) }
   val playFocus = remember { FocusRequester() }
   val progressFocus = remember { FocusRequester() }
@@ -300,18 +300,8 @@ fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
               }
             },
             onToggleFav = { showPicker = true },
-            onMv = {
-              android.widget.Toast.makeText(context, "正在取得 MV…", android.widget.Toast.LENGTH_SHORT).show()
-              scope.launch {
-                val info = runCatching { appContainer.mvResolver.getMvUrl(track) }.getOrNull()
-                val url = info?.bestUrl()
-                if (url != null) {
-                  controller.playMvUrl(url)
-                } else {
-                  android.widget.Toast.makeText(context, "目前沒有可用的 MV", android.widget.Toast.LENGTH_SHORT).show()
-                }
-              }
-            },
+            vocalRemovalEnabled = vocalRemovalEnabled,
+            onToggleVocalRemoval = { controller.toggleVocalRemoval() },
             onShowQueue = { showMvQueue = true },
             onTuneClick = { showEqDialog = true },
             playFocusRequester = playFocus,
@@ -580,7 +570,8 @@ private fun TransportBar(
   onNext: () -> Unit,
   onCycleRepeat: () -> Unit,
   onToggleFav: () -> Unit,
-  onMv: () -> Unit,
+  vocalRemovalEnabled: Boolean,
+  onToggleVocalRemoval: () -> Unit,
   onShowQueue: () -> Unit,
   onTuneClick: () -> Unit,
   playFocusRequester: FocusRequester? = null,
@@ -595,7 +586,7 @@ private fun TransportBar(
   val playFocus = playFocusRequester ?: remember { FocusRequester() }
   val nextFocus = remember { FocusRequester() }
   val faveFocus = remember { FocusRequester() }
-  val mvFocus = remember { FocusRequester() }
+  val vocalFocus = remember { FocusRequester() }
   val queueFocus = remember { FocusRequester() }
   // 播放页盖在主界面上，主界面的控件仍在下面参与焦点查找。交给系统按位置找的话，会找到被盖住的
   // 控件（比如推荐页迷你播放条的上一曲，#24），所以控制栏每个方向都写死。
@@ -702,7 +693,7 @@ private fun TransportBar(
         onClick = onToggleFav,
         modifier = Modifier.focusProperties {
           left = nextFocus
-          right = mvFocus
+          right = vocalFocus
         },
       )
     }
@@ -712,22 +703,23 @@ private fun TransportBar(
       horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
       TvPill(
-        onClick = onMv,
-        focusRequester = mvFocus,
+        onClick = onToggleVocalRemoval,
+        selected = vocalRemovalEnabled,
+        focusRequester = vocalFocus,
         modifier = Modifier.focusProperties {
           left = faveFocus
           right = queueFocus
         },
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 8.dp),
       ) {
-        Text("MV", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text("消除人聲", fontSize = 12.sp, fontWeight = FontWeight.Bold)
       }
       IconPill(
         Icons.AutoMirrored.Filled.QueueMusic,
         focusRequester = queueFocus,
         onClick = onShowQueue,
         modifier = Modifier.focusProperties {
-          left = mvFocus
+          left = vocalFocus
           right = FocusRequester.Cancel
         },
       )
