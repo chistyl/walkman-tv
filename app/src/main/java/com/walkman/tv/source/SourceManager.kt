@@ -133,7 +133,7 @@ class SourceManager(
         if (scripts.isEmpty()) throw SourceException("沒有指令碼提供 ${track.source.displayName} 歌詞")
         val info = JSONObject().put("type", "").put("musicInfo", makeOldMusicInfo(track))
         for (ls in scripts) {
-            val result = try {
+            val response = try {
                 ls.runtime.requestAction(track.source, "lyric", info, timeoutMs = 10_000) as? JSONObject
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -142,19 +142,37 @@ class SourceManager(
                 null
             } ?: continue
 
-            // Enhanced-only responses were previously rejected here because this gate
-            // checked only lyric/lxlyric/tlyric. The fetcher then fell back to plain LRC.
-            val hasLyrics = LYRIC_PAYLOAD_KEYS.any { key ->
-                when (val value = result.opt(key)) {
-                    is String -> value.isNotBlank()
-                    is JSONObject, is JSONArray -> value.length() > 0
-                    else -> false
-                }
-            }
-            if (hasLyrics) return result
+            // Different source scripts wrap lyric fields at the root or under data/result.
+            // Flatten known containers so enhanced-only YRC/QRC/KRC payloads are not lost.
+            val normalized = collectLyricPayload(response)
+            if (normalized.length() > 0) return normalized
             Log.d(TAG, "lyric script '${ls.script.name}' returned no lyric data")
         }
         return null
+    }
+
+    private fun collectLyricPayload(root: JSONObject): JSONObject {
+        val output = JSONObject()
+        val visited = java.util.Collections.newSetFromMap(
+            java.util.IdentityHashMap<JSONObject, Boolean>(),
+        )
+        fun visit(obj: JSONObject, depth: Int) {
+            if (depth > 4 || !visited.add(obj)) return
+            LYRIC_PAYLOAD_KEYS.forEach { key ->
+                val value = obj.opt(key) ?: return@forEach
+                when (value) {
+                    is String -> if (value.isNotBlank() && !output.has(key)) output.put(key, value)
+                    is JSONObject -> if (value.length() > 0 && !output.has(key)) output.put(key, value.toString())
+                    is JSONArray -> if (value.length() > 0 && !output.has(key)) output.put(key, value.toString())
+                }
+            }
+            listOf("data", "result", "lyrics").forEach { key ->
+                val nested = obj.optJSONObject(key)
+                if (nested != null) visit(nested, depth + 1)
+            }
+        }
+        visit(root, 0)
+        return output
     }
 
     fun availableQualities(source: SourceID): List<Quality> {
