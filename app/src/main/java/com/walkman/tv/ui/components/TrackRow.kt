@@ -97,7 +97,7 @@ fun TrackRow(
                         )
                     }
                 }
-                Artwork(track.picURL, modifier = Modifier.size(44.dp))
+                Artwork(com.walkman.tv.ui.appContainer.coverCache.displayCoverURL(track), modifier = Modifier.size(44.dp))
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
