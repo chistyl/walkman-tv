@@ -49,6 +49,8 @@ object ChineseText {
 
     // Protect remaining 范, including surnames and personal names, from character-level conversion.
     private const val PRESERVE_FAN = "\uE000"
+    // Protect Taiwan-specific 髮 from OpenCC4j character normalization.
+    private const val PRESERVE_HAIR = "\uE001"
 
     fun toTaiwanTraditional(value: String): String {
         if (value.isEmpty()) return value
