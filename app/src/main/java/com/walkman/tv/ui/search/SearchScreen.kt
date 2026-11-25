@@ -71,7 +71,6 @@ import com.walkman.tv.ui.theme.AppColors
 import com.walkman.tv.util.ChineseText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
@@ -116,28 +115,28 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
             // Render each section as soon as its own providers finish instead of waiting for
             // the slower of the song and songlist requests.
             coroutineScope {
-                    launch {
-                        val result = try {
-                            if (f == null) appContainer.catalogs.searchAll(q)
-                            else appContainer.catalogs.search(f, q)
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (_: Exception) {
-                            emptyList()
-                        }
-                        tracks = result
+                launch {
+                    val result = try {
+                        if (f == null) appContainer.catalogs.searchAll(q)
+                        else appContainer.catalogs.search(f, q)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        emptyList()
                     }
-                    launch {
-                        val result = try {
-                            if (f == null) appContainer.songlists.searchAll(q)
-                            else appContainer.songlists.serviceFor(f)?.search(q, 1) ?: emptyList()
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (_: Exception) {
-                            emptyList()
-                        }
-                        songlists = result
+                    tracks = result
+                }
+                launch {
+                    val result = try {
+                        if (f == null) appContainer.songlists.searchAll(q)
+                        else appContainer.songlists.serviceFor(f)?.search(q, 1) ?: emptyList()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        emptyList()
                     }
+                    songlists = result
+                }
             }
             loading = false
         }
