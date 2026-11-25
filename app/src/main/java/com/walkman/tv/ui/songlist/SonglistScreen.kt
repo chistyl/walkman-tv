@@ -117,9 +117,8 @@ fun SonglistScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                 loading -> LoadingState(Modifier.fillMaxSize())
                 lists.isNotEmpty() -> LazyVerticalGrid(
                     columns = GridCells.Fixed(4),
-                    contentPadding = PaddingValues(top = 12.dp),
+                    contentPadding = PaddingValues(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 8.dp),
                     modifier = Modifier.fillMaxWidth().weight(1f)
-                        .padding(top = 8.dp)
                         .focusRestorer(), // restore the previously-focused card on back-nav
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
