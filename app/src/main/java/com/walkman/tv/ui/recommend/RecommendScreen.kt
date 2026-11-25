@@ -92,6 +92,10 @@ private fun NowPlayingPanel(onOpenPlayer: () -> Unit, modifier: Modifier = Modif
   val state by controller.state.collectAsState()
   val lyrics by controller.lyrics.collectAsState()
   val track = state.currentTrack
+  val cachedTrackIDs by appContainer.coverCache.cachedTrackIDs.collectAsState()
+  val coverURL = androidx.compose.runtime.remember(track?.id, track?.picURL, cachedTrackIDs) {
+    track?.let(appContainer.coverCache::displayCoverURL)
+  }
 
   val configuration = androidx.compose.ui.platform.LocalConfiguration.current
   val screenHeight = configuration.screenHeightDp.dp
@@ -110,7 +114,7 @@ private fun NowPlayingPanel(onOpenPlayer: () -> Unit, modifier: Modifier = Modif
       modifier = Modifier.size(coverDynamicSize),
       shape = RoundedCornerShape(12.dp),
     ) {
-      Artwork(track?.picURL, modifier = Modifier.fillMaxSize(), shape = RoundedCornerShape(12.dp))
+      Artwork(coverURL, modifier = Modifier.fillMaxSize(), shape = RoundedCornerShape(12.dp))
     }
     Spacer(Modifier.height(12.dp))
     if (track != null) {
