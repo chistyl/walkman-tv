@@ -53,6 +53,7 @@ import kotlin.math.PI
 import kotlin.math.sin
 import androidx.tv.material3.Text
 import com.walkman.tv.data.model.Track
+import com.walkman.tv.util.ChineseText
 import com.walkman.tv.ui.theme.AppColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -100,7 +101,7 @@ fun TrackRow(
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        track.displayName,
+                        ChineseText.toTaiwanTraditional(track.displayName),
                         color = if (nowPlaying) AppColors.AccentGreen else AppColors.TextPrimary,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -108,7 +109,7 @@ fun TrackRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        track.subtitle,
+                        ChineseText.toTaiwanTraditional(track.subtitle),
                         color = AppColors.TextSecondary,
                         fontSize = 12.sp,
                         maxLines = 1,

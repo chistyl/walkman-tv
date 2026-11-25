@@ -53,6 +53,7 @@ import com.walkman.tv.ui.appContainer
 import com.walkman.tv.ui.components.Artwork
 import com.walkman.tv.ui.components.TvFocusable
 import com.walkman.tv.ui.components.TvPill
+import com.walkman.tv.util.ChineseText
 import com.walkman.tv.ui.theme.AppColors
 
 @Composable
@@ -110,12 +111,12 @@ private fun NowPlayingPanel(onOpenPlayer: () -> Unit, modifier: Modifier = Modif
     }
     Spacer(Modifier.height(12.dp))
     if (track != null) {
-      Text(track.displayName, color = AppColors.TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-      Text(track.displaySinger, color = AppColors.TextSecondary, fontSize = 13.sp, maxLines = 1)
+      Text(ChineseText.toTaiwanTraditional(track.displayName), color = AppColors.TextPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+      Text(ChineseText.toTaiwanTraditional(track.displaySinger), color = AppColors.TextSecondary, fontSize = 13.sp, maxLines = 1)
       Spacer(Modifier.height(8.dp))
       val active = LyricParser.activeIndex(state.positionMs / 1000.0, lyrics)
       val line = lyrics.getOrNull(active)?.text ?: if (state.resolving) "解析中…" else ""
-      Text(line, color = AppColors.LyricIdle, fontSize = 13.sp, maxLines = 1)
+      Text(ChineseText.toTaiwanTraditional(line), color = AppColors.LyricIdle, fontSize = 13.sp, maxLines = 1)
     } else {
       Text("目前沒有播放內容，前往推薦頁選擇歌曲即可開始播放", color = AppColors.TextSecondary, fontSize = 14.sp)
     }
@@ -218,7 +219,7 @@ private fun RecommendGrid(
     appContainer.homeStore.loadIfNeeded(settings.homeSources)
   }
 
-  val activeLabel = home.sources.joinToString(" · ") { it.displayName }
+  val activeLabel = ChineseText.toTaiwanTraditional(home.sources.joinToString(" · ") { it.displayName })
 
   fun openSonglist(info: com.walkman.tv.data.model.SonglistInfo) {
     if (loadingDetail) return
@@ -228,7 +229,7 @@ private fun RecommendGrid(
       val d = runCatching { svc?.fetchDetail(info) }.getOrNull()
       detail = DetailView(
         title = info.displayName,
-        subtitle = info.displayAuthor.takeIf { it.isNotBlank() } ?: info.source.displayName,
+        subtitle = ChineseText.toTaiwanTraditional(info.displayAuthor.takeIf { it.isNotBlank() } ?: info.source.displayName),
         tracks = d?.tracks ?: emptyList(),
       )
       loadingDetail = false
@@ -243,7 +244,7 @@ private fun RecommendGrid(
       val tracks = runCatching { svc?.fetchTracks(board.bangid, 1) ?: emptyList() }.getOrDefault(emptyList())
       detail = DetailView(
         title = board.displayName,
-        subtitle = board.source.displayName,
+        subtitle = ChineseText.toTaiwanTraditional(board.source.displayName),
         tracks = tracks,
       )
       loadingDetail = false
@@ -377,11 +378,11 @@ private fun SectionHeader(
     modifier = Modifier.fillMaxWidth().padding(start = 4.dp),
     verticalAlignment = Alignment.Bottom,
   ) {
-    Text(title, color = AppColors.TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+    Text(ChineseText.toTaiwanTraditional(title), color = AppColors.TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
     if (!subtitle.isNullOrBlank()) {
       Spacer(Modifier.width(10.dp))
       Text(
-        subtitle,
+        ChineseText.toTaiwanTraditional(subtitle),
         color = AppColors.TextMuted,
         fontSize = 13.sp,
         modifier = Modifier.padding(bottom = 4.dp),
@@ -393,7 +394,7 @@ private fun SectionHeader(
         onClick = onTrailingClick,
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 6.dp),
       ) {
-        Text(trailing, fontSize = 12.sp)
+        Text(ChineseText.toTaiwanTraditional(trailing), fontSize = 12.sp)
       }
     }
   }
@@ -517,9 +518,9 @@ private fun HeroBanner(
           )
           Spacer(Modifier.height(8.dp))
           val subParts = buildList {
-            add(item.source.displayName)
+            add(ChineseText.toTaiwanTraditional(item.source.displayName))
             val plays = item.songlist.playCount
-            if (!plays.isNullOrBlank()) add(plays) else add("熱門播放")
+            if (!plays.isNullOrBlank()) add(ChineseText.toTaiwanTraditional(plays)) else add("熱門播放")
           }
           Text(
             subParts.joinToString(" · "),
@@ -578,8 +579,8 @@ private fun SonglistRow(items: List<com.walkman.tv.data.model.SonglistInfo>, onS
     items(unique, key = { "${it.source.key}_${it.id}" }) { info ->
       AlbumCard(
         picURL = info.picURL,
-        title = info.name,
-        subtitle = info.playCount?.let { "▶ $it" } ?: info.source.displayName,
+        title = info.displayName,
+        subtitle = ChineseText.toTaiwanTraditional(info.playCount?.let { "▶ $it" } ?: info.source.displayName),
         fallbackTint = info.source.tintColor(),
         onClick = { onSelect(info) },
       )
@@ -599,8 +600,8 @@ private fun BoardRow(items: List<com.walkman.tv.data.model.BoardInfo>, onSelect:
     items(unique, key = { "${it.source.key}_${it.id}" }) { board ->
       AlbumCard(
         picURL = board.picURL,
-        title = board.name,
-        subtitle = board.source.displayName,
+        title = board.displayName,
+        subtitle = ChineseText.toTaiwanTraditional(board.source.displayName),
         fallbackTint = board.source.tintColor(),
         onClick = { onSelect(board) },
       )
@@ -645,7 +646,7 @@ private fun AlbumCard(
     }
     Spacer(Modifier.height(8.dp))
     Text(
-      title,
+      ChineseText.toTaiwanTraditional(title),
       color = AppColors.TextPrimary,
       fontSize = 16.sp,
       fontWeight = FontWeight.SemiBold,

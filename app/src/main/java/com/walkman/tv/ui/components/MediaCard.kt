@@ -13,6 +13,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
+import com.walkman.tv.util.ChineseText
 import com.walkman.tv.ui.theme.AppColors
 
 /** A poster-style focusable card: square cover + title + optional subtitle. */
@@ -33,7 +34,7 @@ fun MediaCard(
             )
             Box(Modifier.padding(top = 6.dp)) {
                 Text(
-                    title,
+                    ChineseText.toTaiwanTraditional(title),
                     color = AppColors.TextPrimary,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -43,7 +44,7 @@ fun MediaCard(
             }
             if (subtitle != null) {
                 Text(
-                    subtitle,
+                    ChineseText.toTaiwanTraditional(subtitle),
                     color = AppColors.TextMuted,
                     fontSize = 11.sp,
                     maxLines = 1,

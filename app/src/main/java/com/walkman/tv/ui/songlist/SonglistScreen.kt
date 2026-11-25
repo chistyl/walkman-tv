@@ -32,6 +32,7 @@ import com.walkman.tv.data.model.SonglistTag
 import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.data.model.Track
 import com.walkman.tv.ui.appContainer
+import com.walkman.tv.util.ChineseText
 import com.walkman.tv.ui.fetchOr
 import com.walkman.tv.ui.components.EmptyHint
 import com.walkman.tv.ui.components.LoadingState
@@ -100,13 +101,13 @@ fun SonglistScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                 }
                 Spacer(Modifier.padding(start = 8.dp))
                 service?.orders?.forEach { o ->
-                    TvPill(onClick = { order = o }, selected = order?.id == o.id) { Text(o.name, fontSize = 12.sp) }
+                    TvPill(onClick = { order = o }, selected = order?.id == o.id) { Text(ChineseText.toTaiwanTraditional(o.name), fontSize = 12.sp) }
                 }
             }
             Spacer(Modifier.padding(top = 6.dp))
             LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(tags) { t ->
-                    TvPill(onClick = { tag = t }, selected = tag.id == t.id && tag.name == t.name) { Text(t.name, fontSize = 12.sp) }
+                    TvPill(onClick = { tag = t }, selected = tag.id == t.id && tag.name == t.name) { Text(ChineseText.toTaiwanTraditional(t.name), fontSize = 12.sp) }
                 }
             }
             Spacer(Modifier.padding(top = 6.dp))

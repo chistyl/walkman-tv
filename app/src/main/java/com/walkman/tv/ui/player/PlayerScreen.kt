@@ -79,6 +79,7 @@ import com.walkman.tv.ui.appContainer
 import com.walkman.tv.ui.components.Artwork
 import com.walkman.tv.ui.components.TvFocusable
 import com.walkman.tv.ui.components.TvPill
+import com.walkman.tv.util.ChineseText
 import com.walkman.tv.ui.theme.AppColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -215,7 +216,7 @@ fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
             overflow = TextOverflow.Ellipsis,
           )
           // 播放调试信息（设置里开启）：获取地址 / 失败自动跳过 / 换源降级，排查音源问题用。
-          val status = state.error ?: (if (state.resolving) "正在取得播放網址…" else state.warning)
+          val status = ChineseText.toTaiwanTraditional(state.error ?: (if (state.resolving) "正在取得播放網址…" else state.warning).orEmpty()).ifBlank { null }
           if (settings.showDebugInfo && status != null) {
             Text(
               status,
@@ -890,7 +891,7 @@ private fun LyricPane(
       val a = if (isActive) 1f else (1f - distance * 0.22f).coerceAtLeast(0.18f)
       Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-          line.text,
+          ChineseText.toTaiwanTraditional(line.text),
           color = if (isActive) AppColors.LyricActive else AppColors.TextSecondary,
           fontSize = if (isActive) lyricSize.activeSp.sp else lyricSize.inactiveSp.sp,
           // 显式行高：默认行高跟不上大字号，长歌词换行时上下两行会重叠（#21）。
@@ -901,7 +902,7 @@ private fun LyricPane(
         )
         line.translation?.takeIf { showTranslation }?.let {
           Text(
-            it,
+            ChineseText.toTaiwanTraditional(it),
             color = if (isActive) AppColors.LyricActive.copy(alpha = 0.7f) else AppColors.TextMuted,
             fontSize = lyricSize.translationSp.sp,
             lineHeight = (lyricSize.translationSp * 1.3f).sp,
@@ -1037,7 +1038,7 @@ private fun QueueRow(
       Spacer(Modifier.width(8.dp))
       Column(modifier = Modifier.weight(1f)) {
         Text(
-          track.name,
+          ChineseText.toTaiwanTraditional(track.name),
           color = if (isCurrent) AppColors.AccentGreen else AppColors.TextPrimary,
           fontSize = 13.sp,
           fontWeight = FontWeight.SemiBold,

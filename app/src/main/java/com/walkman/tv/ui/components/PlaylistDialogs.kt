@@ -42,6 +42,7 @@ import androidx.tv.material3.Text
 import com.walkman.tv.data.model.Playlist
 import com.walkman.tv.data.model.Track
 import com.walkman.tv.ui.appContainer
+import com.walkman.tv.util.ChineseText
 import com.walkman.tv.ui.theme.AppColors
 import kotlinx.coroutines.launch
 
@@ -112,7 +113,7 @@ fun PlaylistPickerDialog(track: Track, onDismiss: () -> Unit, showDownloadButton
             )
             Spacer(Modifier.size(4.dp))
             Text(
-                track.displayName,
+                ChineseText.toTaiwanTraditional(track.displayName),
                 color = AppColors.TextSecondary,
                 fontSize = 13.sp,
                 maxLines = 1,
@@ -139,7 +140,7 @@ fun PlaylistPickerDialog(track: Track, onDismiss: () -> Unit, showDownloadButton
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                pl.name,
+                                ChineseText.toTaiwanTraditional(pl.name),
                                 color = if (inList) AppColors.AccentGreen else AppColors.TextPrimary,
                                 fontSize = 14.sp,
                                 fontWeight = if (inList) FontWeight.Bold else FontWeight.Medium,

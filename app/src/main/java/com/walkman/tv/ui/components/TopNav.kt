@@ -43,6 +43,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.walkman.tv.ui.NavSection
 import com.walkman.tv.ui.theme.AppColors
+import com.walkman.tv.util.ChineseText
 
 /**
  * Top navigation bar — brand on left, six nav items centered (4 sections + search + settings),
@@ -85,7 +86,7 @@ fun TopNav(
         // Right: now-playing chip (only when a track is loaded)
         if (!nowPlayingTitle.isNullOrEmpty()) {
             NowPlayingChip(
-                title = nowPlayingTitle,
+                title = ChineseText.toTaiwanTraditional(nowPlayingTitle),
                 picURL = nowPlayingPicURL,
                 isPlaying = nowPlayingIsPlaying,
                 onClick = onOpenPlayer,
