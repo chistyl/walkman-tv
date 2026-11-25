@@ -15,7 +15,7 @@ import java.io.File
  *  the original hard-coded 22/15/12. */
 @Serializable
 enum class LyricSize(val label: String, val activeSp: Int, val inactiveSp: Int, val translationSp: Int) {
-    STANDARD("标准", 22, 15, 12),
+    STANDARD("標準", 22, 15, 12),
     LARGE("大", 30, 19, 15),
     MAX("最大", 40, 24, 18),
 }
