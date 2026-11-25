@@ -175,15 +175,20 @@ class AppContainer(val appContext: Context) {
             kotlinx.coroutines.runBlocking {
                 val cols = hotSearch.fetchAll()
                 buildString {
+                    append('{').append('"').append("source").append('"').append(':').append('"')
+                    // Build the outer array below; each provider object is emitted without
+                    // hand-escaped JSON templates to keep provider text escaping centralized.
+                    clear()
                     append('[')
                     cols.forEachIndexed { i, col ->
                         if (i > 0) append(',')
-                        append("{\\"source\\":\\"").append(col.source.key)
-                        append("\\",\\"name\\":\\"").append(col.source.displayName)
-                        append("\\",\\"words\\":[")
+                        append('{')
+                        append('"').append("source").append('"').append(':').append('"').append(jsonEscape(col.source.key)).append('"')
+                        append(',').append('"').append("name").append('"').append(':').append('"').append(jsonEscape(col.source.displayName)).append('"')
+                        append(',').append('"').append("words").append('"').append(':').append('[')
                         col.words.forEachIndexed { j, w ->
                             if (j > 0) append(',')
-                            append('\\\"').append(jsonEscape(w)).append('\\\"')
+                            append('"').append(jsonEscape(w)).append('"')
                         }
                         append("]}")
                     }
