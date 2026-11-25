@@ -1,9 +1,13 @@
 package com.walkman.tv.source.catalog
 
+import android.os.SystemClock
 import com.walkman.tv.data.model.SourceID
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 
 /** One platform's hot-search words, in rank order. */
@@ -13,24 +17,54 @@ data class HotSearchColumn(val source: SourceID, val words: List<String>)
  * Hot / trending search words for each platform, shown on the search screen (and pushed to the
  * phone page) before the user has typed anything.
  *
+ * Results are cached in-process for five minutes. The mutex also coalesces simultaneous callers:
+ * entering the search screen and opening the phone QR page together won't issue duplicate requests.
+ *
  * - QQ / NetEase / Kugou: public endpoints, no signing.
- * - Kuwo: the `/api/www` endpoints are behind a `Secret` header derived from a cookie; we
- *   fabricate a self-consistent (cookie, Secret) pair — see [KuwoSecret]. The hot list is the
- *   `searchKey` suggestion endpoint called with an empty key.
+ * - Kuwo: the /api/www endpoints are behind a Secret header derived from a cookie; we
+ *   fabricate a self-consistent (cookie, Secret) pair — see [KuwoSecret].
  */
 class HotSearch(private val http: CatalogHttp) {
     private val ua = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)"
+    private val cacheMutex = Mutex()
+    private var cachedColumns: List<HotSearchColumn>? = null
+    private var cachedAtElapsedMs: Long = 0L
 
-    /** Fetch all four platforms in parallel; a platform that fails yields an empty column (kept
-     *  so the UI still renders its labeled column). Order: 酷我 / 网易云 / 酷狗 / QQ. */
-    suspend fun fetchAll(): List<HotSearchColumn> = coroutineScope {
-        val jobs = listOf(
-            async { HotSearchColumn(SourceID.KW, runCatching { kuwo() }.getOrDefault(emptyList())) },
-            async { HotSearchColumn(SourceID.WY, runCatching { netease() }.getOrDefault(emptyList())) },
-            async { HotSearchColumn(SourceID.KG, runCatching { kugou() }.getOrDefault(emptyList())) },
-            async { HotSearchColumn(SourceID.TX, runCatching { qq() }.getOrDefault(emptyList())) },
-        )
-        jobs.awaitAll()
+    /**
+     * Fetch all four platforms concurrently. A failed platform yields an empty column so the UI
+     * can still render its labeled column. Cached results remain available for five minutes.
+     */
+    suspend fun fetchAll(forceRefresh: Boolean = false): List<HotSearchColumn> =
+        cacheMutex.withLock {
+            val now = SystemClock.elapsedRealtime()
+            cachedColumns?.takeIf {
+                !forceRefresh && now - cachedAtElapsedMs < CACHE_TTL_MS
+            }?.let { return@withLock it }
+
+            val startedAt = now
+            val fresh = coroutineScope {
+                listOf(
+                    async { fetchColumn(SourceID.KW) { kuwo() } },
+                    async { fetchColumn(SourceID.WY) { netease() } },
+                    async { fetchColumn(SourceID.KG) { kugou() } },
+                    async { fetchColumn(SourceID.TX) { qq() } },
+                ).awaitAll()
+            }
+            cachedColumns = fresh
+            cachedAtElapsedMs = SystemClock.elapsedRealtime()
+            android.util.Log.d(TAG, "hot-search refresh completed in ${cachedAtElapsedMs - startedAt}ms")
+            fresh
+        }
+
+    private suspend fun fetchColumn(
+        source: SourceID,
+        fetch: suspend () -> List<String>,
+    ): HotSearchColumn = try {
+        HotSearchColumn(source, fetch())
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        HotSearchColumn(source, emptyList())
     }
 
     private suspend fun qq(): List<String> {
@@ -100,5 +134,10 @@ class HotSearch(private val http: CatalogHttp) {
         val json = JSONObject(http.getText("http://www.kuwo.cn/api/www/search/searchKey?key=", headers))
         val arr = json.optJSONArray("data") ?: return emptyList()
         return (0 until arr.length()).mapNotNull { arr.optString(it).trim().ifEmpty { null } }
+    }
+
+    private companion object {
+        const val TAG = "WalkmanPerf"
+        const val CACHE_TTL_MS = 5 * 60 * 1_000L
     }
 }
