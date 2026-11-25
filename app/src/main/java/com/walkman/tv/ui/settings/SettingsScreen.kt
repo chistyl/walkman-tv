@@ -457,41 +457,6 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        Section("偵錯") {
-            ToggleRow("顯示偵錯資訊", settings.showDebugInfo) {
-                scope.launch { appContainer.settingsStore.update { it.copy(showDebugInfo = !it.showDebugInfo) } }
-            }
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "排查音源等問題時再開啟，平時不需要。目前包含：在播放畫面的歌手名稱下方顯示取得播放網址、播放失敗時自動跳過，以及切換音源等狀態。",
-                color = AppColors.TextMuted,
-                fontSize = 11.sp,
-            )
-            Spacer(Modifier.height(10.dp))
-            var diagnosticStatus by remember { mutableStateOf("尚未啟動診斷") }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TvPill(
-                    onClick = {
-                        com.walkman.tv.playback.PlaybackDiagnostics.start(context, appContainer.playbackController, appContainer.appScope)
-                        diagnosticStatus = "診斷監測已啟動，請正常播放音樂"
-                    },
-                    selected = true,
-                ) { Text("啟動播放診斷", fontSize = 13.sp) }
-                TvPill(
-                    onClick = {
-                        val exported = com.walkman.tv.playback.PlaybackDiagnostics.shareReport(context)
-                        diagnosticStatus = if (exported) "已開啟分享視窗，請傳送診斷報告" else "目前沒有診斷紀錄"
-                    },
-                ) { Text("匯出診斷報告", fontSize = 13.sp) }
-            }
-            Text(diagnosticStatus, color = AppColors.AccentGreen, fontSize = 12.sp)
-            Text(
-                "使用方式：先啟動診斷，再正常播放音樂直到 APP 閃退。重新開啟 APP 後，回到此處選擇「匯出診斷報告」，將報告分享給開發者。診斷會記錄播放狀態、記憶體與可取得的系統播放器錯誤，不會修改音質或音源。",
-                color = AppColors.TextMuted,
-                fontSize = 11.sp,
-            )
-        }
-
     }
 
     pendingDelete?.let { target ->
