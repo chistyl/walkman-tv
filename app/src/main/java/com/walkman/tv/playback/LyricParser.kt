@@ -21,7 +21,7 @@ data class LyricLine(
 /** Parses standard LRC plus enhanced YRC/QRC-style word timing when supplied by a source. */
 object LyricParser {
     private val timeTag = Regex("""\[(\d{1,2}):(\d{1,2})(?:[.:](\d{1,3}))?]""")
-    private val enhancedLine = Regex("""^\[(\d{1,3})[,，](\d{1,8})](.*)$""")
+    private val enhancedLine = Regex("""^\[([0-9]{1,12})[,，]([0-9]{1,12})](.*)$""")
     private val timedWord = Regex("""\(([^,()]*)[,]([0-9]{1,12})[,]([0-9]{1,12})\)""")
 
     fun parse(raw: String, translation: String? = null): List<LyricLine> {
