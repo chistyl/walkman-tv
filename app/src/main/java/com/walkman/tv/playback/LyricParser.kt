@@ -22,8 +22,8 @@ data class LyricLine(
 object LyricParser {
     private val timeTag = Regex("""\[(\d{1,2}):(\d{1,2})(?:[.:](\d{1,3}))?]""")
     private val enhancedLine = Regex("""^\[([0-9]{1,12})[,，]([0-9]{1,12})](.*)$""")
-    // NetEase YRC and Kugou KRC: (or <)absoluteStart,duration,flag( or >)text
-    private val yrcKrcWord = Regex("""[<(]([0-9]{1,12})[,，]([0-9]{1,12})[,，]-?[0-9]{1,12}[>)]([^<(]*)""")
+    // NetEase YRC: absolute start/duration/flag; Kugou KRC: line-relative start/duration.
+    private val yrcKrcWord = Regex("""[<(]([0-9]{1,12})[,，]([0-9]{1,12})(?:[,，]-?[0-9]{1,12})?[>)]([^<(]*)""")
     // QQ QRC: text(absoluteStart,duration); the tuple timestamps the text before it.
     private val qrcWord = Regex("""([^()]*)\(([0-9]{1,12})[,，]([0-9]{1,12})\)""")
 
@@ -54,7 +54,12 @@ object LyricParser {
 
     private fun parseEnhanced(raw: String): List<LyricLine> {
         val result = mutableListOf<LyricLine>()
-        val normalised = raw.replace("\r\n", "\n").replace("\r", "\n")
+        val qrcXmlPayloads = Regex("""LyricContent\s*=\s*(?:"([^"]+)"|'([^']+)')""")
+            .findAll(raw)
+            .map { xmlUnescape(it.groupValues[1].ifEmpty { it.groupValues[2] }) }
+            .toList()
+        val source = if (qrcXmlPayloads.isNotEmpty()) qrcXmlPayloads.joinToString("\n") else raw
+        val normalised = source.replace("\r\n", "\n").replace("\r", "\n")
         for (rawLine in normalised.split("\n")) {
             val header = enhancedLine.find(rawLine.trim()) ?: continue
             val lineStart = header.groupValues[1].toLongOrNull() ?: continue
@@ -62,16 +67,19 @@ object LyricParser {
 
             val yrcMatches = yrcKrcWord.findAll(body).toList()
             val words = if (yrcMatches.isNotEmpty()) {
-                // YRC/KRC word starts are already absolute media timestamps; do not add lineStart.
+                // YRC uses absolute timestamps; KRC word offsets are relative to the line header.
                 yrcMatches.mapNotNull { match ->
                     val start = match.groupValues[1].toLongOrNull() ?: return@mapNotNull null
                     val duration = match.groupValues[2].toLongOrNull() ?: return@mapNotNull null
                     val text = match.groupValues[3]
-                    if (text.isEmpty()) null else LyricWord(
-                        ChineseText.toTaiwanTraditional(text),
-                        start,
-                        duration.coerceAtLeast(1),
-                    )
+                    if (text.isEmpty()) null else {
+                        val hasFlag = match.value.substringBefore(")").substringBefore(">").count { it == ',' || it == '，' } >= 2
+                        LyricWord(
+                            ChineseText.toTaiwanTraditional(text),
+                            if (hasFlag) start else lineStart + start,
+                            duration.coerceAtLeast(1),
+                        )
+                    }
                 }
             } else {
                 // QRC stores each word's absolute timing after the word itself.
@@ -93,6 +101,15 @@ object LyricParser {
         }
         return result.sortedBy { it.time }
     }
+
+    private fun xmlUnescape(value: String): String = value
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&")
+        .replace("&#10;", "\n")
+        .replace("&#13;", "\r")
 
     private data class Parsed(val time: Double, val text: String)
 
