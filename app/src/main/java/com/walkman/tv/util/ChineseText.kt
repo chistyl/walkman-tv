@@ -6,8 +6,8 @@ import com.github.houbb.opencc4j.util.ZhTwConverterUtil
  * Converts source-provided Chinese text to Taiwan Traditional Chinese for presentation.
  *
  * Provider values are kept untouched in the data layer. Conversion is presentation-only.
- * Context-sensitive source phrases are normalized before OpenCC4j so one-to-many characters
- * such as simplified "发" are resolved by the whole word rather than by a character mapping.
+ * Context-sensitive source phrases are normalized before OpenCC4j so ambiguous characters
+ * such as simplified "发" and "范" are resolved by the whole word where possible.
  */
 object ChineseText {
     private val sourceContextCorrections = linkedMapOf(
@@ -32,14 +32,30 @@ object ChineseText {
         "剪发" to "剪髮",
         "护发" to "護髮",
         "洗发" to "洗髮",
-        "吹风机吹发" to "吹風機吹髮"
+        "吹风机吹发" to "吹風機吹髮",
+        "范围" to "範圍",
+        "模范" to "模範",
+        "规范" to "規範",
+        "范例" to "範例",
+        "范本" to "範本",
+        "范式" to "範式",
+        "范畴" to "範疇",
+        "范文" to "範文",
+        "防范" to "防範",
+        "示范" to "示範",
+        "典范" to "典範",
+        "风范" to "風範"
     )
+
+    // Protect remaining 范, including surnames and personal names, from character-level conversion.
+    private const val PRESERVE_FAN = "\uE000"
 
     fun toTaiwanTraditional(value: String): String {
         if (value.isEmpty()) return value
         val contextNormalized = sourceContextCorrections.entries.fold(value) { text, (source, target) ->
             text.replace(source, target)
         }
-        return ZhTwConverterUtil.toTraditional(contextNormalized)
+        val protected = contextNormalized.replace("范", PRESERVE_FAN)
+        return ZhTwConverterUtil.toTraditional(protected).replace(PRESERVE_FAN, "范")
     }
 }
