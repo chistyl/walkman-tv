@@ -47,7 +47,8 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
         installBundledYehuaIfMissing()
     }
 
-    private suspend fun installBundledYehuaIfMissing() = mutationMutex.withLock {
+    private suspend fun installBundledYehuaIfMissing() {
+        mutationMutex.withLock {
         // Treat either historical display name as an existing installation. This also protects
         // a user's manually imported copy, even if its author metadata differs.
         if (_scripts.value.any { it.name.trim() in BUNDLED_YEHUA_NAMES }) return
@@ -76,6 +77,7 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
         }
         imported.onFailure {
             android.util.Log.w(TAG, "Bundled 野花 v1 source was rejected: ${it.message}")
+        }
         }
     }
 
@@ -127,11 +129,13 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
         )
     }
 
-    suspend fun setEnabled(id: String, enabled: Boolean) = mutationMutex.withLock {
-        val script = _scripts.value.firstOrNull { it.id == id } ?: return
+    suspend fun setEnabled(id: String, enabled: Boolean) {
+        mutationMutex.withLock {
+        val script = _scripts.value.firstOrNull { it.id == id } ?: return@withLock
         _scripts.value = _scripts.value.map { if (it.id == id) it.copy(enabled = enabled) else it }
         if (enabled) sourceManager.load(script.copy(enabled = true)) else sourceManager.unload(id)
         persist()
+        }
     }
 
     suspend fun remove(id: String) = mutationMutex.withLock {
