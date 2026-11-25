@@ -164,7 +164,7 @@ class SourceManager(
     }
 
     fun supportedSources(): List<SourceID> {
-        val set = mutableSetOf<Quality>()
+        val set = mutableSetOf<SourceID>()
         _loaded.value.forEach { ls ->
             ls.capabilities.sources.forEach { (src, cap) -> if (cap.actions.contains("musicUrl")) set.add(src) }
         }
