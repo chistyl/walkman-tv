@@ -4,6 +4,7 @@ import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.data.model.Track
 import com.walkman.tv.data.model.TrackDetails
 import com.walkman.tv.source.catalog.CatalogHttp
+import kotlinx.coroutines.CancellationException
 import org.json.JSONObject
 
 /**
@@ -14,14 +15,22 @@ import org.json.JSONObject
  */
 internal class TrackDetailFetcher(private val http: CatalogHttp) {
 
-    suspend fun fetch(track: Track): TrackDetails? = runCatching {
+    suspend fun fetch(track: Track): TrackDetails? =
         when (track.source) {
             SourceID.WY -> fetchNetEase(track)
             SourceID.TX -> fetchQq(track)
             SourceID.KW -> fetchKuwo(track)
             else -> null
         }
-    }.getOrNull()
+
+    /** Best-effort network request that never converts coroutine cancellation into a fallback. */
+    private suspend fun <T> attempt(block: suspend () -> T): T? = try {
+        block()
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        null
+    }
 
     // ─── NetEase ────────────────────────────────────────────────────────────────
 
@@ -33,7 +42,7 @@ internal class TrackDetailFetcher(private val http: CatalogHttp) {
     private suspend fun fetchNetEase(track: Track): TrackDetails? {
         val url = "https://music.163.com/api/song/detail/?ids=%5B${track.songmid}%5D"
         val headers = mapOf("Referer" to "https://music.163.com/")
-        val text = runCatching { http.getText(url, headers) }.getOrNull() ?: return null
+        val text = attempt { http.getText(url, headers) } ?: return null
         val song = runCatching {
             JSONObject(text).optJSONArray("songs")?.optJSONObject(0)
         }.getOrNull() ?: return null
@@ -73,9 +82,9 @@ internal class TrackDetailFetcher(private val http: CatalogHttp) {
             "Referer" to "https://y.qq.com/",
             "Content-Type" to "application/x-www-form-urlencoded",
         )
-        val text = runCatching {
+        val text = attempt {
             http.postJson("https://u.y.qq.com/cgi-bin/musicu.fcg", payload, headers)
-        }.getOrNull() ?: return null
+        } ?: return null
         val data = runCatching {
             JSONObject(text).optJSONObject("songinfo")?.optJSONObject("data")
         }.getOrNull() ?: return null
@@ -96,7 +105,7 @@ internal class TrackDetailFetcher(private val http: CatalogHttp) {
      */
     private suspend fun fetchKuwo(track: Track): TrackDetails? {
         val hiRes = "http://artistpicserver.kuwo.cn/pic.web?corp=kuwo&type=rid_pic&pictype=800&size=800&rid=${track.songmid}"
-        val pic = runCatching { http.getText(hiRes).trim() }.getOrNull()
+        val pic = attempt { http.getText(hiRes).trim() }
             ?.takeIf { it.startsWith("http") }
         return TrackDetails(trackNumber = null, hiResCoverURL = pic)
     }
