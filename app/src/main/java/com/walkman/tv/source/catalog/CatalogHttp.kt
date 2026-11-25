@@ -1,5 +1,6 @@
 package com.walkman.tv.source.catalog
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.Call
@@ -36,11 +37,15 @@ class CatalogHttp(private val client: OkHttpClient) {
     /** Follow redirects for [url] and return the final effective URL (for short-link expansion).
      *  Returns null on failure. Cancellation aborts the underlying network call. */
     suspend fun resolveFinalUrl(url: String, headers: Map<String, String> = emptyMap()): String? =
-        runCatching {
+        try {
             execute(Request.Builder().url(url).applyHeaders(headers).get().build()) { response ->
                 response.request.url.toString()
             }
-        }.getOrNull()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
 
     /**
      * Use OkHttp's async callback bridge rather than blocking an IO thread in execute().
