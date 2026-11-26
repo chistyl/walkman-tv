@@ -565,21 +565,31 @@ private class KugouSonglist(private val http: CatalogHttp) : SonglistService {
 
     private fun build(d: JSONObject?): Track? {
         d ?: return null
-        val audio = d.optJSONObject("audio_info") ?: JSONObject()
-        val hash = audio.optString("hash").ifEmpty { return null }
-        val audioId = audio.opt("audio_id")?.toString()?.ifEmpty { hash } ?: hash
-        val albumInfo = d.optJSONObject("album_info")
-        val albumId = albumInfo?.opt("album_id")?.toString()?.ifEmpty { null }
-        val durMs = audio.optString("timelength").toIntOrNull() ?: audio.optInt("timelength")
+        val audio = d.optJSONObject("audio_info") ?: d
+        // The playlist audio endpoint and rank endpoint have slightly different field
+        // layouts. Accept both so KG playlist tracks carry the same resolver metadata
+        // (audio_id + FileHash) as working leaderboard tracks.
+        val hash = audio.optString("hash").ifEmpty { d.optString("hash") }.ifEmpty { return null }
+        val audioId = when (val value = audio.opt("audio_id") ?: d.opt("audio_id")) {
+            is Number -> value.toLong().toString()
+            is String -> value.ifEmpty { hash }
+            else -> hash
+        }
+        val albumInfo = d.optJSONObject("album_info") ?: d.optJSONObject("album")
+        val albumId = (albumInfo?.opt("album_id") ?: d.opt("album_id"))?.toString()?.ifEmpty { null }
+        val durMs = audio.optString("timelength").toIntOrNull()
+            ?: audio.optInt("timelength").takeIf { it > 0 }
+            ?: d.optString("duration").toIntOrNull()?.let { it * 1000 }
+            ?: 0
         fun nonZero(key: String): Boolean {
             val v = audio.opt(key)
             return when (v) { is String -> v != "0" && v.isNotEmpty(); is Number -> v.toLong() != 0L; else -> false }
         }
         val qs = mutableListOf<Quality>()
-        if (nonZero("filesize")) qs.add(Quality.K128)
-        if (nonZero("filesize_320")) qs.add(Quality.K320)
-        if (nonZero("filesize_flac")) qs.add(Quality.FLAC)
-        if (nonZero("filesize_high")) qs.add(Quality.FLAC24)
+        if (nonZero("filesize") || d.optLong("filesize") > 0) qs.add(Quality.K128)
+        if (nonZero("filesize_320") || d.optLong("320filesize") > 0) qs.add(Quality.K320)
+        if (nonZero("filesize_flac") || d.optLong("sqfilesize") > 0) qs.add(Quality.FLAC)
+        if (nonZero("filesize_high") || d.optLong("filesize_high") > 0) qs.add(Quality.FLAC24)
         if (qs.isEmpty()) qs.add(Quality.K128)
         val extras = mutableMapOf("hash" to hash)
         albumId?.let { extras["albumId"] = it }
@@ -587,7 +597,8 @@ private class KugouSonglist(private val http: CatalogHttp) : SonglistService {
         // Field name varies between API versions — best-effort across both common spellings.
         val mvKg = audio.optString("mvhash").ifEmpty { audio.optString("mv_hash") }
         if (mvKg.isNotEmpty()) extras["mvId"] = mvKg
-        val pic = albumInfo?.optString("sizable_cover")?.ifEmpty { null }?.replace("{size}", "240")
+        val pic = (albumInfo?.optString("sizable_cover")?.ifEmpty { null }
+            ?: d.optString("imgurl").ifEmpty { null })?.replace("{size}", "240")
         return Track(
             id = Track.makeID(SourceID.KG, audioId),
             name = decode(d.optString("songname").ifEmpty { d.optString("ori_audio_name", "未知") }),
