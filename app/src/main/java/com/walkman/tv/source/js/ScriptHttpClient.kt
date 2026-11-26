@@ -4,7 +4,6 @@ import com.walkman.tv.diagnostics.AppDiagnostics
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.Headers
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
@@ -200,11 +199,12 @@ class ScriptHttpClient(private val client: OkHttpClient) {
             builder.method(method, body ?: ByteArray(0).toRequestBody(null))
         }
 
-        // Headers (caller first)
+        // Preserve caller-supplied headers. The JS bridge used by LE Music forwards the
+        // lx.request options without synthesizing an Accept header; adding application/json
+        // here changes the actual request sent to source APIs (including the flower endpoint).
         val hb = Headers.Builder()
         callerHeaders.forEach { (k, v) -> hb.add(k, v) }
         if (headerCI(callerHeaders, "User-Agent") == null) hb.add("User-Agent", DEFAULT_UA)
-        if (headerCI(callerHeaders, "Accept") == null) hb.add("Accept", "application/json")
         builder.headers(hb.build())
         return builder.build()
     }
