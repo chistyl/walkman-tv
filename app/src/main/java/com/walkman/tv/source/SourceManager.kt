@@ -136,6 +136,74 @@ class SourceManager(
         throw SourceException("這首 ${track.source.displayName} 歌曲無法取得播放網址，請換一首歌曲或更換可用的指令碼")
     }
 
+    /**
+     * Resolve the same recording on a platform that has not already failed for this track.
+     * Used after ExoPlayer rejects a URL even though the source script returned it successfully.
+     */
+    suspend fun resolveOtherSourceURL(
+        track: Track,
+        preferred: Quality,
+        excludedSources: Set<SourceID>,
+    ): ResolvedTrack {
+        val alternatives = otherSourceFinder.findMatches(
+            track = track,
+            includedSources = SourceID.onlineSources.toSet(),
+            excludedSources = excludedSources + track.source,
+        )
+        return resolveAlternativeCandidates(track, preferred, alternatives)
+            ?: throw SourceException("其他音源也無法取得可播放網址")
+    }
+
+    /** Resolve a user-requested platform directly, without first retrying the original source. */
+    suspend fun resolveMusicURLOnSource(
+        track: Track,
+        targetSource: SourceID,
+        preferred: Quality = Quality.K320,
+    ): ResolvedTrack {
+        if (targetSource == SourceID.LOCAL) throw SourceException("本機音源不可作為線上換源目標")
+        if (targetSource == track.source) return resolveMusicURL(track, preferred)
+        val alternatives = otherSourceFinder.findMatches(
+            track = track,
+            includedSources = setOf(targetSource),
+            excludedSources = emptySet(),
+        )
+        return resolveAlternativeCandidates(track, preferred, alternatives)
+            ?: throw SourceException("在「${targetSource.displayName}」找不到可播放的相符歌曲")
+    }
+
+    private suspend fun resolveAlternativeCandidates(
+        original: Track,
+        preferred: Quality,
+        alternatives: List<Track>,
+    ): ResolvedTrack? {
+        for (alt in alternatives.take(10)) {
+            val matchingScripts = scriptsFor(alt.source, "musicUrl")
+            for (altLS in matchingScripts) {
+                val scriptQs = altLS.capabilities.sources[alt.source]?.qualities?.toSet() ?: emptySet()
+                val first = pickPlayQuality(preferred, alt.qualities.toSet(), scriptQs)
+                val cascade = qualityCascade(first, alt.qualities.toSet(), scriptQs)
+                for (q in cascade) {
+                    val play = try {
+                        attempt { resolveViaScript(alt, q, altLS) }.getOrNull()
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    }
+                    if (play != null) {
+                        return ResolvedTrack(
+                            url = play.url,
+                            origin = ResolveOrigin.OtherSource(alt.source),
+                            quality = q,
+                            warning = "已由「${original.source.displayName}」切換至「${alt.source.displayName}」",
+                            headers = play.headers,
+                            userAgent = play.userAgent,
+                        )
+                    }
+                }
+            }
+        }
+        return null
+    }
+
     private suspend fun tryOtherSources(track: Track, preferred: Quality): ResolvedTrack? {
         val alternatives = otherSourceFinder.findMatches(track)
         if (alternatives.isEmpty()) return null
