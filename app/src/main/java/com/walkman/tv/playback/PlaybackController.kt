@@ -499,6 +499,7 @@ class PlaybackController(
                 // Remember the tier so onPlayerError can re-cascade from one tier below if
                 // ExoPlayer rejects the file format.
                 lastAttemptedQuality = r.quality
+                attemptedResolverKeys.addAll(r.attemptedKeys)
                 activeResolverAttemptKey = r.attemptKey
                 sourceFailoverInProgress = false
                 val host = runCatching { android.net.Uri.parse(r.url).host }.getOrNull() ?: "(local-or-unknown)"
