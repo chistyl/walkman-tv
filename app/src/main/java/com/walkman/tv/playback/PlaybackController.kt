@@ -570,6 +570,11 @@ class PlaybackController(
             return
         }
         attemptedResolverKeys.add(failedKey)
+        // Score the concrete Media3 playback failure once per failover attempt. This runs
+        // asynchronously so the player callback never blocks on disk persistence.
+        scope.launch {
+            runCatching { sources.recordPlaybackFailure(failedKey) }
+        }
         sourceFailoverInProgress = true
         retryJob?.cancel()
         retryJob = null
