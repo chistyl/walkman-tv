@@ -84,6 +84,7 @@ class SourceManager(
         track: Track,
         quality: Quality? = null,
         excludedAttempts: Set<String> = emptySet(),
+        scriptsOnly: Boolean = false,
     ): ResolvedTrack {
         val preferred = quality ?: Quality.K320
 
@@ -125,10 +126,15 @@ class SourceManager(
             }
         }
 
-        tryOtherSources(track, preferred, attempted)?.let { return it }
+        // Playback failover is deliberately limited to alternate JS files for this
+        // same track/source. Cross-platform search and built-in direct resolution are
+        // existing first-resolution fallbacks, not JS-file failover candidates.
+        if (!scriptsOnly) {
+            tryOtherSources(track, preferred, attempted)?.let { return it }
+        }
 
         val directAttemptKey = "direct:${track.source.key}:${track.id}"
-        if (fallbackEnabled && directAttemptKey !in attempted) {
+        if (!scriptsOnly && fallbackEnabled && directAttemptKey !in attempted) {
             attempted.add(directAttemptKey)
             val qForFallback = if (track.qualities.contains(preferred)) preferred else (track.qualities.firstOrNull() ?: Quality.K128)
             attempt {
