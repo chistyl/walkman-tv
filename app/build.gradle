@@ -113,8 +113,8 @@ android.applicationVariants.all { variant ->
         def abi = output.getFilter(OutputFile.ABI)
         def tag = abi ?: "universal"
         output.outputFileName = "walkman-tv-${variant.versionName}-${tag}-${variant.buildType.name}.apk"
-        // CI 上的测试包 versionCode 每次递增（正式版本号 × 100000 + 运行编号），测试包之间总能覆盖安装，
-        // 不会被电视安装器以「版本相同」拒绝。
+        // CI 上的测试包 versionCode 每次递增（正式版本号 × 100000 + 运行编号），
+        // 测试包之间总能覆盖安装，不会被电视安装器以「版本相同」拒绝。
         def runNumber = System.getenv("GITHUB_RUN_NUMBER")
         if (variant.buildType.name == "debug" && runNumber) {
             output.versionCodeOverride = variant.versionCode * 100000 + (runNumber.toInteger() % 100000)
@@ -142,10 +142,11 @@ dependencies {
     implementation "androidx.tv:tv-material:1.0.0"
     debugImplementation "androidx.compose.ui:ui-tooling"
 
-    // Media playback
-    implementation "androidx.media3:media3-exoplayer:1.10.1"
-    implementation "androidx.media3:media3-session:1.10.1"
-    implementation "androidx.media3:media3-ui:1.10.1"
+    // Media playback — aligned to LE Music 1.3.3 (Media3 1.8.0).
+    // Keep all Media3 modules on the same version to avoid mixed ExoPlayer internals.
+    implementation "androidx.media3:media3-exoplayer:1.8.0"
+    implementation "androidx.media3:media3-session:1.8.0"
+    implementation "androidx.media3:media3-ui:1.8.0"
 
     // Image loading
     implementation "io.coil-kt:coil-compose:2.7.0"
