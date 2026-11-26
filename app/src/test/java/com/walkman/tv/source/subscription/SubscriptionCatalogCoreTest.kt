@@ -123,6 +123,11 @@ class SubscriptionCatalogCoreTest {
             RemoteSubscriptionScript("a", "A2", "https://example.com/a2.js", "two"),
         )
         assertNull(SubscriptionCatalogCore.buildUpdatePlan(emptyList(), duplicateRemote))
+
+        val unsafeUrl = listOf(
+            RemoteSubscriptionScript("unsafe", "Unsafe", "file:///tmp/source.js", "body"),
+        )
+        assertNull(SubscriptionCatalogCore.buildUpdatePlan(emptyList(), unsafeUrl))
     }
 
 }
