@@ -338,7 +338,11 @@ class PlaybackController(
                                 player.currentMediaItem?.mediaId == mediaIdAtRetry &&
                                 activeMediaId == mediaIdAtRetry
                             ) {
-                                playAt(_state.value.index, qualityCap = lastAttemptedQuality)
+                                // Retry the already-resolved media item. Re-running playAt()
+                                // would execute the same JS resolver again and defeat the
+                                // one-attempt-per-JS failover guard.
+                                player.prepare()
+                                player.playWhenReady = true
                             }
                         }
                         return
