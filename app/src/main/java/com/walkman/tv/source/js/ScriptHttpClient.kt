@@ -1,5 +1,6 @@
 package com.walkman.tv.source.js
 
+import com.walkman.tv.diagnostics.AppDiagnostics
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.Headers
@@ -45,6 +46,7 @@ class ScriptHttpClient(private val client: OkHttpClient) {
             completion(e.message ?: "Invalid request", null); return
         }
         val binary = options.optBoolean("binary", false)
+        recordTransportBegin(req)
         val call = client.newCall(req)
         val timeoutMs = options.optLong("timeout", 0L)
         if (timeoutMs > 0L) call.timeout().timeout(timeoutMs, TimeUnit.MILLISECONDS)
@@ -55,12 +57,19 @@ class ScriptHttpClient(private val client: OkHttpClient) {
                 // Explicit cancellation removes the call before cancel(); a call timeout also
                 // marks it canceled, but must still be reported to the script callback.
                 if (!wasActive && call.isCanceled()) return
+                AppDiagnostics.record(
+                    "SCRIPT_HTTP_TRANSPORT_ERROR",
+                    "host=${call.request().url.host}; method=${call.request().method}; " +
+                        "path=${safePathShape(call.request().url)}; errorType=${e.javaClass.simpleName}; " +
+                        "canceled=${call.isCanceled()}"
+                )
                 completion(e.message ?: "request failed", null)
             }
 
             override fun onResponse(call: Call, response: Response) {
                 calls.remove(requestKey)
                 response.use { resp ->
+                    recordTransportResult(resp)
                     try {
                         val headers = mutableMapOf<String, String>()
                         resp.headers.forEach { (k, v) -> headers[k.lowercase()] = v }
@@ -85,6 +94,68 @@ class ScriptHttpClient(private val client: OkHttpClient) {
 
     fun cancel(requestKey: String) {
         calls.remove(requestKey)?.cancel()
+    }
+
+    /**
+     * Records the request after OkHttp has parsed/canonicalized its URL and assembled headers.
+     * Values that may identify a song or source session are represented only by fingerprints.
+     */
+    private fun recordTransportBegin(request: Request) {
+        val headers = request.headers
+        AppDiagnostics.record(
+            "SCRIPT_HTTP_TRANSPORT_BEGIN",
+            "host=${request.url.host}; method=${request.method}; " +
+                "path=${safePathShape(request.url)}; encodedPathLength=${request.url.encodedPath.length}; " +
+                "headerNames=${headers.names().sorted().joinToString(",")}; " +
+                "tagCount=${headers.values("tag").size}; tagFingerprints=${headerFingerprints(headers, "tag")}; " +
+                "uaFingerprint=${headerFingerprints(headers, "User-Agent")}; " +
+                "verFingerprint=${headerFingerprints(headers, "ver")}; " +
+                "sourceVerFingerprint=${headerFingerprints(headers, "source-ver")}"
+        )
+    }
+
+    /** Records the final request actually associated with the response and any redirect chain. */
+    private fun recordTransportResult(response: Response) {
+        val request = response.request
+        val redirects = mutableListOf<String>()
+        var previous = response.priorResponse
+        while (previous != null && redirects.size < 5) {
+            redirects += "${previous.code}@${previous.request.url.host}@" +
+                safePathShape(previous.request.url)
+            previous = previous.priorResponse
+        }
+        val headers = request.headers
+        AppDiagnostics.record(
+            "SCRIPT_HTTP_TRANSPORT_RESULT",
+            "status=${response.code}; host=${request.url.host}; " +
+                "path=${safePathShape(request.url)}; redirects=${redirects.joinToString(">")}; " +
+                "headerNames=${headers.names().sorted().joinToString(",")}; " +
+                "tagCount=${headers.values("tag").size}; tagFingerprints=${headerFingerprints(headers, "tag")}; " +
+                "uaFingerprint=${headerFingerprints(headers, "User-Agent")}; " +
+                "verFingerprint=${headerFingerprints(headers, "ver")}; " +
+                "sourceVerFingerprint=${headerFingerprints(headers, "source-ver")}"
+        )
+    }
+
+    /** Never logs the identifier itself or query string. */
+    private fun safePathShape(url: okhttp3.HttpUrl): String {
+        if (url.host != "97.64.37.235") return "/[non-flower-path]"
+        val segments = url.encodedPathSegments
+        if (segments.size < 6 || segments.take(3) != listOf("flower", "v1", "url")) {
+            return "/[unrecognized-flower-path]"
+        }
+        val source = segments[3].takeIf { it.matches(Regex("[a-z0-9_-]{1,16}")) } ?: "[other]"
+        val quality = segments[5].takeIf { it.matches(Regex("[a-zA-Z0-9_-]{1,24}")) } ?: "[other]"
+        return "/flower/v1/url/$source/{id:${segments[4].length}}/$quality"
+    }
+
+    private fun headerFingerprints(headers: Headers, name: String): String =
+        headers.values(name).joinToString(",") { fingerprint(it) }
+
+    private fun fingerprint(value: String): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(value.toByteArray(Charsets.UTF_8))
+        return digest.take(8).joinToString("") { "%02x".format(it) }
     }
 
     private fun buildRequest(url: String, options: JSONObject): Request {
