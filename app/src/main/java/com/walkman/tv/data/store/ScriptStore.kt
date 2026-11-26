@@ -4,6 +4,7 @@ import android.content.Context
 import com.walkman.tv.data.model.UserScript
 import com.walkman.tv.source.SourceManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -126,6 +127,117 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
                 Result.success(Imported(script, old))
             },
             onFailure = { Result.failure(it) },
+        )
+    }
+
+    /** Summary returned after a complete subscription catalog has been applied. */
+    data class SubscriptionApplySummary(
+        val added: Int,
+        val updated: Int,
+        val unchanged: Int,
+        val retainedMissing: Int,
+    )
+
+    /**
+     * Apply a fully staged catalog as one transaction:
+     * 1) build a complete additive-only plan,
+     * 2) initialize candidate runtimes without publishing them,
+     * 3) atomically persist the complete candidate list,
+     * 4) publish the runtime snapshot and StateFlow list.
+     *
+     * New subscription entries are deliberately disabled until the user enables them.
+     * Manual scripts, their IDs, enabled flags, and relative order are preserved.
+     */
+    suspend fun applySubscriptionCatalog(
+        staged: com.walkman.tv.source.subscription.StagedSubscriptionCatalog,
+    ): Result<SubscriptionApplySummary> = mutationMutex.withLock {
+        val current = _scripts.value
+        val subscriptionScripts = current.filter {
+            it.id.startsWith(com.walkman.tv.source.subscription.SubscriptionCatalogCore.localId(""))
+                .not()
+        }.filter { com.walkman.tv.source.subscription.SubscriptionCatalogCore.remoteId(it.id) != null }
+        val localRecords = subscriptionScripts.map { script ->
+            val remoteId = com.walkman.tv.source.subscription.SubscriptionCatalogCore.remoteId(script.id)
+                ?: return@withLock Result.failure(IllegalStateException("訂閱音源識別碼無效"))
+            com.walkman.tv.source.subscription.LocalSubscriptionRecord(
+                localId = script.id,
+                remoteId = remoteId,
+                name = script.name,
+                script = script.rawScript,
+                enabled = script.enabled,
+            )
+        }
+        val plan = com.walkman.tv.source.subscription.buildUpdatePlan(localRecords, staged.scripts)
+            ?: return@withLock Result.failure(IllegalArgumentException("訂閱更新計畫驗證失敗，未修改任何音源"))
+
+        val remoteById = staged.scripts.associateBy { it.id }
+        val updatesByLocalId = plan.updates.associateBy { it.localId }
+        fun updatedScript(old: UserScript, remote: com.walkman.tv.source.subscription.RemoteSubscriptionScript): UserScript {
+            val meta = parseHeader(remote.script)
+            return UserScript(
+                id = old.id,
+                name = meta["name"]?.takeIf { it.isNotBlank() } ?: remote.name,
+                description = meta["description"] ?: "",
+                version = meta["version"] ?: "",
+                author = meta["author"] ?: "",
+                homepage = meta["homepage"] ?: "",
+                rawScript = remote.script,
+                importedAt = old.importedAt,
+                enabled = old.enabled,
+            )
+        }
+
+        val candidate = current.map { old ->
+            val update = updatesByLocalId[old.id]
+            if (update == null) old
+            else {
+                val remote = remoteById[update.remoteId]
+                    ?: return@withLock Result.failure(IllegalStateException("訂閱更新項目遺失"))
+                updatedScript(old, remote)
+            }
+        }.toMutableList()
+
+        // Append additions in remote catalog order. Never auto-enable a newly introduced script.
+        plan.additions.forEach { remote ->
+            val meta = parseHeader(remote.script)
+            candidate += UserScript(
+                id = com.walkman.tv.source.subscription.SubscriptionCatalogCore.localId(remote.id),
+                name = meta["name"]?.takeIf { it.isNotBlank() } ?: remote.name,
+                description = meta["description"] ?: "",
+                version = meta["version"] ?: "",
+                author = meta["author"] ?: "",
+                homepage = meta["homepage"] ?: "",
+                rawScript = remote.script,
+                enabled = false,
+            )
+        }
+
+        val candidateSubscriptions = candidate.filter {
+            com.walkman.tv.source.subscription.SubscriptionCatalogCore.remoteId(it.id) != null
+        }
+        val prepared = sourceManager.prepareSubscriptionScripts(candidateSubscriptions).getOrElse {
+            return@withLock Result.failure(it)
+        }
+
+        try {
+            withContext(NonCancellable + Dispatchers.IO) {
+                store.saveStrict(candidate)
+            }
+        } catch (error: Exception) {
+            sourceManager.discardSubscriptionScripts(prepared)
+            return@withLock Result.failure(error)
+        }
+
+        // No suspension between durable persistence and the runtime/list publication.
+        sourceManager.commitSubscriptionScripts(prepared)
+        _scripts.value = candidate
+        Result.success(
+            SubscriptionApplySummary(
+                added = plan.additions.size,
+                updated = plan.updates.size,
+                unchanged = plan.unchangedLocalIds.size,
+                retainedMissing = plan.retainedMissingLocalIds.size,
+            ),
         )
     }
 
