@@ -2,6 +2,7 @@ package com.walkman.tv.data.store
 
 import android.content.Context
 import com.walkman.tv.data.model.UserScript
+import com.walkman.tv.diagnostics.AppDiagnostics
 import com.walkman.tv.source.SourceManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withTimeoutOrNull
@@ -36,9 +37,40 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
      * bounded and best-effort so an unavailable third-party service cannot prevent app startup.
      */
     suspend fun loadAll(installBundled: Boolean = true) {
+        val startedAt = System.currentTimeMillis()
         val persisted = withContext(Dispatchers.IO) { store.load() }
         _scripts.value = persisted
-        persisted.filter { it.enabled }.forEach { sourceManager.load(it) }
+        val enabledScripts = persisted.filter { it.enabled }
+        AppDiagnostics.record(
+            "SCRIPT_STORE_LOAD_BEGIN",
+            "savedCount=${persisted.size}; enabledCount=${enabledScripts.size}; installBundled=$installBundled",
+        )
+        var loadedCount = 0
+        var failedCount = 0
+        enabledScripts.forEach { script ->
+            val result = sourceManager.load(script)
+            result.fold(
+                onSuccess = {
+                    loadedCount++
+                    AppDiagnostics.record(
+                        "SCRIPT_STORE_LOAD_SUCCESS",
+                        "name=${script.name}; sourceCount=${it.sources.size}; sources=${it.sources.keys.joinToString(",") { source -> source.key }}",
+                    )
+                },
+                onFailure = { error ->
+                    failedCount++
+                    AppDiagnostics.record(
+                        "SCRIPT_STORE_LOAD_ERROR",
+                        "name=${script.name}; error=${error.message ?: error::class.simpleName}",
+                        error,
+                    )
+                },
+            )
+        }
+        AppDiagnostics.record(
+            "SCRIPT_STORE_LOAD_FINISH",
+            "savedCount=${persisted.size}; enabledCount=${enabledScripts.size}; loadedCount=$loadedCount; failedCount=$failedCount; availableSources=${sourceManager.supportedSources().joinToString(",") { it.key }}; elapsedMs=${System.currentTimeMillis() - startedAt}",
+        )
         if (installBundled) installBundledYehuaIfMissing()
     }
 
