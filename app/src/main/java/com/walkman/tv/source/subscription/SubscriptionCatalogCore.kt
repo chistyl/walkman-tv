@@ -3,6 +3,7 @@ package com.walkman.tv.source.subscription
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -67,9 +68,9 @@ object SubscriptionCatalogCore {
         val result = ArrayList<SubscriptionCatalogEntry>(entries.size)
         for (element in entries) {
             val item = element as? JsonObject ?: return null
-            val id = item["id"]?.jsonPrimitive?.contentOrNull()?.trim().orEmpty()
-            val name = item["name"]?.jsonPrimitive?.contentOrNull()?.trim().orEmpty()
-            val rawUrl = item["url"]?.jsonPrimitive?.contentOrNull()?.trim().orEmpty()
+            val id = item.stringValue("id")?.trim().orEmpty()
+            val name = item.stringValue("name")?.trim().orEmpty()
+            val rawUrl = item.stringValue("url")?.trim().orEmpty()
             if (id.isBlank() || name.isBlank() || rawUrl.isBlank() || !ids.add(id)) return null
             val resolved = resolveHttpUrl(rawUrl, base) ?: return null
             result += SubscriptionCatalogEntry(id, name, resolved)
@@ -107,6 +108,6 @@ object SubscriptionCatalogCore {
         }?.toString()
     }.getOrNull()
 
-    private fun kotlinx.serialization.json.JsonPrimitive.contentOrNull(): String? =
-        if (isString) content else null
+    private fun JsonObject.stringValue(key: String): String? =
+        (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
 }
