@@ -26,6 +26,7 @@ class SourceManager(
     private val http: ScriptHttpClient,
     private val otherSourceFinder: OtherSourceFinder,
     private val builtIn: BuiltInResolver,
+    private val healthStore: SourceHealthStore? = null,
 ) {
     data class LoadedScript(
         val script: UserScript,
@@ -89,41 +90,56 @@ class SourceManager(
         val preferred = quality ?: Quality.K320
 
         val attempted = excludedAttempts.toMutableSet()
-        val scripts = scriptsFor(track.source, "musicUrl").filter { scriptAttemptKey(track, it) !in attempted }
+        val eligibleScripts = scriptsFor(track.source, "musicUrl")
+            .filter { scriptAttemptKey(track, it) !in attempted }
+        // Health ranking is applied only after the existing platform/action eligibility and
+        // exclusion filters. Unknown/equal sources preserve their original script order.
+        val scriptsById = eligibleScripts.associateBy { it.script.id }
+        val rankedIds = SourceHealthPolicy.rank(
+            eligibleScripts.map { it.script.id },
+            healthStore?.snapshot().orEmpty(),
+            System.currentTimeMillis(),
+        )
+        val scripts = rankedIds.mapNotNull { scriptsById[it] }
         scripts.forEachIndexed { scriptIdx, ls ->
             attempted.add(scriptAttemptKey(track, ls))
+            val startedAtMs = System.currentTimeMillis()
             val scriptQs = ls.capabilities.sources[track.source]?.qualities?.toSet() ?: emptySet()
             val first = pickPlayQuality(preferred, track.qualities.toSet(), scriptQs)
             val cascade = qualityCascade(first, track.qualities.toSet(), scriptQs)
             for ((idx, q) in cascade.withIndex()) {
-                var timedOut = false
-                attempt { resolveViaScript(track, q, ls) }
-                    .onSuccess { play ->
-                        val warn = when {
-                            scriptIdx > 0 -> "已切換至音源「${ls.script.name}」"
-                            idx > 0 -> "${first.displayName} 遠端不支援，已降低至 ${q.displayName}"
-                            else -> null
-                        }
-                        return ResolvedTrack(
-                            url = play.url,
-                            origin = ResolveOrigin.Script(ls.script.name),
-                            quality = q,
-                            warning = warn,
-                            headers = play.headers,
-                            userAgent = play.userAgent,
-                            attemptKey = scriptAttemptKey(track, ls),
-                            attemptedKeys = attempted.toSet(),
-                        )
+                val result = attempt { resolveViaScript(track, q, ls) }
+                if (result.isSuccess) {
+                    val play = result.getOrThrow()
+                    healthStore?.recordSuccess(ls.script.id, (System.currentTimeMillis() - startedAtMs).coerceAtLeast(0))
+                    val warn = when {
+                        scriptIdx > 0 -> "已切換至音源「${ls.script.name}」"
+                        idx > 0 -> "${first.displayName} 遠端不支援，已降低至 ${q.displayName}"
+                        else -> null
                     }
-                    .onFailure {
-                        Log.d(TAG, "script '${ls.script.name}' @${q.key} failed: ${it.message}")
-                        AppDiagnostics.record("SOURCE_SCRIPT_ERROR", "source=${track.source.key}; script=${ls.script.name}; quality=${q.key}", it)
-                        timedOut = it is JsScriptRuntime.ScriptTimeoutException
-                    }
+                    return ResolvedTrack(
+                        url = play.url,
+                        origin = ResolveOrigin.Script(ls.script.name),
+                        quality = q,
+                        warning = warn,
+                        headers = play.headers,
+                        userAgent = play.userAgent,
+                        attemptKey = scriptAttemptKey(track, ls),
+                        attemptedKeys = attempted.toSet(),
+                    )
+                }
+                val error = result.exceptionOrNull()
+                Log.d(TAG, "script '${ls.script.name}' @${q.key} failed: ${error?.message}")
+                if (error != null) {
+                    AppDiagnostics.record("SOURCE_SCRIPT_ERROR", "source=${track.source.key}; script=${ls.script.name}; quality=${q.key}", error)
+                }
+                val timedOut = error is JsScriptRuntime.ScriptTimeoutException
                 // An unresponsive script won't answer at a lower tier either; don't wait out the
                 // timeout once per tier (that was up to a minute of silence per song).
                 if (timedOut) break
             }
+            // One failure sample per script/song resolution, not one sample per quality tier.
+            healthStore?.recordFailure(ls.script.id)
         }
 
         // Playback failover is deliberately limited to alternate JS files for this
