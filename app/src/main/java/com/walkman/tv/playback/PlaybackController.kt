@@ -573,6 +573,7 @@ class PlaybackController(
     fun toggleShuffle() { _state.value = _state.value.copy(shuffle = !_state.value.shuffle) }
 
     fun stop() {
+        resolveGeneration++
         resolveJob?.cancel()
         lyricsJob?.cancel()
         player.stop()
