@@ -46,6 +46,8 @@ class JsScriptRuntime(
         private set
 
     private val pending = ConcurrentHashMap<String, CompletableDeferred<Any?>>()
+    private val musicUrlUserAgents = ConcurrentHashMap<String, String>()
+    @Volatile private var activeMusicUrlRequestKey: String? = null
     private var initDeferred: CompletableDeferred<ScriptCapabilities>? = null
 
     open class ScriptException(message: String) : Exception(message)
@@ -99,14 +101,39 @@ class JsScriptRuntime(
             .put("action", action)
             .put("info", info)
         val payload = JSONObject().put("requestKey", requestKey).put("data", data)
-        withContext(jsDispatcher) { sendToScript("request", payload.toString()) }
-        return try {
-            withTimeout(timeoutMs) { deferred.await() }
-        } catch (e: TimeoutCancellationException) {
-            throw ScriptTimeoutException("指令碼呼叫逾時")
+        var inheritedUserAgent: String? = null
+        val result = try {
+            withContext(jsDispatcher) {
+                val previousRequestKey = activeMusicUrlRequestKey
+                if (action == "musicUrl") activeMusicUrlRequestKey = requestKey
+                try {
+                    sendToScript("request", payload.toString())
+                } finally {
+                    activeMusicUrlRequestKey = previousRequestKey
+                }
+            }
+            val value = try {
+                withTimeout(timeoutMs) { deferred.await() }
+            } catch (e: TimeoutCancellationException) {
+                throw ScriptTimeoutException("指令碼呼叫逾時")
+            }
+            if (action == "musicUrl") inheritedUserAgent = musicUrlUserAgents.remove(requestKey)
+            value
         } finally {
             pending.remove(requestKey)
+            musicUrlUserAgents.remove(requestKey)
         }
+        // Legacy source scripts return only a URL. Reuse the User-Agent they used to resolve it.
+        if (action == "musicUrl" && result is JSONObject && !inheritedUserAgent.isNullOrBlank()) {
+            val resultData = result.optJSONObject("data")
+            val explicitUserAgent = resultData?.optString("userAgent")?.takeIf { it.isNotBlank() }
+                ?: result.optString("userAgent").takeIf { it.isNotBlank() }
+            if (explicitUserAgent == null) {
+                if (resultData != null) resultData.put("userAgent", inheritedUserAgent)
+                else result.put("userAgent", inheritedUserAgent)
+            }
+        }
+        return result
     }
 
     fun destroy() {
@@ -232,6 +259,15 @@ class JsScriptRuntime(
         val requestKey = obj.optString("requestKey").ifEmpty { return }
         val url = obj.optString("url").ifEmpty { return }
         val options = obj.optJSONObject("options") ?: JSONObject()
+        // Legacy musicUrl scripts return only a URL; capture the User-Agent used by lx.request.
+        val actionRequestKey = activeMusicUrlRequestKey
+        if (actionRequestKey != null) {
+            val requestHeaders = options.optJSONObject("headers")
+            val uaKey = requestHeaders?.keys()?.asSequence()
+                ?.firstOrNull { it.equals("User-Agent", ignoreCase = true) }
+            val ua = uaKey?.let { requestHeaders?.optString(it) }
+            if (!ua.isNullOrBlank()) musicUrlUserAgents[actionRequestKey] = ua
+        }
         http.send(requestKey, url, options) { error, response ->
             // Completes on an OkHttp thread — hop back to the JS thread to call the script.
             scope.launch {
