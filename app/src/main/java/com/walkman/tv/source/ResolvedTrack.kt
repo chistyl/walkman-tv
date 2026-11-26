@@ -34,6 +34,8 @@ data class ResolvedTrack(
     val userAgent: String? = null,
     /** Stable identity used to exclude a failed resolver on the next failover attempt. */
     val attemptKey: String? = null,
+    /** All resolver identities tried before this URL was selected. */
+    val attemptedKeys: Set<String> = emptySet(),
 )
 
 /** Implemented by the catalog layer so [OtherSourceFinder] can search other platforms. */
