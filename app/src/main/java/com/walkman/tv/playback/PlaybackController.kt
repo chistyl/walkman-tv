@@ -498,7 +498,12 @@ class PlaybackController(
                     val userAgent = r.userAgent?.takeIf { it.isNotBlank() }
                         ?: headerUserAgent
                         ?: ScriptHttpClient.DEFAULT_UA
-                    if (headerUserAgent == null) requestHeaders["User-Agent"] = userAgent
+                    // Normalize to one authoritative User-Agent. A script-level userAgent
+                    // must not conflict with a differently-cased value inside headers.
+                    requestHeaders.keys
+                        .filter { it.equals("User-Agent", ignoreCase = true) }
+                        .forEach(requestHeaders::remove)
+                    requestHeaders["User-Agent"] = userAgent
                     val httpFactory = DefaultHttpDataSource.Factory()
                         .setUserAgent(userAgent)
                         .setDefaultRequestProperties(requestHeaders)

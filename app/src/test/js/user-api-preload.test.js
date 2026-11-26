@@ -91,3 +91,47 @@ test('QuickJS preload supplies a compatible URLSearchParams implementation', () 
     query: 'source=kw&rid=MUSIC_123',
   })
 })
+
+
+async function invokeMusicUrlResponse(response) {
+  const { context, nativeCalls } = loadPreloadWithoutNativeUrlSearchParams()
+  const responseLiteral = JSON.stringify(response)
+  vm.runInContext(`lx.on('request', async () => (${responseLiteral}))`, context)
+  vm.runInContext(
+    `__lx_native__('key', 'request', JSON.stringify({
+      requestKey: 'music-url-test',
+      data: { source: 'kg', action: 'musicUrl', info: { type: '320k' } },
+    }))`,
+    context,
+  )
+  await new Promise(resolve => setImmediate(resolve))
+  const nativeResponse = nativeCalls.find(call => call.action === 'response')
+  assert.ok(nativeResponse, 'musicUrl response was not returned to native')
+  return nativeResponse.data
+}
+
+test('musicUrl preserves per-track headers and userAgent from object responses', async () => {
+  const payload = await invokeMusicUrlResponse({
+    url: 'https://cdn.example.com/song.mp3',
+    headers: { Referer: 'https://www.example.com/' },
+    userAgent: 'ExamplePlayer/1.0',
+  })
+
+  assert.equal(payload.status, true)
+  assert.deepEqual(payload.result.data, {
+    type: '320k',
+    url: 'https://cdn.example.com/song.mp3',
+    headers: { Referer: 'https://www.example.com/' },
+    userAgent: 'ExamplePlayer/1.0',
+  })
+})
+
+test('musicUrl keeps legacy string responses compatible', async () => {
+  const payload = await invokeMusicUrlResponse('https://cdn.example.com/legacy.mp3')
+
+  assert.equal(payload.status, true)
+  assert.deepEqual(payload.result.data, {
+    type: '320k',
+    url: 'https://cdn.example.com/legacy.mp3',
+  })
+})
