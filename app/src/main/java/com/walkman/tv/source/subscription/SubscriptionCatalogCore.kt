@@ -92,6 +92,75 @@ object SubscriptionCatalogCore {
         }
     }
 
+
+/** Existing locally-managed subscription entry. Manual scripts must never be passed here. */
+data class LocalSubscriptionRecord(
+    val localId: String,
+    val remoteId: String,
+    val name: String,
+    val script: String,
+    val enabled: Boolean,
+)
+
+/** A staged update; the consumer must keep [localId] and [enabled] unchanged. */
+data class PlannedSubscriptionUpdate(
+    val localId: String,
+    val remoteId: String,
+    val name: String,
+    val script: String,
+)
+
+/** Additive/update-only plan. No operation in this model deletes local scripts. */
+data class SubscriptionUpdatePlan(
+    val additions: List<RemoteSubscriptionScript>,
+    val updates: List<PlannedSubscriptionUpdate>,
+    val unchangedLocalIds: List<String>,
+    val retainedMissingLocalIds: List<String>,
+)
+
+/**
+ * Builds a complete plan without mutating storage or runtime sources.
+ * Existing subscription identity and enabled state are preserved by localId; absent remote
+ * entries are retained locally rather than interpreted as deletion instructions.
+ * Returns null if the supplied local or remote identity set is ambiguous or invalid.
+ */
+fun buildUpdatePlan(
+    local: List<LocalSubscriptionRecord>,
+    remote: List<RemoteSubscriptionScript>,
+): SubscriptionUpdatePlan? {
+    if (local.any { it.localId.isBlank() || it.remoteId.isBlank() }) return null
+    if (local.map { it.localId }.toSet().size != local.size) return null
+    if (local.map { it.remoteId }.toSet().size != local.size) return null
+    if (local.any { it.localId != localId(it.remoteId) }) return null
+    if (remote.any { it.id.isBlank() || it.name.isBlank() || it.script.isBlank() }) return null
+    if (remote.map { it.id }.toSet().size != remote.size) return null
+
+    val localByRemoteId = local.associateBy { it.remoteId }
+    val remoteIds = remote.mapTo(HashSet()) { it.id }
+    val additions = mutableListOf<RemoteSubscriptionScript>()
+    val updates = mutableListOf<PlannedSubscriptionUpdate>()
+    val unchanged = mutableListOf<String>()
+
+    for (next in remote) {
+        val current = localByRemoteId[next.id]
+        if (current == null) {
+            additions += next
+        } else if (current.name != next.name || current.script != next.script) {
+            updates += PlannedSubscriptionUpdate(
+                localId = current.localId,
+                remoteId = next.id,
+                name = next.name,
+                script = next.script,
+            )
+        } else {
+            unchanged += current.localId
+        }
+    }
+
+    val retainedMissing = local.filter { it.remoteId !in remoteIds }.map { it.localId }
+    return SubscriptionUpdatePlan(additions, updates, unchanged, retainedMissing)
+}
+
     private fun parseHttpUri(raw: String): URI? = runCatching {
         URI(raw.trim()).takeIf { uri ->
             uri.isAbsolute && uri.scheme?.lowercase() in setOf("http", "https") &&
