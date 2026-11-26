@@ -353,7 +353,11 @@ class PlaybackController(
                     return
                 }
                 // Any other media error — attempt a different resolver before skipping.
-                tryNextSource(track, errorGeneration, error.errorCodeName)
+                if (track != null) {
+                    tryNextSource(track, errorGeneration, error.errorCodeName)
+                } else {
+                    failAndAdvance(error.errorCodeName, errorGeneration)
+                }
             }
         })
         startPositionTicker()
