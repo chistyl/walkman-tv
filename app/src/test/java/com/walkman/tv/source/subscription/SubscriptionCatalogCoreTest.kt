@@ -83,4 +83,46 @@ class SubscriptionCatalogCoreTest {
         val changedName = listOf(RemoteSubscriptionScript("a", "Renamed", "https://new.example/a.js", "script body"))
         assertTrue(SubscriptionCatalogCore.contentChanged(local, changedName))
     }
+
+    @Test
+    fun updatePlanAddsUpdatesAndRetainsMissingEntriesWithoutDeletion() {
+        val local = listOf(
+            LocalSubscriptionRecord("user_api_subscription_a", "a", "Alpha", "old body", true),
+            LocalSubscriptionRecord("user_api_subscription_b", "b", "Beta", "same body", false),
+            LocalSubscriptionRecord("user_api_subscription_c", "c", "Gamma", "keep body", true),
+        )
+        val remote = listOf(
+            RemoteSubscriptionScript("a", "Alpha 2", "https://example.com/a.js", "new body"),
+            RemoteSubscriptionScript("b", "Beta", "https://example.com/b.js", "same body"),
+            RemoteSubscriptionScript("d", "Delta", "https://example.com/d.js", "new script"),
+        )
+
+        val plan = SubscriptionCatalogCore.buildUpdatePlan(local, remote)
+        assertEquals(listOf("d"), plan?.additions?.map { it.id })
+        assertEquals(listOf("user_api_subscription_a"), plan?.updates?.map { it.localId })
+        assertEquals(listOf("user_api_subscription_b"), plan?.unchangedLocalIds)
+        assertEquals(listOf("user_api_subscription_c"), plan?.retainedMissingLocalIds)
+        assertEquals(false, local.first { it.remoteId == "b" }.enabled)
+    }
+
+    @Test
+    fun updatePlanRejectsAmbiguousOrManualLocalIdentity() {
+        val duplicateLocal = listOf(
+            LocalSubscriptionRecord("user_api_subscription_a", "a", "A", "one", true),
+            LocalSubscriptionRecord("user_api_subscription_a", "a", "A", "two", true),
+        )
+        assertNull(SubscriptionCatalogCore.buildUpdatePlan(duplicateLocal, emptyList()))
+
+        val manualScript = listOf(
+            LocalSubscriptionRecord("manual-script", "a", "Manual", "body", true),
+        )
+        assertNull(SubscriptionCatalogCore.buildUpdatePlan(manualScript, emptyList()))
+
+        val duplicateRemote = listOf(
+            RemoteSubscriptionScript("a", "A", "https://example.com/a.js", "one"),
+            RemoteSubscriptionScript("a", "A2", "https://example.com/a2.js", "two"),
+        )
+        assertNull(SubscriptionCatalogCore.buildUpdatePlan(emptyList(), duplicateRemote))
+    }
+
 }
