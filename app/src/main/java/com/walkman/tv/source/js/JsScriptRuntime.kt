@@ -11,6 +11,7 @@ import com.whl.quickjs.wrapper.QuickJSContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
@@ -21,6 +22,8 @@ import org.json.JSONObject
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.coroutines.EmptyCoroutineContext
 
 /**
  * Runs a single lx-music v4 user script in a QuickJS context. Ports `userApi/QuickJS.java`
@@ -46,6 +49,10 @@ class JsScriptRuntime(
         private set
 
     private val pending = ConcurrentHashMap<String, CompletableDeferred<Any?>>()
+    private val activeHttpRequests = ConcurrentHashMap.newKeySet<String>()
+    private val musicUrlUserAgents = ConcurrentHashMap<String, String>()
+    @Volatile private var activeMusicUrlRequestKey: String? = null
+    private val destroyed = AtomicBoolean(false)
     private var initDeferred: CompletableDeferred<ScriptCapabilities>? = null
 
     open class ScriptException(message: String) : Exception(message)
@@ -55,6 +62,7 @@ class JsScriptRuntime(
 
     /** Create the context, evaluate preload + script, and wait for the script to report `init`. */
     suspend fun load(timeoutMs: Long = 10_000): ScriptCapabilities {
+        if (destroyed.get()) throw ScriptException("指令碼已卸載")
         val deferred = CompletableDeferred<ScriptCapabilities>()
         initDeferred = deferred
         withContext(jsDispatcher) {
@@ -90,6 +98,7 @@ class JsScriptRuntime(
 
     /** Ask the script to perform an action (musicUrl / lyric / pic). */
     suspend fun requestAction(source: SourceID, action: String, info: JSONObject, timeoutMs: Long = 15_000): Any? {
+        if (destroyed.get()) throw ScriptException("指令碼已卸載")
         if (!inited) throw ScriptException("指令碼尚未初始化")
         val requestKey = UUID.randomUUID().toString()
         val deferred = CompletableDeferred<Any?>()
@@ -99,22 +108,62 @@ class JsScriptRuntime(
             .put("action", action)
             .put("info", info)
         val payload = JSONObject().put("requestKey", requestKey).put("data", data)
-        withContext(jsDispatcher) { sendToScript("request", payload.toString()) }
-        return try {
-            withTimeout(timeoutMs) { deferred.await() }
-        } catch (e: TimeoutCancellationException) {
-            throw ScriptTimeoutException("指令碼呼叫逾時")
+        var inheritedUserAgent: String? = null
+        val result = try {
+            withContext(jsDispatcher) {
+                if (destroyed.get()) throw ScriptException("指令碼已卸載")
+                val previousRequestKey = activeMusicUrlRequestKey
+                if (action == "musicUrl") activeMusicUrlRequestKey = requestKey
+                try {
+                    sendToScript("request", payload.toString())
+                } finally {
+                    activeMusicUrlRequestKey = previousRequestKey
+                }
+            }
+            val value = try {
+                withTimeout(timeoutMs) { deferred.await() }
+            } catch (e: TimeoutCancellationException) {
+                throw ScriptTimeoutException("指令碼呼叫逾時")
+            }
+            if (action == "musicUrl") inheritedUserAgent = musicUrlUserAgents.remove(requestKey)
+            value
         } finally {
             pending.remove(requestKey)
+            musicUrlUserAgents.remove(requestKey)
         }
+        // Legacy source scripts return only a URL string. Inherit the User-Agent they used
+        // for the musicUrl resolver request so ExoPlayer can make a compatible stream request.
+        if (action == "musicUrl" && result is JSONObject && !inheritedUserAgent.isNullOrBlank()) {
+            val resultData = result.optJSONObject("data")
+            val explicitUserAgent = resultData?.optString("userAgent")?.takeIf { it.isNotBlank() }
+                ?: result.optString("userAgent").takeIf { it.isNotBlank() }
+            if (explicitUserAgent == null) {
+                if (resultData != null) resultData.put("userAgent", inheritedUserAgent)
+                else result.put("userAgent", inheritedUserAgent)
+            }
+        }
+        return result
     }
 
     fun destroy() {
-        scope.launch {
-            runCatching { ctx?.destroy() }
-            ctx = null
+        if (!destroyed.compareAndSet(false, true)) return
+        val unloaded = ScriptException("指令碼已卸載")
+        pending.values.forEach { it.completeExceptionally(unloaded) }
+        pending.clear()
+        initDeferred?.completeExceptionally(unloaded)
+        initDeferred = null
+        activeHttpRequests.toList().forEach(http::cancel)
+        activeHttpRequests.clear()
+        musicUrlUserAgents.clear()
+        activeMusicUrlRequestKey = null
+        // Stop timer/callback coroutines before shutting down the JS executor.
+        scope.cancel()
+        runCatching {
+            jsDispatcher.dispatch(EmptyCoroutineContext) {
+                runCatching { ctx?.destroy() }
+                ctx = null
+            }
         }
-        // Allow the destroy task to run, then stop the thread.
         executor.shutdown()
     }
 
@@ -171,6 +220,7 @@ class JsScriptRuntime(
 
     /** Call the script's `__lx_native__(key, action[, dataString])`. Must run on [jsDispatcher]. */
     private fun sendToScript(action: String, dataString: String?) {
+        if (destroyed.get()) return
         val c = ctx ?: return
         try {
             val fn = c.globalObject.getJSFunction("__lx_native__")
@@ -183,10 +233,15 @@ class JsScriptRuntime(
     // MARK: - script → host
 
     private fun handleScriptCall(action: String, rawData: String?) {
+        if (destroyed.get()) return
         when (action) {
             "init" -> handleInit(rawData)
             "request" -> handleHttpRequest(rawData)
-            "cancelRequest" -> rawData?.let { http.cancel(stripQuotes(it)) }
+            "cancelRequest" -> rawData?.let {
+                val requestKey = stripQuotes(it)
+                activeHttpRequests.remove(requestKey)
+                http.cancel(requestKey)
+            }
             "response" -> handleScriptResponse(rawData)
             "showUpdateAlert" -> Log.i(TAG, "updateAlert: $rawData")
             else -> Log.d(TAG, "unknown script call: $action")
@@ -229,13 +284,27 @@ class JsScriptRuntime(
     }
 
     private fun handleHttpRequest(rawData: String?) {
+        if (destroyed.get()) return
         val obj = parseObj(rawData) ?: return
         val requestKey = obj.optString("requestKey").ifEmpty { return }
         val url = obj.optString("url").ifEmpty { return }
         val options = obj.optJSONObject("options") ?: JSONObject()
+        // The legacy 野花 musicUrl handler returns only a URL. Capture the User-Agent
+        // supplied by that action's synchronous lx.request call and attach it to the result.
+        val actionRequestKey = activeMusicUrlRequestKey
+        if (actionRequestKey != null) {
+            val requestHeaders = options.optJSONObject("headers")
+            val uaKey = requestHeaders?.keys()?.asSequence()
+                ?.firstOrNull { it.equals("User-Agent", ignoreCase = true) }
+            val ua = uaKey?.let { requestHeaders?.optString(it) }
+            if (!ua.isNullOrBlank()) musicUrlUserAgents[actionRequestKey] = ua
+        }
+        activeHttpRequests.add(requestKey)
         http.send(requestKey, url, options) { error, response ->
+            activeHttpRequests.remove(requestKey)
             // Completes on an OkHttp thread — hop back to the JS thread to call the script.
-            scope.launch {
+            if (!destroyed.get()) scope.launch {
+                if (destroyed.get()) return@launch
                 val payload = JSONObject().put("requestKey", requestKey)
                 if (error != null || response == null) {
                     payload.put("error", error ?: "no response")

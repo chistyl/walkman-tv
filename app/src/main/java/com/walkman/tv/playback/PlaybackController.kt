@@ -31,6 +31,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -236,6 +237,7 @@ class PlaybackController(
     private var lyricsJob: Job? = null
     private var retryJob: Job? = null
     private var autoSkipJob: Job? = null
+    private var tickerJob: Job? = null
     @Volatile private var activeMediaId: String? = null
 
     /** Invalidates late resolver results after a newer track/source selection. */
@@ -277,6 +279,11 @@ class PlaybackController(
                     return
                 }
                 val errorGeneration = resolveGeneration
+                if (_state.value.isMv) {
+                    AppDiagnostics.record("MV_PLAYER_ERROR", "generation=$errorGeneration; code=${error.errorCode} ${error.errorCodeName}", error)
+                    _state.value = _state.value.copy(error = "MV 播放失敗", resolving = false, isPlaying = false)
+                    return
+                }
                 AppDiagnostics.record("PLAYER_ERROR", "generation=$errorGeneration; mediaId=$eventMediaId; code=${error.errorCode} ${error.errorCodeName}; source=${_state.value.currentTrack?.source?.key}; quality=${lastAttemptedQuality?.key}", error)
                 // Format/codec rejections are the "encrypted .mgg" / "actually MP3 not FLAC" case
                 // from spec §3 — re-cascade from one tier below the current attempt. Network /
@@ -390,6 +397,10 @@ class PlaybackController(
     fun playAt(index: Int, qualityCap: Quality? = null) {
         val track = _state.value.queue.getOrNull(index) ?: return
         val generation = ++resolveGeneration
+        probeJob?.cancel()
+        probeJob = null
+        probingUrl = null
+        _audioSpec.value = null
         retryJob?.cancel()
         retryJob = null
         autoSkipJob?.cancel()
@@ -666,6 +677,10 @@ class PlaybackController(
 
     fun stop() {
         resolveGeneration++
+        probeJob?.cancel()
+        probeJob = null
+        probingUrl = null
+        _audioSpec.value = null
         activeMediaId = null
         retryJob?.cancel()
         autoSkipJob?.cancel()
@@ -682,6 +697,10 @@ class PlaybackController(
     /** Play an MV video url on the same player (UI attaches a PlayerView for output). */
     fun playMvUrl(url: String) {
         val generation = ++resolveGeneration
+        probeJob?.cancel()
+        probeJob = null
+        probingUrl = null
+        _audioSpec.value = null
         retryJob?.cancel()
         autoSkipJob?.cancel()
         val mediaId = "mv:$generation"
@@ -759,7 +778,8 @@ class PlaybackController(
     }
 
     private fun startPositionTicker() {
-        scope.launch {
+        if (tickerJob?.isActive == true) return
+        tickerJob = scope.launch {
             while (true) {
                 if (player.isPlaying || _state.value.isMv) {
                     _state.value = _state.value.copy(
@@ -774,12 +794,16 @@ class PlaybackController(
 
     fun release() {
         resolveGeneration++
+        tickerJob?.cancel()
+        probeJob?.cancel()
+        probingUrl = null
         activeMediaId = null
         retryJob?.cancel()
         autoSkipJob?.cancel()
         resolveJob?.cancel()
         lyricsJob?.cancel()
         probeJob?.cancel()
+        scope.cancel()
         player.release()
     }
 
