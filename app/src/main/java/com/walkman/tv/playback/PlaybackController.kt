@@ -22,6 +22,7 @@ import com.walkman.tv.data.store.PlaybackSnapshot
 import com.walkman.tv.diagnostics.AppDiagnostics
 import com.walkman.tv.data.model.Quality
 import com.walkman.tv.data.model.Track
+import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.source.ResolveOrigin
 import com.walkman.tv.source.ResolvedTrack
 import com.walkman.tv.source.SourceManager
@@ -55,6 +56,7 @@ data class PlaybackState(
     val repeatMode: RepeatMode = RepeatMode.ALL,
     val shuffle: Boolean = false,
     val isMv: Boolean = false,
+    val activeSource: SourceID? = null,
 ) {
     val currentTrack: Track? get() = queue.getOrNull(index)
 }
@@ -92,6 +94,9 @@ class PlaybackController(
      *  [MAX_CONSECUTIVE_FAILURES]. Reset to 0 when any track actually reaches READY, and on a
      *  fresh user-initiated queue. Distinct from [networkRetryCount], which retries one track. */
     private var consecutiveFailures: Int = 0
+
+    /** Platforms already attempted for the currently selected recording. */
+    private val attemptedSources = linkedSetOf<SourceID>()
 
     /**
      * Optional local-first URL resolver. When set, [playAt] checks it before going to
@@ -158,6 +163,7 @@ class PlaybackController(
         /** Stop auto-skipping once this many tracks fail back-to-back (a whole playlist of dead
          *  links shouldn't spin forever). */
         const val MAX_CONSECUTIVE_FAILURES = 3
+        const val MAX_BUFFERING_WAIT_MS = 18_000L
 
         /**
          * Build ExoPlayer using Media3's standard audio sink. Avoid custom PCM processor,
@@ -237,6 +243,7 @@ class PlaybackController(
     private var lyricsJob: Job? = null
     private var retryJob: Job? = null
     private var autoSkipJob: Job? = null
+    private var bufferingWatchdogJob: Job? = null
     private var tickerJob: Job? = null
     @Volatile private var activeMediaId: String? = null
 
@@ -266,6 +273,8 @@ class PlaybackController(
                     if (_state.value.isMv) exitMv() else handleEnded()
                 }
                 if (playbackState == Player.STATE_READY) {
+                    bufferingWatchdogJob?.cancel()
+                    bufferingWatchdogJob = null
                     // A track actually started — clear the consecutive-failure streak.
                     consecutiveFailures = 0
                     _state.value = _state.value.copy(durationMs = player.duration.coerceAtLeast(0))
@@ -306,6 +315,10 @@ class PlaybackController(
                     if (errorGeneration == resolveGeneration) playAt(_state.value.index, qualityCap = below)
                     return
                 }
+                if (isFormatReject && track != null && current == Quality.K128) {
+                    attemptSourceFailover(track, error.errorCodeName, errorGeneration)
+                    return
+                }
                 // Transient network — exponential backoff retry up to MAX_NETWORK_RETRIES.
                 // After that, advance to next so playback doesn't dead-stop the queue.
                 if (error.errorCode in NETWORK_RETRY_CODES && track != null) {
@@ -343,11 +356,12 @@ class PlaybackController(
                         "PlaybackController",
                         "network retries exhausted on ${track.name}; skipping to next",
                     )
-                    failAndAdvance("網路不穩定", errorGeneration)
+                    attemptSourceFailover(track, "網路不穩定", errorGeneration)
                     return
                 }
-                // Any other error — this track failed; auto-skip (or stop after too many in a row).
-                failAndAdvance(error.errorCodeName, errorGeneration)
+                // Any other error — try a different platform before abandoning the song.
+                if (track != null) attemptSourceFailover(track, error.errorCodeName, errorGeneration)
+                else failAndAdvance(error.errorCodeName, errorGeneration)
             }
         })
         startPositionTicker()
@@ -413,6 +427,8 @@ class PlaybackController(
         if (qualityCap == null) {
             lastAttemptedQuality = null
             networkRetryCount = 0
+            attemptedSources.clear()
+            attemptedSources.add(track.source)
             // Silence the previous song right away. Resolving can take a long time with a slow or
             // dead source (every quality tier × 15s script timeout, then other-platform lookups),
             // and the old track playing on under the new title looked like "切換歌曲未成功".
@@ -491,6 +507,12 @@ class PlaybackController(
                 // Remember the tier so onPlayerError can re-cascade from one tier below if
                 // ExoPlayer rejects the file format.
                 lastAttemptedQuality = r.quality
+                val resolvedSource = when (val origin = r.origin) {
+                    is ResolveOrigin.OtherSource -> origin.source
+                    ResolveOrigin.LocalFile -> SourceID.LOCAL
+                    else -> track.source
+                }
+                attemptedSources.add(resolvedSource)
                 val host = runCatching { android.net.Uri.parse(r.url).host }.getOrNull() ?: "(local-or-unknown)"
                 AppDiagnostics.record("PLAY_RESOLVED", "source=${track.source.key}; quality=${r.quality.key}; host=$host; headerNames=${r.headers.keys.joinToString(",")}; customUA=${!r.userAgent.isNullOrBlank()}")
                 // Successful resolve + setMediaItem → reset the network retry counter so the
@@ -549,11 +571,13 @@ class PlaybackController(
                 // the transition on Android 9 and trigger RemoteServiceException.
                 ensureService()
                 player.playWhenReady = true
+                scheduleBufferingWatchdog(generation, mediaId)
                 _state.value = _state.value.copy(
                     resolving = false,
                     warning = r.warning,
                     originLabel = r.origin.label,
                     quality = r.quality,
+                    activeSource = resolvedSource,
                 )
                 onTrackStarted?.invoke(track)
                 // (lyrics already loaded in playAt when the track switched)
@@ -563,6 +587,144 @@ class PlaybackController(
                     failAndAdvance(e.message ?: "無法播放", generation)
                 }
             }
+    }
+
+    private fun scheduleBufferingWatchdog(generation: Long, mediaId: String) {
+        bufferingWatchdogJob?.cancel()
+        bufferingWatchdogJob = scope.launch {
+            delay(MAX_BUFFERING_WAIT_MS)
+            if (
+                generation == resolveGeneration &&
+                activeMediaId == mediaId &&
+                player.currentMediaItem?.mediaId == mediaId &&
+                player.playbackState == Player.STATE_BUFFERING &&
+                player.playWhenReady &&
+                !_state.value.isMv &&
+                !_state.value.resolving
+            ) {
+                val track = _state.value.currentTrack ?: return@launch
+                AppDiagnostics.record(
+                    "SOURCE_BUFFERING_TIMEOUT",
+                    "generation=$generation; source=${_state.value.activeSource?.key ?: track.source.key}; waitMs=$MAX_BUFFERING_WAIT_MS",
+                )
+                attemptSourceFailover(track, "播放載入逾時", generation)
+            }
+        }
+    }
+
+    /**
+     * Try a different platform for the same recording. Generation + mediaId guards ensure that
+     * stale player callbacks, delayed retries, and late script responses cannot replace a newer
+     * user selection. All player mutations remain on the controller's main-thread scope.
+     */
+    private fun attemptSourceFailover(track: Track, reason: String, expectedGeneration: Long) {
+        if (expectedGeneration != resolveGeneration) return
+        if (_state.value.resolving || _state.value.isMv) return
+        val excluded = attemptedSources.toSet() + track.source
+        if (SourceID.onlineSources.all { it in excluded }) {
+            failAndAdvance("所有音源皆已嘗試（$reason）", expectedGeneration)
+            return
+        }
+
+        val generation = ++resolveGeneration
+        retryJob?.cancel()
+        retryJob = null
+        bufferingWatchdogJob?.cancel()
+        bufferingWatchdogJob = null
+        autoSkipJob?.cancel()
+        autoSkipJob = null
+        resolveJob?.cancel()
+        activeMediaId = "$generation:${track.id}"
+        networkRetryCount = 0
+        runCatching { player.stop() }
+        _state.value = _state.value.copy(
+            resolving = true,
+            isPlaying = false,
+            warning = "「${_state.value.activeSource?.displayName ?: track.source.displayName}」播放失敗，正在切換其他音源…",
+            error = null,
+        )
+        AppDiagnostics.record(
+            "SOURCE_FAILOVER_BEGIN",
+            "generation=$generation; trackId=${track.id}; excluded=${excluded.joinToString(",") { it.key }}; reason=$reason",
+        )
+        val quality = lastAttemptedQuality ?: preferredQuality
+        resolveJob = scope.launch {
+            val result = try {
+                Result.success(sources.resolveOtherSourceURL(track, quality, excluded))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Result.failure(error)
+            }
+            if (generation != resolveGeneration || _state.value.currentTrack?.id != track.id) {
+                AppDiagnostics.record("SOURCE_FAILOVER_STALE", "generation=$generation; currentGeneration=$resolveGeneration")
+                return@launch
+            }
+            result.fold(
+                onSuccess = { resolved ->
+                    AppDiagnostics.record(
+                        "SOURCE_FAILOVER_SUCCESS",
+                        "generation=$generation; source=${(resolved.origin as? ResolveOrigin.OtherSource)?.source?.key ?: "unknown"}",
+                    )
+                    playResolvedOrFail(track, Result.success(resolved), generation)
+                },
+                onFailure = { error ->
+                    AppDiagnostics.record("SOURCE_FAILOVER_EXHAUSTED", "generation=$generation; reason=$reason", error)
+                    failAndAdvance("所有可用音源皆無法播放（$reason）", generation)
+                },
+            )
+        }
+    }
+
+    /** Manually resolve the current song on a platform selected by the user. */
+    fun switchSource(targetSource: SourceID) {
+        val track = _state.value.currentTrack ?: return
+        val currentSource = _state.value.activeSource ?: track.source
+        if (targetSource == currentSource || targetSource == SourceID.LOCAL) return
+
+        val generation = ++resolveGeneration
+        retryJob?.cancel()
+        retryJob = null
+        bufferingWatchdogJob?.cancel()
+        bufferingWatchdogJob = null
+        autoSkipJob?.cancel()
+        autoSkipJob = null
+        resolveJob?.cancel()
+        attemptedSources.clear()
+        attemptedSources.add(currentSource)
+        _state.value = _state.value.copy(
+            resolving = true,
+            warning = "正在切換至「${targetSource.displayName}」…",
+            error = null,
+        )
+        AppDiagnostics.record(
+            "SOURCE_MANUAL_SWITCH_BEGIN",
+            "generation=$generation; from=${currentSource.key}; to=${targetSource.key}",
+        )
+        resolveJob = scope.launch {
+            val result = try {
+                Result.success(sources.resolveMusicURLOnSource(track, targetSource, preferredQuality))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Result.failure(error)
+            }
+            if (generation != resolveGeneration || _state.value.currentTrack?.id != track.id) return@launch
+            result.fold(
+                onSuccess = { resolved ->
+                    runCatching { player.stop() }
+                    activeMediaId = "$generation:${track.id}"
+                    playResolvedOrFail(track, Result.success(resolved), generation)
+                },
+                onFailure = { error ->
+                    _state.value = _state.value.copy(
+                        resolving = false,
+                        warning = "切換至「${targetSource.displayName}」失敗：${error.message ?: "找不到相符歌曲"}",
+                    )
+                    AppDiagnostics.record("SOURCE_MANUAL_SWITCH_ERROR", "to=${targetSource.key}", error)
+                },
+            )
+        }
     }
 
     /**
@@ -684,6 +846,7 @@ class PlaybackController(
         activeMediaId = null
         retryJob?.cancel()
         autoSkipJob?.cancel()
+        bufferingWatchdogJob?.cancel()
         resolveJob?.cancel()
         lyricsJob?.cancel()
         player.stop()
@@ -800,6 +963,7 @@ class PlaybackController(
         activeMediaId = null
         retryJob?.cancel()
         autoSkipJob?.cancel()
+        bufferingWatchdogJob?.cancel()
         resolveJob?.cancel()
         lyricsJob?.cancel()
         probeJob?.cancel()
