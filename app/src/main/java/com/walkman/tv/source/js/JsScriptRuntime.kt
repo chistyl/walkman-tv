@@ -350,10 +350,29 @@ class JsScriptRuntime(
                     val bodyType = response.body::class.java.simpleName
                     val bodyLength = when (val body = response.body) {
                         is String -> body.length
-                        is JSONObject -> body.length()
-                        is org.json.JSONArray -> body.length()
+                        is JSONObject -> body.toString().length
+                        is org.json.JSONArray -> body.toString().length
                         else -> -1
                     }
+                    // Log only structured error metadata, never the raw response body.
+                    // This lets us distinguish API rejection reasons without exposing URLs or tokens.
+                    val bodyDiagnostic = (response.body as? JSONObject)?.let { body ->
+                        val keys = body.keys().asSequence().sorted().take(12).joinToString(",")
+                        val safeFields = listOf("code", "status", "error", "message", "msg", "detail", "reason")
+                            .mapNotNull { name ->
+                                if (!body.has(name) || body.isNull(name)) return@mapNotNull null
+                                val value = body.opt(name)
+                                if (value !is String && value !is Number && value !is Boolean) return@mapNotNull null
+                                val safeValue = value.toString()
+                                    .replace(Regex("https?://\\S+"), "[url]")
+                                    .replace(Regex("[A-Fa-f0-9]{32,}"), "[redacted]")
+                                    .replace(Regex("[\\r\\n]+"), " ")
+                                    .take(120)
+                                "$name=$safeValue"
+                            }
+                            .joinToString(";")
+                        "; bodyKeys=$keys" + if (safeFields.isNotEmpty()) "; bodyFields=$safeFields" else ""
+                    } ?: ""
                     val responseHeaderSummary = listOf("server", "content-type", "date", "x-request-id")
                         .mapNotNull { name -> response.headers[name]?.take(120)?.let { "$name=$it" } }
                         .joinToString("; ")
@@ -361,7 +380,7 @@ class JsScriptRuntime(
                         "SCRIPT_HTTP_RESULT",
                         "request=$shortRequestKey; host=$requestHost; method=$requestMethod; statusCode=" +
                             response.statusCode + "; statusMessage=" + response.statusMessage +
-                            "; bodyType=" + bodyType + "; bodyLength=" + bodyLength +
+                            "; bodyType=" + bodyType + "; bodyLength=" + bodyLength + bodyDiagnostic +
                             if (responseHeaderSummary.isNotEmpty()) "; responseHeaders=$responseHeaderSummary" else ""
                     )
                     payload.put("error", JSONObject.NULL)
