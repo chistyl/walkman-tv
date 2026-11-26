@@ -5,6 +5,11 @@ import com.walkman.tv.data.model.UserScript
 import com.walkman.tv.diagnostics.AppDiagnostics
 import com.walkman.tv.source.SourceManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,8 +52,19 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
         )
         var loadedCount = 0
         var failedCount = 0
-        enabledScripts.forEach { script ->
-            val result = sourceManager.load(script)
+        // Each script owns an isolated QuickJS context. Initialize at most two in parallel:
+        // this shortens cold-start time when several sources are enabled without flooding low-RAM
+        // Android TV devices. SourceManager retains persisted priority independent of completion.
+        val loadResults = coroutineScope {
+            val permits = Semaphore(2)
+            enabledScripts.mapIndexed { index, script ->
+                async {
+                    permits.withPermit { sourceManager.load(script, priority = index) }
+                }
+            }.awaitAll()
+        }
+        loadResults.forEachIndexed { index, result ->
+            val script = enabledScripts[index]
             result.fold(
                 onSuccess = {
                     loadedCount++
