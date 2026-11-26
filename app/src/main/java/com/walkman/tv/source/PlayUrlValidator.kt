@@ -17,7 +17,7 @@ internal object PlayUrlValidator {
         }
         val scheme = uri?.scheme?.lowercase(Locale.ROOT)
         if (uri == null || !uri.isAbsolute || scheme !in setOf("http", "https") || uri.host.isNullOrBlank()) {
-            throw SourceManager.SourceException("音源未提供有效的 HTTP／HTTPS 播放網址")
+            throw IllegalArgumentException("音源未提供有效的 HTTP／HTTPS 播放網址")
         }
         return value
     }
