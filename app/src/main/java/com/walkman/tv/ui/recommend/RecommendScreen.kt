@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -600,7 +600,7 @@ private fun HeroBanner(
 private fun SonglistRow(items: List<com.walkman.tv.data.model.SonglistInfo>, onSelect: (com.walkman.tv.data.model.SonglistInfo) -> Unit) {
   val unique = androidx.compose.runtime.remember(items) { items.distinctBy { "${it.source.key}_${it.id}" } }
   androidx.compose.foundation.lazy.LazyRow(
-    modifier = Modifier.focusRestorer(),
+    modifier = Modifier.focusGroup(),
     horizontalArrangement = Arrangement.spacedBy(14.dp),
     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 4.dp),
   ) {
@@ -621,7 +621,7 @@ private fun SonglistRow(items: List<com.walkman.tv.data.model.SonglistInfo>, onS
 private fun BoardRow(items: List<com.walkman.tv.data.model.BoardInfo>, onSelect: (com.walkman.tv.data.model.BoardInfo) -> Unit) {
   val unique = androidx.compose.runtime.remember(items) { items.distinctBy { "${it.source.key}_${it.id}" } }
   androidx.compose.foundation.lazy.LazyRow(
-    modifier = Modifier.focusRestorer(),
+    modifier = Modifier.focusGroup(),
     horizontalArrangement = Arrangement.spacedBy(14.dp),
     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 4.dp),
   ) {
