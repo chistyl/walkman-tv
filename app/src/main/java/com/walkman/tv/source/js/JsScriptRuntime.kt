@@ -6,11 +6,13 @@ import com.walkman.tv.data.model.ScriptCapabilities
 import com.walkman.tv.data.model.SourceCapability
 import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.data.model.UserScript
+import com.walkman.tv.diagnostics.AppDiagnostics
 import com.whl.quickjs.wrapper.JSCallFunction
 import com.whl.quickjs.wrapper.QuickJSContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
@@ -19,8 +21,11 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
 import java.util.UUID
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.coroutines.EmptyCoroutineContext
 
 /**
  * Runs a single lx-music v4 user script in a QuickJS context. Ports `userApi/QuickJS.java`
@@ -46,6 +51,10 @@ class JsScriptRuntime(
         private set
 
     private val pending = ConcurrentHashMap<String, CompletableDeferred<Any?>>()
+    private val activeHttpRequests = ConcurrentHashMap.newKeySet<String>()
+    private val musicUrlUserAgents = ConcurrentHashMap<String, String>()
+    @Volatile private var activeMusicUrlRequestKey: String? = null
+    private val destroyed = AtomicBoolean(false)
     private var initDeferred: CompletableDeferred<ScriptCapabilities>? = null
 
     open class ScriptException(message: String) : Exception(message)
@@ -55,6 +64,7 @@ class JsScriptRuntime(
 
     /** Create the context, evaluate preload + script, and wait for the script to report `init`. */
     suspend fun load(timeoutMs: Long = 10_000): ScriptCapabilities {
+        if (destroyed.get()) throw ScriptException("指令碼已卸載")
         val deferred = CompletableDeferred<ScriptCapabilities>()
         initDeferred = deferred
         withContext(jsDispatcher) {
@@ -90,6 +100,7 @@ class JsScriptRuntime(
 
     /** Ask the script to perform an action (musicUrl / lyric / pic). */
     suspend fun requestAction(source: SourceID, action: String, info: JSONObject, timeoutMs: Long = 15_000): Any? {
+        if (destroyed.get()) throw ScriptException("指令碼已卸載")
         if (!inited) throw ScriptException("指令碼尚未初始化")
         val requestKey = UUID.randomUUID().toString()
         val deferred = CompletableDeferred<Any?>()
@@ -99,22 +110,62 @@ class JsScriptRuntime(
             .put("action", action)
             .put("info", info)
         val payload = JSONObject().put("requestKey", requestKey).put("data", data)
-        withContext(jsDispatcher) { sendToScript("request", payload.toString()) }
-        return try {
-            withTimeout(timeoutMs) { deferred.await() }
-        } catch (e: TimeoutCancellationException) {
-            throw ScriptTimeoutException("指令碼呼叫逾時")
+        var inheritedUserAgent: String? = null
+        val result = try {
+            withContext(jsDispatcher) {
+                if (destroyed.get()) throw ScriptException("指令碼已卸載")
+                val previousRequestKey = activeMusicUrlRequestKey
+                if (action == "musicUrl") activeMusicUrlRequestKey = requestKey
+                try {
+                    sendToScript("request", payload.toString())
+                } finally {
+                    activeMusicUrlRequestKey = previousRequestKey
+                }
+            }
+            val value = try {
+                withTimeout(timeoutMs) { deferred.await() }
+            } catch (e: TimeoutCancellationException) {
+                throw ScriptTimeoutException("指令碼呼叫逾時")
+            }
+            if (action == "musicUrl") inheritedUserAgent = musicUrlUserAgents.remove(requestKey)
+            value
         } finally {
             pending.remove(requestKey)
+            musicUrlUserAgents.remove(requestKey)
         }
+        // Legacy source scripts return only a URL string. Inherit the User-Agent they used
+        // for the musicUrl resolver request so ExoPlayer can make a compatible stream request.
+        if (action == "musicUrl" && result is JSONObject && !inheritedUserAgent.isNullOrBlank()) {
+            val resultData = result.optJSONObject("data")
+            val explicitUserAgent = resultData?.optString("userAgent")?.takeIf { it.isNotBlank() }
+                ?: result.optString("userAgent").takeIf { it.isNotBlank() }
+            if (explicitUserAgent == null) {
+                if (resultData != null) resultData.put("userAgent", inheritedUserAgent)
+                else result.put("userAgent", inheritedUserAgent)
+            }
+        }
+        return result
     }
 
     fun destroy() {
-        scope.launch {
-            runCatching { ctx?.destroy() }
-            ctx = null
+        if (!destroyed.compareAndSet(false, true)) return
+        val unloaded = ScriptException("指令碼已卸載")
+        pending.values.forEach { it.completeExceptionally(unloaded) }
+        pending.clear()
+        initDeferred?.completeExceptionally(unloaded)
+        initDeferred = null
+        activeHttpRequests.toList().forEach(http::cancel)
+        activeHttpRequests.clear()
+        musicUrlUserAgents.clear()
+        activeMusicUrlRequestKey = null
+        // Stop timer/callback coroutines before shutting down the JS executor.
+        scope.cancel()
+        runCatching {
+            jsDispatcher.dispatch(EmptyCoroutineContext) {
+                runCatching { ctx?.destroy() }
+                ctx = null
+            }
         }
-        // Allow the destroy task to run, then stop the thread.
         executor.shutdown()
     }
 
@@ -171,6 +222,7 @@ class JsScriptRuntime(
 
     /** Call the script's `__lx_native__(key, action[, dataString])`. Must run on [jsDispatcher]. */
     private fun sendToScript(action: String, dataString: String?) {
+        if (destroyed.get()) return
         val c = ctx ?: return
         try {
             val fn = c.globalObject.getJSFunction("__lx_native__")
@@ -183,10 +235,15 @@ class JsScriptRuntime(
     // MARK: - script → host
 
     private fun handleScriptCall(action: String, rawData: String?) {
+        if (destroyed.get()) return
         when (action) {
             "init" -> handleInit(rawData)
             "request" -> handleHttpRequest(rawData)
-            "cancelRequest" -> rawData?.let { http.cancel(stripQuotes(it)) }
+            "cancelRequest" -> rawData?.let {
+                val requestKey = stripQuotes(it)
+                activeHttpRequests.remove(requestKey)
+                http.cancel(requestKey)
+            }
             "response" -> handleScriptResponse(rawData)
             "showUpdateAlert" -> Log.i(TAG, "updateAlert: $rawData")
             else -> Log.d(TAG, "unknown script call: $action")
@@ -222,24 +279,122 @@ class JsScriptRuntime(
     }
 
     private fun failInit(message: String) {
-        inited = true
+        inited = false
+        capabilities = ScriptCapabilities()
         initDeferred?.completeExceptionally(ScriptException("載入指令碼失敗： $message"))
         initDeferred = null
     }
 
     private fun handleHttpRequest(rawData: String?) {
+        if (destroyed.get()) return
         val obj = parseObj(rawData) ?: return
         val requestKey = obj.optString("requestKey").ifEmpty { return }
         val url = obj.optString("url").ifEmpty { return }
         val options = obj.optJSONObject("options") ?: JSONObject()
+        val requestUri = runCatching { java.net.URI(url) }.getOrNull()
+        val requestHost = requestUri?.host ?: "unknown"
+        val requestMethod = options.optString("method", "GET").uppercase()
+        val shortRequestKey = requestKey.take(8)
+        val requestHeaders = options.optJSONObject("headers")
+        val headerNames = requestHeaders?.keys()?.asSequence()?.sorted()?.joinToString(",") ?: ""
+        val flowerSegments = requestUri?.path?.split('/')?.filter { it.isNotEmpty() }.orEmpty()
+        val flowerDiagnostic = if (requestHost == "97.64.37.235" &&
+            flowerSegments.size >= 6 && flowerSegments.take(3) == listOf("flower", "v1", "url")
+        ) {
+            fun headerValue(name: String): String? {
+                val key = requestHeaders?.keys()?.asSequence()
+                    ?.firstOrNull { it.equals(name, ignoreCase = true) } ?: return null
+                return requestHeaders.optString(key).takeIf { it.isNotEmpty() }
+            }
+            val tag = headerValue("tag")
+            val ua = headerValue("User-Agent")
+            val ver = headerValue("ver")
+            val sourceVer = headerValue("source-ver")
+            val identifier = flowerSegments[4]
+            val queryParts = requestUri?.rawQuery?.split('&').orEmpty().filter { it.isNotEmpty() }
+            val queryKeys = queryParts.map { it.substringBefore('=') }.sorted().joinToString(",")
+            val queryValueLengths = queryParts.map { it.substringAfter('=', "").length }.sorted().joinToString(",")
+            // Keep each safe key/length pair together so different parameter values can be
+            // compared without logging the actual values or changing their privacy boundary.
+            val queryShape = queryParts.map {
+                "${it.substringBefore('=')}:${it.substringAfter('=', "").length}"
+            }.sorted().joinToString(",")
+            "; endpoint=flower; route=/flower/v1/url/{source}/{id}/{quality}" +
+                "; source=${flowerSegments[3]}; identifierPresent=${identifier.isNotEmpty()}" +
+                "; identifierLength=${identifier.length}; quality=${flowerSegments[5]}" +
+                "; queryKeys=$queryKeys; queryValueLengths=$queryValueLengths; queryShape=$queryShape" +
+                "; headerNames=$headerNames; tagPresent=${tag != null}; tagLength=${tag?.length ?: 0}" +
+                "; tagHex=${tag?.matches(Regex("[0-9a-fA-F]+")) == true}; tagFingerprint=${fingerprint(tag)}" +
+                "; userAgentPresent=${ua != null}; userAgentLength=${ua?.length ?: 0}" +
+                "; userAgentFingerprint=${fingerprint(ua)}; verLength=${ver?.length ?: 0}" +
+                "; verFingerprint=${fingerprint(ver)}; sourceVerLength=${sourceVer?.length ?: 0}" +
+                "; sourceVerFingerprint=${fingerprint(sourceVer)}"
+        } else {
+            ""
+        }
+        AppDiagnostics.record(
+            "SCRIPT_HTTP_BEGIN",
+            "request=$shortRequestKey; host=$requestHost; method=$requestMethod$flowerDiagnostic"
+        )
+        // The legacy 野花 musicUrl handler returns only a URL. Capture the User-Agent
+        // supplied by that action's synchronous lx.request call and attach it to the result.
+        val actionRequestKey = activeMusicUrlRequestKey
+        if (actionRequestKey != null) {
+            val requestHeaders = options.optJSONObject("headers")
+            val uaKey = requestHeaders?.keys()?.asSequence()
+                ?.firstOrNull { it.equals("User-Agent", ignoreCase = true) }
+            val ua = uaKey?.let { requestHeaders?.optString(it) }
+            if (!ua.isNullOrBlank()) musicUrlUserAgents[actionRequestKey] = ua
+        }
+        activeHttpRequests.add(requestKey)
         http.send(requestKey, url, options) { error, response ->
+            activeHttpRequests.remove(requestKey)
             // Completes on an OkHttp thread — hop back to the JS thread to call the script.
-            scope.launch {
+            if (!destroyed.get()) scope.launch {
+                if (destroyed.get()) return@launch
                 val payload = JSONObject().put("requestKey", requestKey)
                 if (error != null || response == null) {
-                    payload.put("error", error ?: "no response")
+                    val requestError = error ?: "no response"
+                    AppDiagnostics.record("SCRIPT_HTTP_ERROR", "request=$shortRequestKey; host=$requestHost; method=$requestMethod; error=$requestError")
+                    payload.put("error", requestError)
                     payload.put("response", JSONObject.NULL)
                 } else {
+                    val bodyType = response.body::class.java.simpleName
+                    val bodyLength = when (val body = response.body) {
+                        is String -> body.length
+                        is JSONObject -> body.toString().length
+                        is org.json.JSONArray -> body.toString().length
+                        else -> -1
+                    }
+                    // Log only structured error metadata, never the raw response body.
+                    // This lets us distinguish API rejection reasons without exposing URLs or tokens.
+                    val bodyDiagnostic = (response.body as? JSONObject)?.let { body ->
+                        val keys = body.keys().asSequence().sorted().take(12).joinToString(",")
+                        val safeFields = listOf("code", "status", "error", "message", "msg", "detail", "reason")
+                            .mapNotNull { name ->
+                                if (!body.has(name) || body.isNull(name)) return@mapNotNull null
+                                val value = body.opt(name)
+                                if (value !is String && value !is Number && value !is Boolean) return@mapNotNull null
+                                val safeValue = value.toString()
+                                    .replace(Regex("https?://\\S+"), "[url]")
+                                    .replace(Regex("[A-Fa-f0-9]{32,}"), "[redacted]")
+                                    .replace(Regex("[\\r\\n]+"), " ")
+                                    .take(120)
+                                "$name=$safeValue"
+                            }
+                            .joinToString(";")
+                        "; bodyKeys=$keys" + if (safeFields.isNotEmpty()) "; bodyFields=$safeFields" else ""
+                    } ?: ""
+                    val responseHeaderSummary = listOf("server", "content-type", "date", "x-request-id")
+                        .mapNotNull { name -> response.headers[name]?.take(120)?.let { "$name=$it" } }
+                        .joinToString("; ")
+                    AppDiagnostics.record(
+                        "SCRIPT_HTTP_RESULT",
+                        "request=$shortRequestKey; host=$requestHost; method=$requestMethod; statusCode=" +
+                            response.statusCode + "; statusMessage=" + response.statusMessage +
+                            "; bodyType=" + bodyType + "; bodyLength=" + bodyLength + bodyDiagnostic +
+                            if (responseHeaderSummary.isNotEmpty()) "; responseHeaders=$responseHeaderSummary" else ""
+                    )
                     payload.put("error", JSONObject.NULL)
                     payload.put(
                         "response",
@@ -262,8 +417,17 @@ class JsScriptRuntime(
         if (obj.optBoolean("status", false)) {
             deferred.complete(if (obj.isNull("result")) null else obj.get("result"))
         } else {
-            deferred.completeExceptionally(ScriptException(obj.optString("errorMessage", "unknown error")))
+            val errorMessage = obj.optString("errorMessage", "unknown error")
+            AppDiagnostics.record("SCRIPT_CALLBACK_ERROR", "request=" + requestKey.take(8) + "; error=" + errorMessage)
+            deferred.completeExceptionally(ScriptException(errorMessage))
         }
+    }
+
+    /** Short one-way fingerprints let diagnostics compare request metadata without logging secrets. */
+    private fun fingerprint(value: String?): String {
+        if (value.isNullOrEmpty()) return "none"
+        val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
+        return digest.take(8).joinToString("") { "%02x".format(it) }
     }
 
     private fun parseObj(raw: String?): JSONObject? =

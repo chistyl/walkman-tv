@@ -2,12 +2,14 @@ package com.walkman.tv
 
 import android.app.Application
 import com.walkman.tv.di.AppContainer
+import com.walkman.tv.diagnostics.AppDiagnostics
 import com.whl.quickjs.android.QuickJSLoader
 
 class App : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        AppDiagnostics.install(this)
         instance = this
         // Load the QuickJS native lib once for the whole process (custom-source engine).
         QuickJSLoader.init()

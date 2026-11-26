@@ -319,17 +319,32 @@ globalThis.lx_setup = (key, id, name, description, version, author, homepage, ra
       events.request.call(globalThis.lx, { source: data.source, action: data.action, info: data.info }).then(response => {
         let result
         switch (data.action) {
-          case 'musicUrl':
-            if (typeof response != 'string' || response.length > 2048 || !/^https?:/.test(response)) throw new Error('failed')
+          case 'musicUrl': {
+            // Keep the legacy string contract, but also preserve per-track playback
+            // headers returned by newer source scripts: { url, headers, userAgent }.
+            const musicResult = response && typeof response === 'object' && !Array.isArray(response)
+              ? response
+              : null
+            const musicData = musicResult?.data && typeof musicResult.data === 'object' && !Array.isArray(musicResult.data)
+              ? musicResult.data
+              : musicResult
+            const url = typeof response === 'string' ? response : musicData?.url
+            if (typeof url != 'string' || url.length > 2048 || !/^https?:/.test(url)) throw new Error('failed')
+            const playData = {
+              type: data.info.type,
+              url,
+            }
+            const headers = musicData?.headers ?? musicResult?.headers
+            if (headers && typeof headers === 'object' && !Array.isArray(headers)) playData.headers = headers
+            const userAgent = musicData?.userAgent ?? musicResult?.userAgent
+            if (typeof userAgent === 'string' && userAgent.trim()) playData.userAgent = userAgent
             result = {
               source: data.source,
               action: data.action,
-              data: {
-                type: data.info.type,
-                url: response,
-              },
+              data: playData,
             }
             break
+          }
           case 'lyric':
             result = {
               source: data.source,

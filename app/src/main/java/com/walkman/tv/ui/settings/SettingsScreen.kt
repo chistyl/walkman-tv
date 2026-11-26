@@ -10,6 +10,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import android.net.Uri
+import android.content.ContentValues
+import android.provider.MediaStore
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -60,6 +65,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.walkman.tv.data.model.Quality
+import com.walkman.tv.diagnostics.AppDiagnostics
 import com.walkman.tv.di.getLanIp
 import com.walkman.tv.ui.appContainer
 import com.walkman.tv.ui.components.QrDialog
@@ -81,6 +87,59 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
     var status by remember { mutableStateOf<String?>(null) }
     var showQr by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<com.walkman.tv.data.model.UserScript?>(null) }
+    var diagnosticLog by remember { mutableStateOf(AppDiagnostics.readAll()) }
+
+    val diagnosticsExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                val result = runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { output ->
+                        output.write(AppDiagnostics.readAll().toByteArray(Charsets.UTF_8))
+                    } ?: error("無法寫入選取的位置")
+                }
+                withContext(Dispatchers.Main) {
+                    status = result.fold({ "診斷紀錄已匯出" }, { "匯出失敗：${it.message}" })
+                }
+            }
+        }
+    }
+
+    val diagnosticsPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            scope.launch(Dispatchers.IO) {
+                val result = saveDiagnosticsToDownloads(context)
+                withContext(Dispatchers.Main) {
+                    status = result.fold(
+                        { "診斷紀錄已儲存：下載資料夾/$it" },
+                        { "儲存失敗：${it.message}" },
+                    )
+                }
+            }
+        } else {
+            status = "未取得儲存權限，無法寫入下載資料夾"
+        }
+    }
+
+    fun exportDiagnosticsToDownloads() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+            ContextCompat.checkSelfPermission(context, android.Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            diagnosticsPermission.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            return
+        }
+        scope.launch(Dispatchers.IO) {
+            val result = saveDiagnosticsToDownloads(context)
+            withContext(Dispatchers.Main) {
+                status = result.fold(
+                    { "診斷紀錄已儲存：下載資料夾/$it" },
+                    { "儲存失敗：${it.message}" },
+                )
+            }
+        }
+    }
 
     // System file picker (SAF) for .js scripts.
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -457,6 +516,36 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             }
         }
 
+        Section("閃退與播放紀錄") {
+            Text(
+                "若播放異常或 App 閃退，系統會自動保留錯誤紀錄。可直接儲存到電視的「下載」資料夾，不依賴系統檔案選擇器；也可使用另存位置。",
+                color = AppColors.TextMuted,
+                fontSize = 12.sp,
+            )
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TvPill(
+                    onClick = { diagnosticLog = AppDiagnostics.readAll() },
+                    selected = true,
+                ) { Text("重新整理紀錄", fontSize = 13.sp) }
+                TvPill(
+                    onClick = { exportDiagnosticsToDownloads() },
+                ) { Text("儲存到下載資料夾", fontSize = 13.sp) }
+                TvPill(
+                    onClick = { runCatching { diagnosticsExport.launch(AppDiagnostics.fileName()) }
+                        .onFailure { status = "無法開啟系統另存視窗：${it.message}" } },
+                ) { Text("另存位置", fontSize = 13.sp) }
+            }
+            Text(
+                diagnosticLog.takeLast(12000),
+                color = AppColors.TextSecondary,
+                fontSize = 10.sp,
+                maxLines = 80,
+                overflow = TextOverflow.Clip,
+            )
+        }
     }
 
     pendingDelete?.let { target ->
@@ -516,6 +605,35 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             onCancel = { showDownloadBrowser = false },
         )
     }
+}
+
+
+/** Export diagnostics without depending on a TV's optional system document picker. */
+private fun saveDiagnosticsToDownloads(context: android.content.Context): Result<String> = runCatching {
+    val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+    val fileName = "Walkman-TV-診斷紀錄-$stamp.txt"
+    val bytes = AppDiagnostics.readAll().toByteArray(Charsets.UTF_8)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+            put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+        }
+        val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            ?: error("無法建立下載檔案")
+        try {
+            context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                ?: error("無法開啟下載檔案")
+        } catch (error: Throwable) {
+            runCatching { context.contentResolver.delete(uri, null, null) }
+            throw error
+        }
+    } else {
+        val directory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        if (!directory.exists() && !directory.mkdirs()) error("無法建立下載資料夾")
+        java.io.File(directory, fileName).writeBytes(bytes)
+    }
+    fileName
 }
 
 /** Whether we can write to arbitrary folders with java.io.File right now. */
