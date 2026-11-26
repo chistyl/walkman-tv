@@ -133,18 +133,14 @@ class JsScriptRuntime(
             pending.remove(requestKey)
             musicUrlUserAgents.remove(requestKey)
         }
-        // Legacy source scripts return only a URL string. Inherit the User-Agent they used
-        // for the musicUrl resolver request so ExoPlayer can make a compatible stream request.
-        if (action == "musicUrl" && result is JSONObject && !inheritedUserAgent.isNullOrBlank()) {
-            val resultData = result.optJSONObject("data")
-            val explicitUserAgent = resultData?.optString("userAgent")?.takeIf { it.isNotBlank() }
-                ?: result.optString("userAgent").takeIf { it.isNotBlank() }
-            if (explicitUserAgent == null) {
-                if (resultData != null) resultData.put("userAgent", inheritedUserAgent)
-                else result.put("userAgent", inheritedUserAgent)
-            }
+        // Legacy lx-music scripts (including older imported sources) return the play URL
+        // directly as a string. Normalize that contract to the object shape consumed by
+        // SourceManager, then preserve the resolver request User-Agent for ExoPlayer.
+        return if (action == "musicUrl") {
+            normalizeMusicUrlResult(result, inheritedUserAgent)
+        } else {
+            result
         }
-        return result
     }
 
     fun destroy() {
@@ -442,5 +438,26 @@ class JsScriptRuntime(
 
     companion object {
         private const val TAG = "JsScriptRuntime"
+
+        /**
+         * Normalize the legacy URL-string result while retaining modern object responses.
+         * Kept pure so both compatibility shapes can be regression-tested without QuickJS.
+         */
+        internal fun normalizeMusicUrlResult(result: Any?, inheritedUserAgent: String?): Any? {
+            val normalized = when (result) {
+                is String -> JSONObject().put("url", result)
+                else -> result
+            } ?: return null
+            if (normalized is JSONObject && !inheritedUserAgent.isNullOrBlank()) {
+                val data = normalized.optJSONObject("data")
+                val explicitUserAgent = data?.optString("userAgent")?.takeIf { it.isNotBlank() }
+                    ?: normalized.optString("userAgent").takeIf { it.isNotBlank() }
+                if (explicitUserAgent == null) {
+                    if (data != null) data.put("userAgent", inheritedUserAgent)
+                    else normalized.put("userAgent", inheritedUserAgent)
+                }
+            }
+            return normalized
+        }
     }
 }
