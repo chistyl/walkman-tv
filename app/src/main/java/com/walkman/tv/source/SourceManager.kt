@@ -100,14 +100,37 @@ class SourceManager(
         val preferred = quality ?: Quality.K320
 
         val scripts = scriptsFor(track.source, "musicUrl")
+        val resolveStartedAt = System.nanoTime()
+        AppDiagnostics.record(
+            "PLAY_URL_RESOLVE_BEGIN",
+            "source=${track.source.key}; songmid=${track.songmid}; requested=${preferred.key}; " +
+                "trackQualities=${track.qualities.joinToString(",") { it.key }}; " +
+                "scriptCount=${scripts.size}; scripts=${scripts.joinToString(",") { it.script.name }}; " +
+                "fallbackEnabled=$fallbackEnabled",
+        )
         scripts.forEachIndexed { scriptIdx, ls ->
             val scriptQs = ls.capabilities.sources[track.source]?.qualities?.toSet() ?: emptySet()
             val first = pickPlayQuality(preferred, track.qualities.toSet(), scriptQs)
             val cascade = qualityCascade(first, track.qualities.toSet(), scriptQs)
             for ((idx, q) in cascade.withIndex()) {
                 var timedOut = false
+                val attemptStartedAt = System.nanoTime()
+                AppDiagnostics.record(
+                    "PLAY_URL_SCRIPT_ATTEMPT",
+                    "source=${track.source.key}; songmid=${track.songmid}; script=${ls.script.name}; " +
+                        "quality=${q.key}; scriptQualities=${scriptQs.joinToString(",") { it.key }}; " +
+                        "attempt=${idx + 1}/${cascade.size}",
+                )
                 attempt { resolveViaScript(track, q, ls) }
                     .onSuccess { play ->
+                        val elapsedMs = (System.nanoTime() - attemptStartedAt) / 1_000_000
+                        val host = runCatching { java.net.URI(play.url).host }.getOrNull() ?: "unknown"
+                        AppDiagnostics.record(
+                            "PLAY_URL_SCRIPT_SUCCESS",
+                            "source=${track.source.key}; songmid=${track.songmid}; script=${ls.script.name}; " +
+                                "quality=${q.key}; elapsedMs=$elapsedMs; host=$host; " +
+                                "headerNames=${play.headers.keys.joinToString(",")}; userAgentPresent=${!play.userAgent.isNullOrBlank()}",
+                        )
                         val warn = when {
                             scriptIdx > 0 -> "已切換至音源「${ls.script.name}」"
                             idx > 0 -> "${first.displayName} 遠端不支援，已降低至 ${q.displayName}"
@@ -123,8 +146,14 @@ class SourceManager(
                         )
                     }
                     .onFailure {
+                        val elapsedMs = (System.nanoTime() - attemptStartedAt) / 1_000_000
                         Log.d(TAG, "script '${ls.script.name}' @${q.key} failed: ${it.message}")
-                        AppDiagnostics.record("SOURCE_SCRIPT_ERROR", "source=${track.source.key}; script=${ls.script.name}; quality=${q.key}", it)
+                        AppDiagnostics.record(
+                            "SOURCE_SCRIPT_ERROR",
+                            "source=${track.source.key}; songmid=${track.songmid}; script=${ls.script.name}; " +
+                                "quality=${q.key}; elapsedMs=$elapsedMs",
+                            it,
+                        )
                         timedOut = it is JsScriptRuntime.ScriptTimeoutException
                     }
                 // An unresponsive script won't answer at a lower tier either; don't wait out the
