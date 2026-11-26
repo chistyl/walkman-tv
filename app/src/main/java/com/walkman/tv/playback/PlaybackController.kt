@@ -674,6 +674,7 @@ class PlaybackController(
     }
 
     fun release() {
+        resolveGeneration++
         resolveJob?.cancel()
         lyricsJob?.cancel()
         probeJob?.cancel()
