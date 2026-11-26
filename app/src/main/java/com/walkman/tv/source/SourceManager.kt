@@ -371,6 +371,7 @@ class SourceManager(
 
     companion object {
         private const val TAG = "SourceManager"
+        private const val SUBSCRIPTION_SCRIPT_ID_PREFIX = "user_api_subscription_"
 
         /**
          * Pick the effective playback tier — spec §3.
