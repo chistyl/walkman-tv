@@ -12,6 +12,9 @@ import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
@@ -21,6 +24,7 @@ import com.walkman.tv.data.model.Track
 import com.walkman.tv.source.ResolveOrigin
 import com.walkman.tv.source.ResolvedTrack
 import com.walkman.tv.source.SourceManager
+import com.walkman.tv.source.js.ScriptHttpClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -425,7 +429,30 @@ class PlaybackController(
                 // Successful resolve + setMediaItem → reset the network retry counter so the
                 // next track gets a fresh budget.
                 networkRetryCount = 0
-                player.setMediaItem(item)
+                if (r.headers.isEmpty() && r.userAgent.isNullOrBlank()) {
+                    // Keep the existing default pipeline unchanged for ordinary sources.
+                    player.setMediaItem(item)
+                } else {
+                    // Apply script-provided request properties only to this media item.
+                    val requestHeaders = LinkedHashMap(r.headers)
+                    val headerUserAgent = requestHeaders.entries
+                        .firstOrNull { it.key.equals("User-Agent", ignoreCase = true) }
+                        ?.value
+                    val userAgent = r.userAgent?.takeIf { it.isNotBlank() }
+                        ?: headerUserAgent
+                        ?: ScriptHttpClient.DEFAULT_UA
+                    requestHeaders.keys
+                        .filter { it.equals("User-Agent", ignoreCase = true) }
+                        .forEach(requestHeaders::remove)
+                    requestHeaders["User-Agent"] = userAgent
+                    val httpFactory = DefaultHttpDataSource.Factory()
+                        .setUserAgent(userAgent)
+                        .setDefaultRequestProperties(requestHeaders)
+                    val dataSourceFactory = DefaultDataSource.Factory(appContext, httpFactory)
+                    val mediaSource = DefaultMediaSourceFactory(dataSourceFactory)
+                        .createMediaSource(item)
+                    player.setMediaSource(mediaSource)
+                }
                 player.prepare()
                 // Fire the file-header probe so the badge can later clamp the claimed tier
                 // down if the bytes turn out to be lower-grade than the script reported.
