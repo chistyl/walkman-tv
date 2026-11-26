@@ -14,6 +14,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -165,17 +166,33 @@ class SourceManager(
         // Cross-platform search is best-effort. A catalog/network exception here must not
         // abort the final built-in resolver, otherwise a transient search outage makes otherwise
         // playable tracks appear completely unavailable.
-        val otherSourceResult = attempt { tryOtherSources(track, preferred) }
-            .onFailure { error ->
-                Log.w(TAG, "other-source fallback search failed: ${error.message}")
-                AppDiagnostics.record(
-                    "OTHER_SOURCE_FALLBACK_ERROR",
-                    "source=${track.source.key}; action=continue-to-direct-fallback",
-                    error,
-                )
-            }
-            .getOrNull()
-        otherSourceResult?.let { return it }
+        val otherSourceStartedAt = System.nanoTime()
+        val otherSourceAttempt = withTimeoutOrNull(8_000) {
+            attempt { tryOtherSources(track, preferred) }
+                .onFailure { error ->
+                    Log.w(TAG, "other-source fallback search failed: ${error.message}")
+                    AppDiagnostics.record(
+                        "OTHER_SOURCE_FALLBACK_ERROR",
+                        "source=${track.source.key}; action=continue-to-direct-fallback",
+                        error,
+                    )
+                }
+        }
+        val otherSourceElapsedMs = (System.nanoTime() - otherSourceStartedAt) / 1_000_000
+        if (otherSourceAttempt == null) {
+            AppDiagnostics.record(
+                "OTHER_SOURCE_FALLBACK_TIMEOUT",
+                "source=${track.source.key}; timeoutMs=8000; elapsedMs=$otherSourceElapsedMs; " +
+                    "action=continue-to-direct-fallback",
+            )
+        } else {
+            AppDiagnostics.record(
+                "OTHER_SOURCE_FALLBACK_FINISH",
+                "source=${track.source.key}; elapsedMs=$otherSourceElapsedMs; " +
+                    "matched=${otherSourceAttempt.getOrNull() != null}",
+            )
+        }
+        otherSourceAttempt?.getOrNull()?.let { return it }
 
         if (fallbackEnabled) {
             val qForFallback = if (track.qualities.contains(preferred)) preferred else (track.qualities.firstOrNull() ?: Quality.K128)
