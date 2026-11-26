@@ -266,17 +266,13 @@ class AppContainer(val appContext: Context) {
                     scriptStore.loadAll(installBundled = false)
                 }
                 val library = async { libraryStore.loadAll() }
-                val history = async { searchHistoryStore.load() }
-                val covers = async { coverCache.loadAll() }
                 val downloads = async { downloadStore.loadAll() }
-                val localFolders = async { localFolderStore.loadAll() }
 
+                // Only stores needed to restore playback are on the critical path. Search history,
+                // cover index and local-folder metadata are independent and can hydrate afterwards.
                 scripts.await()
                 library.await()
-                history.await()
-                covers.await()
                 downloads.await()
-                localFolders.await()
             }
 
             AppDiagnostics.record(
@@ -292,6 +288,19 @@ class AppContainer(val appContext: Context) {
                 "APP_STARTUP",
                 "playback snapshot restored; elapsedMs=${SystemClock.elapsedRealtime() - bootstrapStartedAt}",
             )
+
+            // Hydrate non-critical stores after the first playback-ready state. These reads use IO
+            // internally and must not hold up startup or the initial home-screen interaction.
+            appScope.launch { searchHistoryStore.load() }
+            appScope.launch {
+                val startedAt = SystemClock.elapsedRealtime()
+                coverCache.loadAll()
+                AppDiagnostics.record(
+                    "APP_STARTUP",
+                    "cover cache indexed; elapsedMs=${SystemClock.elapsedRealtime() - startedAt}",
+                )
+            }
+            appScope.launch { localFolderStore.loadAll() }
 
             // The bundled third-party source is optional for restoring the previous session.
             // Initialize it in the background so its network startup timeout cannot delay first
