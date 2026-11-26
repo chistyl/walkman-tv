@@ -405,7 +405,8 @@ class PlaybackController(
         }
     }
 
-    private fun playResolvedOrFail(track: Track, resolved: Result<ResolvedTrack>) {
+    private fun playResolvedOrFail(track: Track, resolved: Result<ResolvedTrack>, generation: Long) {
+        if (generation != resolveGeneration || _state.value.currentTrack?.id != track.id) return
         resolved.onSuccess { r ->
                 val item = MediaItem.Builder()
                     .setUri(r.url)
