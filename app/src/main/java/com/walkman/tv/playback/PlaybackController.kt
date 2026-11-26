@@ -280,8 +280,19 @@ class PlaybackController(
 
             override fun onPlayerError(error: PlaybackException) {
                 val eventMediaId = player.currentMediaItem?.mediaId
-                if (eventMediaId.isNullOrBlank() || eventMediaId != activeMediaId) {
-                    AppDiagnostics.record("PLAYER_ERROR_STALE", "code=${error.errorCode} ${error.errorCodeName}; eventMediaId=${eventMediaId ?: "none"}; activeMediaId=${activeMediaId ?: "none"}", error)
+                val expectedMediaId = activeMediaId
+                // Some Media3/TV implementations clear currentMediaItem while dispatching
+                // onPlayerError. A missing event ID is not proof that this is stale: discard
+                // only an explicit, non-empty ID that belongs to another media item.
+                if (!expectedMediaId.isNullOrBlank() &&
+                    !eventMediaId.isNullOrBlank() &&
+                    eventMediaId != expectedMediaId
+                ) {
+                    AppDiagnostics.record("PLAYER_ERROR_STALE", "code=${error.errorCode} ${error.errorCodeName}; eventMediaId=${eventMediaId}; activeMediaId=${expectedMediaId}", error)
+                    return
+                }
+                if (expectedMediaId.isNullOrBlank()) {
+                    AppDiagnostics.record("PLAYER_ERROR_NO_ACTIVE_MEDIA", "code=${error.errorCode} ${error.errorCodeName}; eventMediaId=${eventMediaId ?: "none"}", error)
                     return
                 }
                 val errorGeneration = resolveGeneration
