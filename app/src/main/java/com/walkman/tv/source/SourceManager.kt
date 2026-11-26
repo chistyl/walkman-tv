@@ -86,13 +86,20 @@ class SourceManager(
             for ((idx, q) in cascade.withIndex()) {
                 var timedOut = false
                 attempt { resolveViaScript(track, q, ls) }
-                    .onSuccess { url ->
+                    .onSuccess { play ->
                         val warn = when {
                             scriptIdx > 0 -> "已切換至音源「${ls.script.name}」"
                             idx > 0 -> "${first.displayName} 遠端不支援，已降低至 ${q.displayName}"
                             else -> null
                         }
-                        return ResolvedTrack(url, ResolveOrigin.Script(ls.script.name), q, warn)
+                        return ResolvedTrack(
+                            url = play.url,
+                            origin = ResolveOrigin.Script(ls.script.name),
+                            quality = q,
+                            warning = warn,
+                            headers = play.headers,
+                            userAgent = play.userAgent,
+                        )
                     }
                     .onFailure {
                         Log.d(TAG, "script '${ls.script.name}' @${q.key} failed: ${it.message}")
@@ -133,23 +140,49 @@ class SourceManager(
                 alt.qualities.toSet(),
                 altLS.capabilities.sources[alt.source]?.qualities?.toSet() ?: emptySet(),
             )
-            attempt { resolveViaScript(alt, q, altLS) }.getOrNull()?.let { url ->
+            attempt { resolveViaScript(alt, q, altLS) }.getOrNull()?.let { play ->
                 val warn = "原本的 ${track.source.displayName} 音源無法取得播放網址，已切換至 ${alt.source.displayName}"
-                return ResolvedTrack(url, ResolveOrigin.OtherSource(alt.source), q, warn)
+                return ResolvedTrack(
+                    url = play.url,
+                    origin = ResolveOrigin.OtherSource(alt.source),
+                    quality = q,
+                    warning = warn,
+                    headers = play.headers,
+                    userAgent = play.userAgent,
+                )
             }
         }
         return null
     }
 
-    private suspend fun resolveViaScript(track: Track, quality: Quality, ls: LoadedScript): String {
+    private data class ScriptPlayResult(
+        val url: String,
+        val headers: Map<String, String>,
+        val userAgent: String?,
+    )
+
+    private suspend fun resolveViaScript(track: Track, quality: Quality, ls: LoadedScript): ScriptPlayResult {
         val info = JSONObject()
             .put("type", quality.key)
             .put("musicInfo", makeOldMusicInfo(track))
         val result = ls.runtime.requestAction(track.source, "musicUrl", info)
         val obj = result as? JSONObject
-        val url = obj?.optJSONObject("data")?.optString("url")?.ifEmpty { null }
+        val data = obj?.optJSONObject("data")
+        val url = data?.optString("url")?.ifEmpty { null }
             ?: obj?.optString("url")?.ifEmpty { null }
-        return PlayUrlValidator.requireHttpUrl(url)
+        val headersObject = data?.optJSONObject("headers") ?: obj?.optJSONObject("headers")
+        val headers = buildMap {
+            headersObject?.keys()?.forEach { key ->
+                if (!headersObject.isNull(key)) put(key, headersObject.get(key).toString())
+            }
+        }
+        val userAgent = data?.optString("userAgent")?.ifEmpty { null }
+            ?: obj?.optString("userAgent")?.ifEmpty { null }
+        return ScriptPlayResult(
+            url = PlayUrlValidator.requireHttpUrl(url),
+            headers = headers,
+            userAgent = userAgent,
+        )
     }
 
     /** Ask a user script for lyric data — raw `{lyric, tlyric, rlyric, lxlyric}` (iOS `requestLyric`). */
