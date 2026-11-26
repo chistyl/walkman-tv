@@ -70,3 +70,31 @@ bmizhou/lx-music-tv is also a native Kotlin Android TV project. Reviewed files i
 - User cancellation, track switching and stale async results do not poison source health.
 - Catalog refresh failures never delete or partially replace existing scripts.
 - CI build and tests pass before proposing any merge.
+
+
+## Phase C completion and Phase D subscription-recovery audit
+
+### Phase C status (commit ca8b58f42c253ff2b8bfd6b9626386bf21147d4a)
+
+- Media3 failover now reports the concrete failed resolver attempt to SourceManager.
+- Only `script:<script-id>:<platform-key>` attempts affect script health; direct/local/other-source keys are ignored.
+- The callback path records asynchronously and retains the existing generation, media-ID and failover-in-progress guards.
+- GitHub Actions Run #415 (run ID 45844807148) completed successfully: regression tests, four ABI APK builds/uploads, and full source ZIP upload all succeeded.
+
+### Subscription recovery feasibility findings
+
+The Android TV app currently persists imported scripts as `UserScript` records in `scripts.json`. The record contains script content and display metadata, but no subscription catalog URL, remote catalog ID, or subscription ownership metadata. `ScriptStore.import(raw)` is a manual raw-script import/update path; it replaces a same-name + same-author script and otherwise appends a new independent script. There is no existing subscription catalog manager or remote-update transaction.
+
+The pinned Enhanced implementation separates portable catalog parsing/change detection from its React Native adapter. The portable concepts are suitable, but its adapter is not:
+
+- Reuse the safety properties of complete-catalog parsing, stable remote IDs, relative URL resolution, metadata extraction and content-based change detection.
+- Do not copy the React Native timer/storage adapter.
+- Do not copy the upstream catalog writer as-is: it removes missing subscription entries, replaces lists, and changes selected-source state. That is too destructive for Walkman-TV's current manual-import semantics.
+- A subscription must be explicitly created by the user with a catalog URL. Existing manually imported scripts must never be silently claimed as subscription-managed.
+- A refresh must stage and validate the entire catalog and all script bodies before any local mutation. Failed/partial fetches must leave every existing script unchanged.
+- Preserve local scripts, script IDs where remote identity matches, enabled/disabled choices, list ordering, and current source selection. Removed remote entries should be handled by an explicit policy, not implicit deletion.
+- Use bounded HTTP timeouts and coroutine cancellation that cancels the underlying OkHttp call. Do not count cancellation as a failed refresh.
+
+### Phase D implementation gate
+
+Before implementing automatic recovery, introduce an additive subscription model/store with explicit URL and stable remote IDs, and define user-facing opt-in/import semantics. Keep the existing `UserScript` JSON schema backward-compatible through defaults or a separate store. First implement and test pure parsing, URL resolution, identity mapping, and atomic plan generation; only then wire network fetching and ScriptStore mutation. The playback recovery trigger must be bounded to one refresh per song/subscription and rate-limited per catalog URL, following the Enhanced policy without importing its mutable module-global state.
