@@ -203,6 +203,17 @@ class SourceManager(
     private fun scriptAttemptKey(track: Track, script: LoadedScript): String =
         "script:${script.script.id}:${track.source.key}"
 
+    /**
+     * Feed a real Media3 playback failure back into the resolver health model.
+     * Only script attempts are scored; local/direct/other-source keys are ignored.
+     */
+    suspend fun recordPlaybackFailure(attemptKey: String) {
+        if (!attemptKey.startsWith("script:")) return
+        val scriptId = attemptKey.removePrefix("script:").substringBeforeLast(':')
+        if (scriptId.isBlank()) return
+        healthStore?.recordFailure(scriptId)
+    }
+
     private data class ScriptPlayResult(
         val url: String,
         val headers: Map<String, String>,
