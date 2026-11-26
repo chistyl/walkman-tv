@@ -314,10 +314,15 @@ class JsScriptRuntime(
             val queryParts = requestUri?.rawQuery?.split('&').orEmpty().filter { it.isNotEmpty() }
             val queryKeys = queryParts.map { it.substringBefore('=') }.sorted().joinToString(",")
             val queryValueLengths = queryParts.map { it.substringAfter('=', "").length }.sorted().joinToString(",")
+            // Keep each safe key/length pair together so different parameter values can be
+            // compared without logging the actual values or changing their privacy boundary.
+            val queryShape = queryParts.map {
+                "${it.substringBefore('=')}:${it.substringAfter('=', "").length}"
+            }.sorted().joinToString(",")
             "; endpoint=flower; route=/flower/v1/url/{source}/{id}/{quality}" +
                 "; source=${flowerSegments[3]}; identifierPresent=${identifier.isNotEmpty()}" +
                 "; identifierLength=${identifier.length}; quality=${flowerSegments[5]}" +
-                "; queryKeys=$queryKeys; queryValueLengths=$queryValueLengths" +
+                "; queryKeys=$queryKeys; queryValueLengths=$queryValueLengths; queryShape=$queryShape" +
                 "; headerNames=$headerNames; tagPresent=${tag != null}; tagLength=${tag?.length ?: 0}" +
                 "; tagHex=${tag?.matches(Regex("[0-9a-fA-F]+")) == true}; tagFingerprint=${fingerprint(tag)}" +
                 "; userAgentPresent=${ua != null}; userAgentLength=${ua?.length ?: 0}" +
