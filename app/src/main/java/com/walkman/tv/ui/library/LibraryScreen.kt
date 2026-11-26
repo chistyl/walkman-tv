@@ -46,7 +46,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -613,9 +613,8 @@ private fun DownloadedTab(
     androidx.compose.foundation.lazy.LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            // focusRestorer remembers which row was last focused; when the user opens the
-            // player and comes back, focus lands on the same line they launched from.
-            .focusRestorer()
+            // Keep the lazy list in one focus group; avoid restoring focus through a detached node.
+            .focusGroup()
             .focusProperties {
                 exit = { dir -> if (dir == FocusDirection.Up) upFocus else FocusRequester.Default }
             },
