@@ -36,13 +36,12 @@ class JsonStore<T>(
     fun saveStrict(value: T) {
         file.parentFile?.mkdirs()
         val atomic = AtomicFile(file)
-        var stream: java.io.FileOutputStream? = null
+        val stream = atomic.startWrite()
         try {
-            stream = atomic.startWrite()
             stream.write(json.encodeToString(serializer, value).toByteArray(Charsets.UTF_8))
             atomic.finishWrite(stream)
         } catch (error: Exception) {
-            if (stream != null) runCatching { atomic.failWrite(stream) }
+            runCatching { atomic.failWrite(stream) }
             throw error
         }
     }
