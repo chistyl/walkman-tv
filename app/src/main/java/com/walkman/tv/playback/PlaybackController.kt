@@ -234,6 +234,9 @@ class PlaybackController(
 
     private var resolveJob: Job? = null
     private var lyricsJob: Job? = null
+    private var retryJob: Job? = null
+    private var autoSkipJob: Job? = null
+    @Volatile private var activeMediaId: String? = null
 
     /** Invalidates late resolver results after a newer track/source selection. */
     @Volatile private var resolveGeneration: Long = 0
@@ -268,7 +271,13 @@ class PlaybackController(
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                AppDiagnostics.record("PLAYER_ERROR", "code=${error.errorCode} ${error.errorCodeName}; source=${_state.value.currentTrack?.source?.key}; quality=${lastAttemptedQuality?.key}", error)
+                val eventMediaId = player.currentMediaItem?.mediaId
+                if (eventMediaId.isNullOrBlank() || eventMediaId != activeMediaId) {
+                    AppDiagnostics.record("PLAYER_ERROR_STALE", "code=${error.errorCode} ${error.errorCodeName}; eventMediaId=${eventMediaId ?: "none"}; activeMediaId=${activeMediaId ?: "none"}", error)
+                    return
+                }
+                val errorGeneration = resolveGeneration
+                AppDiagnostics.record("PLAYER_ERROR", "generation=$errorGeneration; mediaId=$eventMediaId; code=${error.errorCode} ${error.errorCodeName}; source=${_state.value.currentTrack?.source?.key}; quality=${lastAttemptedQuality?.key}", error)
                 // Format/codec rejections are the "encrypted .mgg" / "actually MP3 not FLAC" case
                 // from spec §3 — re-cascade from one tier below the current attempt. Network /
                 // unauthorized errors get surfaced as-is.
@@ -287,7 +296,7 @@ class PlaybackController(
                         warning = "${current.displayName} 格式不支援，已降低音質至 ${below.displayName}",
                     )
                     networkRetryCount = 0 // format error path — separate from the network counter
-                    playAt(_state.value.index, qualityCap = below)
+                    if (errorGeneration == resolveGeneration) playAt(_state.value.index, qualityCap = below)
                     return
                 }
                 // Transient network — exponential backoff retry up to MAX_NETWORK_RETRIES.
@@ -306,10 +315,16 @@ class PlaybackController(
                             error = null,
                         )
                         val trackIdAtRetry = track.id
-                        scope.launch {
+                        val mediaIdAtRetry = eventMediaId
+                        retryJob?.cancel()
+                        retryJob = scope.launch {
                             kotlinx.coroutines.delay(delayMs)
-                            // Guard: user may have skipped to a different track during the delay.
-                            if (_state.value.currentTrack?.id == trackIdAtRetry) {
+                            // Track ID alone is insufficient: the same song can be selected again.
+                            if (errorGeneration == resolveGeneration &&
+                                _state.value.currentTrack?.id == trackIdAtRetry &&
+                                player.currentMediaItem?.mediaId == mediaIdAtRetry &&
+                                activeMediaId == mediaIdAtRetry
+                            ) {
                                 playAt(_state.value.index, qualityCap = lastAttemptedQuality)
                             }
                         }
@@ -321,11 +336,11 @@ class PlaybackController(
                         "PlaybackController",
                         "network retries exhausted on ${track.name}; skipping to next",
                     )
-                    failAndAdvance("網路不穩定")
+                    failAndAdvance("網路不穩定", errorGeneration)
                     return
                 }
                 // Any other error — this track failed; auto-skip (or stop after too many in a row).
-                failAndAdvance(error.errorCodeName)
+                failAndAdvance(error.errorCodeName, errorGeneration)
             }
         })
         startPositionTicker()
@@ -335,6 +350,13 @@ class PlaybackController(
 
     fun setQueue(tracks: List<Track>, startIndex: Int = 0, autoPlay: Boolean = true) {
         if (tracks.isEmpty()) return
+        if (!autoPlay) {
+            resolveGeneration++
+            activeMediaId = null
+            retryJob?.cancel()
+            autoSkipJob?.cancel()
+            resolveJob?.cancel()
+        }
         consecutiveFailures = 0 // fresh user-initiated queue — start the failure streak over
         _state.value = _state.value.copy(queue = tracks, index = startIndex.coerceIn(0, tracks.size - 1))
         if (autoPlay) playAt(_state.value.index)
@@ -368,6 +390,11 @@ class PlaybackController(
     fun playAt(index: Int, qualityCap: Quality? = null) {
         val track = _state.value.queue.getOrNull(index) ?: return
         val generation = ++resolveGeneration
+        retryJob?.cancel()
+        retryJob = null
+        autoSkipJob?.cancel()
+        autoSkipJob = null
+        activeMediaId = "$generation:${track.id}"
         AppDiagnostics.record("PLAY_REQUEST", "generation=$generation; source=${track.source.key}; index=$index; queueSize=${_state.value.queue.size}; qualityCap=${qualityCap?.key ?: "none"}")
         // Fresh attempt (no cap) clears the last-attempted memory + the network retry counter;
         // cascade retries (cap != null) keep them so [onPlayerError] can keep stepping down or
@@ -427,7 +454,7 @@ class PlaybackController(
                 .onFailure { e ->
                     android.util.Log.e("PlaybackController", "playAt failed", e)
                     if (generation == resolveGeneration && _state.value.currentTrack?.id == track.id) {
-                        failAndAdvance(e.message ?: e::class.simpleName ?: "播放時發生錯誤")
+                        failAndAdvance(e.message ?: e::class.simpleName ?: "播放時發生錯誤", generation)
                     }
                 }
         }
@@ -436,7 +463,10 @@ class PlaybackController(
     private fun playResolvedOrFail(track: Track, resolved: Result<ResolvedTrack>, generation: Long) {
         if (generation != resolveGeneration || _state.value.currentTrack?.id != track.id) return
         resolved.onSuccess { r ->
+                val mediaId = "$generation:${track.id}"
+                activeMediaId = mediaId
                 val item = MediaItem.Builder()
+                    .setMediaId(mediaId)
                     .setUri(r.url)
                     .setMediaMetadata(
                         MediaMetadata.Builder()
@@ -514,7 +544,7 @@ class PlaybackController(
             }.onFailure { e ->
                 // Couldn't get a play URL for this track — auto-skip (or stop after too many).
                 if (generation == resolveGeneration && _state.value.currentTrack?.id == track.id) {
-                    failAndAdvance(e.message ?: "無法播放")
+                    failAndAdvance(e.message ?: "無法播放", generation)
                 }
             }
     }
@@ -525,7 +555,11 @@ class PlaybackController(
      * [MAX_CONSECUTIVE_FAILURES] tracks fail back-to-back. The streak resets when any track
      * reaches READY (see the player listener). Guarded so a user skipping mid-delay wins.
      */
-    private fun failAndAdvance(reason: String) {
+    private fun failAndAdvance(reason: String, expectedGeneration: Long) {
+        if (expectedGeneration != resolveGeneration) {
+            AppDiagnostics.record("AUTO_SKIP_STALE", "generation=$expectedGeneration; currentGeneration=$resolveGeneration; reason=$reason")
+            return
+        }
         // Stop whatever is still loaded (e.g. a cascade retry's half-played attempt) so a failed
         // track actually goes silent.
         runCatching { player.stop() }
@@ -545,12 +579,13 @@ class PlaybackController(
             resolving = false,
             error = null,
         )
-        val failedId = _state.value.currentTrack?.id
-        scope.launch {
+        val failed = _state.value.currentTrack
+        val failedId = failed?.id
+        AppDiagnostics.record("AUTO_SKIP", "generation=$expectedGeneration; source=${failed?.source?.key}; trackId=${failedId ?: "none"}; index=${_state.value.index}; queueSize=${_state.value.queue.size}; reason=$reason")
+        autoSkipJob?.cancel()
+        autoSkipJob = scope.launch {
             delay(400)
-            // Only auto-advance if we're still parked on the track that failed (the user may
-            // have manually picked another song during the delay).
-            if (_state.value.currentTrack?.id == failedId) next()
+            if (expectedGeneration == resolveGeneration && _state.value.currentTrack?.id == failedId) next()
         }
     }
 
@@ -626,6 +661,9 @@ class PlaybackController(
 
     fun stop() {
         resolveGeneration++
+        activeMediaId = null
+        retryJob?.cancel()
+        autoSkipJob?.cancel()
         resolveJob?.cancel()
         lyricsJob?.cancel()
         player.stop()
@@ -638,9 +676,13 @@ class PlaybackController(
 
     /** Play an MV video url on the same player (UI attaches a PlayerView for output). */
     fun playMvUrl(url: String) {
-        resolveGeneration++
+        val generation = ++resolveGeneration
+        retryJob?.cancel()
+        autoSkipJob?.cancel()
+        val mediaId = "mv:$generation"
+        activeMediaId = mediaId
         resolveJob?.cancel()
-        player.setMediaItem(MediaItem.fromUri(url))
+        player.setMediaItem(MediaItem.Builder().setMediaId(mediaId).setUri(url).build())
         player.prepare()
         ensureService()
         player.playWhenReady = true
@@ -727,6 +769,9 @@ class PlaybackController(
 
     fun release() {
         resolveGeneration++
+        activeMediaId = null
+        retryJob?.cancel()
+        autoSkipJob?.cancel()
         resolveJob?.cancel()
         lyricsJob?.cancel()
         probeJob?.cancel()

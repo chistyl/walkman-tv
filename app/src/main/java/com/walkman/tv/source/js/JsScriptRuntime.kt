@@ -222,7 +222,8 @@ class JsScriptRuntime(
     }
 
     private fun failInit(message: String) {
-        inited = true
+        inited = false
+        capabilities = ScriptCapabilities()
         initDeferred?.completeExceptionally(ScriptException("載入指令碼失敗： $message"))
         initDeferred = null
     }

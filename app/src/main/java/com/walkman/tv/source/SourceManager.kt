@@ -41,15 +41,19 @@ class SourceManager(
     class SourceException(message: String) : Exception(message)
 
     suspend fun load(script: UserScript): Result<ScriptCapabilities> {
+        val runtime = JsScriptRuntime(script, preload, http)
         return try {
-            val runtime = JsScriptRuntime(script, preload, http)
             val caps = runtime.load()
+            val previous = _loaded.value.firstOrNull { it.script.id == script.id }
             _loaded.value = _loaded.value.filter { it.script.id != script.id } +
                 LoadedScript(script, runtime, caps)
+            if (previous != null && previous.runtime !== runtime) previous.runtime.destroy()
             Result.success(caps)
         } catch (cancelled: CancellationException) {
+            runtime.destroy()
             throw cancelled
         } catch (e: Exception) {
+            runtime.destroy()
             Log.e(TAG, "load failed: ${e.message}")
             Result.failure(e)
         }
