@@ -171,7 +171,7 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
                 enabled = script.enabled,
             )
         }
-        val plan = com.walkman.tv.source.subscription.buildUpdatePlan(localRecords, staged.scripts)
+        val plan = com.walkman.tv.source.subscription.SubscriptionCatalogCore.buildUpdatePlan(localRecords, staged.scripts)
             ?: return@withLock Result.failure(IllegalArgumentException("訂閱更新計畫驗證失敗，未修改任何音源"))
 
         val remoteById = staged.scripts.associateBy { it.id }
