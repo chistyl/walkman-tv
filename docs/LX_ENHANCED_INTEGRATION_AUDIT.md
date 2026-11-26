@@ -48,7 +48,7 @@ bmizhou/lx-music-tv is also a native Kotlin Android TV project. Reviewed files i
 2. Port adaptive source health into Kotlin as a platform-neutral component using persistent Android storage. Track success, failure, EWMA latency, consecutive failures, cooldown and deterministic tie-breaking.
 3. Apply health ranking only among scripts already eligible for the requested platform/action. Do not bypass user enable/disable settings or platform filters.
 4. Keep the current source order as the stable tie-breaker when health evidence is equal or absent.
-5. Record success only after a resolved URL is accepted and playback reaches a meaningful success state; record failures with a classified reason. Avoid counting user cancellation as a source failure.
+5. Phase B records resolver health: success only after a script returns an accepted HTTP(S) URL; failure once per script/song after its quality cascade is exhausted. Cancellation is rethrown and is not counted. Playback-level feedback is a later phase and must be wired to actual Media3 state transitions before it is used to score playback reliability.
 6. Add bounded subscription/catalog refresh as a separate follow-up. Require explicit user-configured catalog URL, validate HTTPS/HTTP URLs, parse the complete catalog before mutation, preserve locally-added scripts and selected source, and never overwrite local data on partial fetch failure.
 7. Use the existing Kotlin QuickJS runtime and ScriptHttpClient. Do not import React Native timers, storage, navigation, or UI components.
 8. Preserve existing quality cascade, cross-platform matching, URL validation, retry limits and local-file playback.
@@ -66,7 +66,7 @@ bmizhou/lx-music-tv is also a native Kotlin Android TV project. Reviewed files i
 - Existing UI and remote-control behavior remain unchanged.
 - No regression to currently supported source scripts or platform filters.
 - A failing source is cooled down after repeated failures and healthy sources are preferred.
-- Health data survives process restart and malformed stored data is safely normalized.
+- Resolver health data survives process restart and malformed stored data falls back safely to an empty map.
 - User cancellation, track switching and stale async results do not poison source health.
 - Catalog refresh failures never delete or partially replace existing scripts.
 - CI build and tests pass before proposing any merge.
