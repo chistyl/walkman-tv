@@ -54,6 +54,8 @@ class HomeStore(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var loadJob: Job? = null
+    /** Prevents a cancelled, slower request from publishing over a newer source selection. */
+    private var loadGeneration: Long = 0L
     private val cache = mutableMapOf<String, CachedHome>()
 
     /** Identity of the last requested source set. */
@@ -71,6 +73,7 @@ class HomeStore(
 
         lastSourcesKey = key
         if (srcs.isEmpty()) {
+            loadGeneration++
             loadJob?.cancel()
             _state.value = HomeState()
             return
@@ -95,8 +98,11 @@ class HomeStore(
 
     private fun load(srcs: List<SourceID>, key: String) {
         loadJob?.cancel()
+        val generation = ++loadGeneration
         loadJob = scope.launch {
-            _state.update { it.copy(isLoading = true, sources = srcs) }
+            _state.update { current ->
+                if (generation == loadGeneration) current.copy(isLoading = true, sources = srcs) else current
+            }
 
             // Start recommendations and boards together. Publish useful home content as soon as
             // recommendations finish; do not make the hero section wait for ranking endpoints.
@@ -123,6 +129,7 @@ class HomeStore(
                 }
 
                 val groups = recommendationsJob.await()
+                if (generation != loadGeneration) return@launch
                 val heroes = srcs.mapNotNull { s -> groups[s]?.firstOrNull()?.let { HeroItem(it, s) } }
 
                 val tails = srcs.associateWith { groups[it].orEmpty().drop(1).take(8) }
@@ -132,11 +139,13 @@ class HomeStore(
                     for (s in srcs) tails[s]?.getOrNull(i)?.let { recs += it }
                 }
 
-                _state.update {
-                    it.copy(heroes = heroes, recommendations = recs.take(12), sources = srcs)
+                _state.update { current ->
+                    if (generation == loadGeneration) current.copy(heroes = heroes, recommendations = recs.take(12), sources = srcs) else current
                 }
 
-                val boardList = balanceBoards(srcs, boardsJob.await(), totalTarget = 12)
+                val boardResults = boardsJob.await()
+                if (generation != loadGeneration) return@launch
+                val boardList = balanceBoards(srcs, boardResults, totalTarget = 12)
                 val completed = HomeState(
                     isLoading = false,
                     heroes = heroes,
@@ -144,8 +153,10 @@ class HomeStore(
                     boards = boardList,
                     sources = srcs,
                 )
-                cache[key] = CachedHome(completed, SystemClock.elapsedRealtime())
-                _state.value = completed
+                if (generation == loadGeneration) {
+                    cache[key] = CachedHome(completed, SystemClock.elapsedRealtime())
+                    _state.value = completed
+                }
             }
         }
     }
