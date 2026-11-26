@@ -146,8 +146,7 @@ class SourceManager(
         throw SourceException("這首 ${track.source.displayName} 歌曲無法取得播放網址，請換一首歌曲或更換可用的指令碼")
     }
 
-    private suspend fun tryOtherSources(track: Track, preferred: Quality, excludedAttempts: Set<String>): ResolvedTrack? {
-        val attempted = excludedAttempts.toMutableSet()
+    private suspend fun tryOtherSources(track: Track, preferred: Quality, attempted: MutableSet<String>): ResolvedTrack? {
         val alternatives = otherSourceFinder.findMatches(track)
         if (alternatives.isEmpty()) return null
         for (alt in alternatives.take(5)) {
