@@ -87,8 +87,10 @@ class SourceManager(
     ): ResolvedTrack {
         val preferred = quality ?: Quality.K320
 
-        val scripts = scriptsFor(track.source, "musicUrl").filter { scriptAttemptKey(track, it) !in excludedAttempts }
+        val attempted = excludedAttempts.toMutableSet()
+        val scripts = scriptsFor(track.source, "musicUrl").filter { scriptAttemptKey(track, it) !in attempted }
         scripts.forEachIndexed { scriptIdx, ls ->
+            attempted.add(scriptAttemptKey(track, ls))
             val scriptQs = ls.capabilities.sources[track.source]?.qualities?.toSet() ?: emptySet()
             val first = pickPlayQuality(preferred, track.qualities.toSet(), scriptQs)
             val cascade = qualityCascade(first, track.qualities.toSet(), scriptQs)
@@ -109,6 +111,7 @@ class SourceManager(
                             headers = play.headers,
                             userAgent = play.userAgent,
                             attemptKey = scriptAttemptKey(track, ls),
+                            attemptedKeys = attempted.toSet(),
                         )
                     }
                     .onFailure {
@@ -122,17 +125,18 @@ class SourceManager(
             }
         }
 
-        tryOtherSources(track, preferred, excludedAttempts)?.let { return it }
+        tryOtherSources(track, preferred, attempted)?.let { return it }
 
         val directAttemptKey = "direct:${track.source.key}:${track.id}"
-        if (fallbackEnabled && directAttemptKey !in excludedAttempts) {
+        if (fallbackEnabled && directAttemptKey !in attempted) {
+            attempted.add(directAttemptKey)
             val qForFallback = if (track.qualities.contains(preferred)) preferred else (track.qualities.firstOrNull() ?: Quality.K128)
             attempt {
                 builtIn.resolve(track, qForFallback).let { result ->
                     result.copy(url = PlayUrlValidator.requireHttpUrl(result.url))
                 }
             }.getOrNull()?.let { res ->
-                return ResolvedTrack(res.url, ResolveOrigin.DirectFallback, qForFallback, res.warning, attemptKey = directAttemptKey)
+                return ResolvedTrack(res.url, ResolveOrigin.DirectFallback, qForFallback, res.warning, attemptKey = directAttemptKey, attemptedKeys = attempted.toSet())
             }
         }
 
@@ -143,13 +147,15 @@ class SourceManager(
     }
 
     private suspend fun tryOtherSources(track: Track, preferred: Quality, excludedAttempts: Set<String>): ResolvedTrack? {
+        val attempted = excludedAttempts.toMutableSet()
         val alternatives = otherSourceFinder.findMatches(track)
         if (alternatives.isEmpty()) return null
         for (alt in alternatives.take(5)) {
             val altScripts = scriptsFor(alt.source, "musicUrl")
             for (altLS in altScripts) {
                 val attemptKey = scriptAttemptKey(alt, altLS)
-                if (attemptKey in excludedAttempts) continue
+                if (attemptKey in attempted) continue
+                attempted.add(attemptKey)
                 val q = pickPlayQuality(
                     preferred,
                     alt.qualities.toSet(),
@@ -165,6 +171,7 @@ class SourceManager(
                         headers = play.headers,
                         userAgent = play.userAgent,
                         attemptKey = attemptKey,
+                        attemptedKeys = attempted.toSet(),
                     )
                 }
             }
