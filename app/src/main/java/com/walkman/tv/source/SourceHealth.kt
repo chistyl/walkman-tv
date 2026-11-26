@@ -1,11 +1,14 @@
 package com.walkman.tv.source
 
+import kotlinx.serialization.Serializable
+
 /**
  * Platform-neutral source-health model ported from LX Music Enhanced.
  *
  * This class deliberately contains no Android or storage dependencies so ranking and cooldown
  * behavior can be unit-tested independently from playback and TV UI.
  */
+@Serializable
 data class SourceHealth(
     val success: Int = 0,
     val failure: Int = 0,
