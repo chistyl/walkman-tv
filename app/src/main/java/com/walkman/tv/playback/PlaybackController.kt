@@ -93,6 +93,11 @@ class PlaybackController(
      *  fresh user-initiated queue. Distinct from [networkRetryCount], which retries one track. */
     private var consecutiveFailures: Int = 0
 
+    /** Resolver attempts already proven unusable for the current track/generation. */
+    private val attemptedResolverKeys = mutableSetOf<String>()
+    @Volatile private var activeResolverAttemptKey: String? = null
+    @Volatile private var sourceFailoverInProgress: Boolean = false
+
     /**
      * Optional local-first URL resolver. When set, [playAt] checks it before going to
      * [SourceManager]. Wired by [com.walkman.tv.di.AppContainer] to point at
@@ -337,17 +342,17 @@ class PlaybackController(
                         }
                         return
                     }
-                    // Retries exhausted — this track has failed; auto-skip (counts toward the
-                    // consecutive-failure limit).
+                    // Retries exhausted — the current URL is likely unusable. Try another
+                    // resolver once before giving up on this track.
                     android.util.Log.w(
                         "PlaybackController",
-                        "network retries exhausted on ${track.name}; skipping to next",
+                        "network retries exhausted on ${track.name}; trying source failover",
                     )
-                    failAndAdvance("網路不穩定", errorGeneration)
+                    tryNextSource(track, errorGeneration, "網路播放失敗")
                     return
                 }
-                // Any other error — this track failed; auto-skip (or stop after too many in a row).
-                failAndAdvance(error.errorCodeName, errorGeneration)
+                // Any other media error — attempt a different resolver before skipping.
+                tryNextSource(track, errorGeneration, error.errorCodeName)
             }
         })
         startPositionTicker()
@@ -413,6 +418,9 @@ class PlaybackController(
         if (qualityCap == null) {
             lastAttemptedQuality = null
             networkRetryCount = 0
+            attemptedResolverKeys.clear()
+            activeResolverAttemptKey = null
+            sourceFailoverInProgress = false
             // Silence the previous song right away. Resolving can take a long time with a slow or
             // dead source (every quality tier × 15s script timeout, then other-platform lookups),
             // and the old track playing on under the new title looked like "切換歌曲未成功".
@@ -471,7 +479,7 @@ class PlaybackController(
         }
     }
 
-    private fun playResolvedOrFail(track: Track, resolved: Result<ResolvedTrack>, generation: Long) {
+    private fun playResolvedOrFail(track: Track, resolved: Result<ResolvedTrack>, generation: Long, notifyTrackStarted: Boolean = true) {
         if (generation != resolveGeneration || _state.value.currentTrack?.id != track.id) return
         resolved.onSuccess { r ->
                 val mediaId = "$generation:${track.id}"
@@ -491,6 +499,8 @@ class PlaybackController(
                 // Remember the tier so onPlayerError can re-cascade from one tier below if
                 // ExoPlayer rejects the file format.
                 lastAttemptedQuality = r.quality
+                activeResolverAttemptKey = r.attemptKey
+                sourceFailoverInProgress = false
                 val host = runCatching { android.net.Uri.parse(r.url).host }.getOrNull() ?: "(local-or-unknown)"
                 AppDiagnostics.record("PLAY_RESOLVED", "source=${track.source.key}; quality=${r.quality.key}; host=$host; headerNames=${r.headers.keys.joinToString(",")}; customUA=${!r.userAgent.isNullOrBlank()}")
                 // Successful resolve + setMediaItem → reset the network retry counter so the
@@ -555,7 +565,7 @@ class PlaybackController(
                     originLabel = r.origin.label,
                     quality = r.quality,
                 )
-                onTrackStarted?.invoke(track)
+                if (notifyTrackStarted) onTrackStarted?.invoke(track)
                 // (lyrics already loaded in playAt when the track switched)
             }.onFailure { e ->
                 // Couldn't get a play URL for this track — auto-skip (or stop after too many).
@@ -563,6 +573,60 @@ class PlaybackController(
                     failAndAdvance(e.message ?: "無法播放", generation)
                 }
             }
+    }
+
+    /**
+     * Resolve the same track through the next not-yet-failed script/source. This deliberately
+     * keeps the current generation and queue index: late results from an older user selection
+     * remain guarded by the existing generation checks.
+     */
+    private fun tryNextSource(track: Track, expectedGeneration: Long, reason: String) {
+        if (expectedGeneration != resolveGeneration || sourceFailoverInProgress) return
+        val failedKey = activeResolverAttemptKey
+        if (failedKey.isNullOrBlank()) {
+            failAndAdvance(reason, expectedGeneration)
+            return
+        }
+        attemptedResolverKeys.add(failedKey)
+        sourceFailoverInProgress = true
+        retryJob?.cancel()
+        retryJob = null
+        runCatching { player.stop() }
+        _state.value = _state.value.copy(
+            resolving = true,
+            isPlaying = false,
+            warning = "目前音源無法播放，正在切換其他音源…",
+            error = null,
+        )
+        AppDiagnostics.record(
+            "SOURCE_FAILOVER_BEGIN",
+            "generation=$expectedGeneration; failedAttempt=$failedKey; tried=${attemptedResolverKeys.size}; reason=$reason",
+        )
+        resolveJob?.cancel()
+        resolveJob = scope.launch {
+            val result = try {
+                Result.success(sources.resolveMusicURL(track, preferredQuality, attemptedResolverKeys.toSet()))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Result.failure(error)
+            }
+            if (expectedGeneration != resolveGeneration || _state.value.currentTrack?.id != track.id) {
+                AppDiagnostics.record("SOURCE_FAILOVER_STALE", "generation=$expectedGeneration; currentGeneration=$resolveGeneration")
+                return@launch
+            }
+            result.onSuccess { resolved ->
+                AppDiagnostics.record(
+                    "SOURCE_FAILOVER_SUCCESS",
+                    "generation=$expectedGeneration; origin=${resolved.origin.label}; attempt=${resolved.attemptKey ?: "unknown"}",
+                )
+                playResolvedOrFail(track, Result.success(resolved), expectedGeneration, notifyTrackStarted = false)
+            }.onFailure { error ->
+                sourceFailoverInProgress = false
+                AppDiagnostics.record("SOURCE_FAILOVER_EXHAUSTED", "generation=$expectedGeneration; tried=${attemptedResolverKeys.size}", error)
+                failAndAdvance(error.message ?: reason, expectedGeneration)
+            }
+        }
     }
 
     /**
