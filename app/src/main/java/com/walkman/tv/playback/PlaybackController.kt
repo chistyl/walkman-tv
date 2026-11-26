@@ -249,7 +249,14 @@ class PlaybackController(
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
-                AppDiagnostics.record("PLAYER_STATE", "playbackState=$playbackState; isPlaying=${player.isPlaying}; source=${_state.value.currentTrack?.source?.key}")
+                val stateName = when (playbackState) {
+                    Player.STATE_IDLE -> "IDLE"
+                    Player.STATE_BUFFERING -> "BUFFERING"
+                    Player.STATE_READY -> "READY"
+                    Player.STATE_ENDED -> "ENDED"
+                    else -> playbackState.toString()
+                }
+                AppDiagnostics.record("PLAYER_STATE", "playbackState=$stateName; isPlaying=${player.isPlaying}; playWhenReady=${player.playWhenReady}; source=${_state.value.currentTrack?.source?.key}")
                 if (playbackState == Player.STATE_ENDED) {
                     if (_state.value.isMv) exitMv() else handleEnded()
                 }
@@ -361,6 +368,7 @@ class PlaybackController(
     fun playAt(index: Int, qualityCap: Quality? = null) {
         val track = _state.value.queue.getOrNull(index) ?: return
         val generation = ++resolveGeneration
+        AppDiagnostics.record("PLAY_REQUEST", "generation=$generation; source=${track.source.key}; index=$index; queueSize=${_state.value.queue.size}; qualityCap=${qualityCap?.key ?: "none"}")
         // Fresh attempt (no cap) clears the last-attempted memory + the network retry counter;
         // cascade retries (cap != null) keep them so [onPlayerError] can keep stepping down or
         // continue counting retries within the same logical attempt.
@@ -379,8 +387,13 @@ class PlaybackController(
         // resolved play URL, so don't make them wait for (or hinge on) a successful audio resolve.
         // Guarded to fresh attempts so a quality-cascade retry of the same track doesn't refetch.
         if (qualityCap == null) loadLyrics(track)
+        if (resolveJob?.isActive == true) {
+            AppDiagnostics.record("RESOLVE_CANCEL", "generation=${generation - 1}; replacedBy=$generation")
+        }
         resolveJob?.cancel()
         resolveJob = scope.launch {
+            val resolveStartedAt = android.os.SystemClock.elapsedRealtime()
+            AppDiagnostics.record("RESOLVE_BEGIN", "generation=$generation; source=${track.source.key}; quality=${effectivePreferred.key}")
             // Local fast-path: downloaded tracks + SAF-imported tracks skip the online cascade.
             // localUrlResolver is set up at AppContainer init time.
             val localUrl = runCatching { localUrlResolver?.invoke(track) }.getOrNull()
@@ -402,7 +415,11 @@ class PlaybackController(
                     Result.failure(error)
                 }
             }
-            if (generation != resolveGeneration || _state.value.currentTrack?.id != track.id) return@launch
+            if (generation != resolveGeneration || _state.value.currentTrack?.id != track.id) {
+                AppDiagnostics.record("RESOLVE_STALE", "generation=$generation; currentGeneration=$resolveGeneration; source=${track.source.key}")
+                return@launch
+            }
+            AppDiagnostics.record("RESOLVE_FINISH", "generation=$generation; source=${track.source.key}; elapsedMs=${android.os.SystemClock.elapsedRealtime() - resolveStartedAt}; success=${resolved.isSuccess}")
             resolved.exceptionOrNull()?.let {
                 AppDiagnostics.record("RESOLVE_ERROR", "source=${track.source.key}; quality=${effectivePreferred.key}", it)
             }
