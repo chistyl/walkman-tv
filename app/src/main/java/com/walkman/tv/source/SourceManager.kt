@@ -108,7 +108,11 @@ class SourceManager(
 
         if (fallbackEnabled) {
             val qForFallback = if (track.qualities.contains(preferred)) preferred else (track.qualities.firstOrNull() ?: Quality.K128)
-            attempt { builtIn.resolve(track, qForFallback) }.getOrNull()?.let { res ->
+            attempt {
+                builtIn.resolve(track, qForFallback).let { result ->
+                    result.copy(url = PlayUrlValidator.requireHttpUrl(result.url))
+                }
+            }.getOrNull()?.let { res ->
                 return ResolvedTrack(res.url, ResolveOrigin.DirectFallback, qForFallback, res.warning)
             }
         }
