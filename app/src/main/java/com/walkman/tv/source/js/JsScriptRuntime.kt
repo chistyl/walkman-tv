@@ -6,6 +6,7 @@ import com.walkman.tv.data.model.ScriptCapabilities
 import com.walkman.tv.data.model.SourceCapability
 import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.data.model.UserScript
+import com.walkman.tv.diagnostics.AppDiagnostics
 import com.whl.quickjs.wrapper.JSCallFunction
 import com.whl.quickjs.wrapper.QuickJSContext
 import kotlinx.coroutines.CompletableDeferred
@@ -289,6 +290,10 @@ class JsScriptRuntime(
         val requestKey = obj.optString("requestKey").ifEmpty { return }
         val url = obj.optString("url").ifEmpty { return }
         val options = obj.optJSONObject("options") ?: JSONObject()
+        val requestHost = runCatching { java.net.URI(url).host }.getOrNull() ?: "unknown"
+        val requestMethod = options.optString("method", "GET").uppercase()
+        val shortRequestKey = requestKey.take(8)
+        AppDiagnostics.record("SCRIPT_HTTP_BEGIN", "request=$shortRequestKey; host=$requestHost; method=$requestMethod")
         // The legacy 野花 musicUrl handler returns only a URL. Capture the User-Agent
         // supplied by that action's synchronous lx.request call and attach it to the result.
         val actionRequestKey = activeMusicUrlRequestKey
@@ -307,9 +312,19 @@ class JsScriptRuntime(
                 if (destroyed.get()) return@launch
                 val payload = JSONObject().put("requestKey", requestKey)
                 if (error != null || response == null) {
-                    payload.put("error", error ?: "no response")
+                    val requestError = error ?: "no response"
+                    AppDiagnostics.record("SCRIPT_HTTP_ERROR", "request=$shortRequestKey; host=$requestHost; method=$requestMethod; error=$requestError")
+                    payload.put("error", requestError)
                     payload.put("response", JSONObject.NULL)
                 } else {
+                    val bodyType = response.body::class.java.simpleName
+                    val bodyLength = when (val body = response.body) {
+                        is String -> body.length
+                        is JSONObject -> body.length()
+                        is org.json.JSONArray -> body.length()
+                        else -> -1
+                    }
+                    AppDiagnostics.record("SCRIPT_HTTP_RESULT", "request=$shortRequestKey; host=$requestHost; method=$requestMethod; statusCode=" + response.statusCode + "; statusMessage=" + response.statusMessage + "; bodyType=" + bodyType + "; bodyLength=" + bodyLength)
                     payload.put("error", JSONObject.NULL)
                     payload.put(
                         "response",
@@ -332,7 +347,9 @@ class JsScriptRuntime(
         if (obj.optBoolean("status", false)) {
             deferred.complete(if (obj.isNull("result")) null else obj.get("result"))
         } else {
-            deferred.completeExceptionally(ScriptException(obj.optString("errorMessage", "unknown error")))
+            val errorMessage = obj.optString("errorMessage", "unknown error")
+            AppDiagnostics.record("SCRIPT_CALLBACK_ERROR", "request=" + requestKey.take(8) + "; error=" + errorMessage)
+            deferred.completeExceptionally(ScriptException(errorMessage))
         }
     }
 
