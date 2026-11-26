@@ -1,7 +1,10 @@
 package com.walkman.tv.di
 
 import android.content.Context
+import android.os.SystemClock
 import com.walkman.tv.data.store.LibraryStore
+import com.walkman.tv.diagnostics.AppDiagnostics
+import com.whl.quickjs.android.QuickJSLoader
 import com.walkman.tv.data.store.PlaybackSnapshotStore
 import com.walkman.tv.data.store.ScriptStore
 import com.walkman.tv.data.store.SearchHistoryStore
@@ -19,6 +22,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.walkman.tv.source.OtherSourceFinder
 import com.walkman.tv.source.SourceManager
 import com.walkman.tv.source.builtin.BuiltInLyricResolver
@@ -222,12 +226,24 @@ class AppContainer(val appContext: Context) {
 
     /** Load persisted data and wire settings → playback. Called once at startup. */
     fun bootstrap() {
-        // Bring up the LAN HTTP server (best-effort; QR features just won't work if it fails).
+        // The optional phone-to-TV HTTP server must never delay first-frame rendering.
         if (localServer == null) {
-            localServer = LocalServer.start(events, hotSearchJson = { hotSearchJsonBlocking() })
+            appScope.launch(Dispatchers.IO) {
+                val startedAt = SystemClock.elapsedRealtime()
+                localServer = LocalServer.start(events, hotSearchJson = { hotSearchJsonBlocking() })
+                AppDiagnostics.record(
+                    "APP_STARTUP",
+                    "local server ready=${localServer != null}; elapsedMs=${SystemClock.elapsedRealtime() - startedAt}",
+                )
+            }
         }
         appScope.launch {
+            val bootstrapStartedAt = SystemClock.elapsedRealtime()
             settingsStore.loadAll()
+            AppDiagnostics.record(
+                "APP_STARTUP",
+                "settings loaded; elapsedMs=${SystemClock.elapsedRealtime() - bootstrapStartedAt}",
+            )
 
             // Apply the loaded settings synchronously before starting dependent store reads.
             // In particular, DownloadStore.loadAll() must see the user's configured root/tree
@@ -239,25 +255,53 @@ class AppContainer(val appContext: Context) {
             // serially waiting for each disk read; custom scripts still finish before snapshot
             // restoration because the saved queue may need those sources to resolve.
             coroutineScope {
-                val scripts = async { scriptStore.loadAll(installBundled = false) }
+                val scripts = async {
+                    val jsStartedAt = SystemClock.elapsedRealtime()
+                    // Loading the native JS library can be relatively expensive on low-end TV
+                    // hardware. Do it off the UI thread, before any QuickJS context is created.
+                    withContext(Dispatchers.IO) { QuickJSLoader.init() }
+                    AppDiagnostics.record(
+                        "APP_STARTUP",
+                        "QuickJS native library ready; elapsedMs=${SystemClock.elapsedRealtime() - jsStartedAt}",
+                    )
+                    scriptStore.loadAll(installBundled = false)
+                }
                 val library = async { libraryStore.loadAll() }
-                val history = async { searchHistoryStore.load() }
-                val covers = async { coverCache.loadAll() }
                 val downloads = async { downloadStore.loadAll() }
-                val localFolders = async { localFolderStore.loadAll() }
 
+                // Only stores needed to restore playback are on the critical path. Search history,
+                // cover index and local-folder metadata are independent and can hydrate afterwards.
                 scripts.await()
                 library.await()
-                history.await()
-                covers.await()
                 downloads.await()
-                localFolders.await()
             }
+
+            AppDiagnostics.record(
+                "APP_STARTUP",
+                "critical stores ready; elapsedMs=${SystemClock.elapsedRealtime() - bootstrapStartedAt}",
+            )
 
             // Restore last session's queue + index + playing state. Run after scripts load so
             // any custom-source needed to resolve URLs is ready.
             val snapshot = playbackSnapshotStore.load()
             playbackController.restoreSnapshot(snapshot)
+            AppDiagnostics.record(
+                "APP_STARTUP",
+                "playback snapshot restored; elapsedMs=${SystemClock.elapsedRealtime() - bootstrapStartedAt}",
+            )
+
+            // Hydrate non-critical stores after the first playback-ready state. These reads use IO
+            // internally and must not hold up startup or the initial home-screen interaction.
+            appScope.launch { searchHistoryStore.load() }
+            appScope.launch {
+                val startedAt = SystemClock.elapsedRealtime()
+                coverCache.loadAll()
+                AppDiagnostics.record(
+                    "APP_STARTUP",
+                    "cover cache indexed; elapsedMs=${SystemClock.elapsedRealtime() - startedAt}",
+                )
+            }
+            appScope.launch { localFolderStore.loadAll() }
 
             // The bundled third-party source is optional for restoring the previous session.
             // Initialize it in the background so its network startup timeout cannot delay first

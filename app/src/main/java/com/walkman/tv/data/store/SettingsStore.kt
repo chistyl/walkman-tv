@@ -88,6 +88,10 @@ class SettingsStore(context: Context) {
     private val _settings = MutableStateFlow(Settings())
     val settings: StateFlow<Settings> = _settings.asStateFlow()
 
+    private val _isLoaded = MutableStateFlow(false)
+    /** True only after persisted settings have been applied; prevents screens fetching with defaults first. */
+    val isLoaded: StateFlow<Boolean> = _isLoaded.asStateFlow()
+
     suspend fun loadAll() {
         val loaded = withContext(Dispatchers.IO) { store.load() }
         // These advanced compatibility switches are intentionally retired from the UI.
@@ -100,6 +104,7 @@ class SettingsStore(context: Context) {
             redownloadOnQualityChange = false,
         )
         _settings.value = normalized
+        _isLoaded.value = true
         if (normalized != loaded) {
             withContext(Dispatchers.IO) { store.save(normalized) }
         }
