@@ -151,12 +151,11 @@ class PlaybackController(
          *  flaky CDN, expired URL on a paused track, etc. Worth retrying a few times before
          *  giving up on the track. */
         val NETWORK_RETRY_CODES = setOf(
+            // Retry only transient transport failures. HTTP status/content errors and invalid
+            // stream responses should move to another platform immediately.
             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
-            PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
             PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
-            PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE,
-            PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE,
         )
         const val MAX_NETWORK_RETRIES = 3
 
