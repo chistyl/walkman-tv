@@ -113,7 +113,12 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
             rawScript = raw,
             enabled = true,
         )
-        val old = _scripts.value.firstOrNull { it.name == script.name && it.author == script.author }
+        // Subscription-managed scripts have a separate identity and lifecycle. A manual import
+        // with the same display name/author must never replace a catalog-managed entry.
+        val subscriptionPrefix = com.walkman.tv.source.subscription.SubscriptionCatalogCore.localId("")
+        val old = _scripts.value.firstOrNull {
+            !it.id.startsWith(subscriptionPrefix) && it.name == script.name && it.author == script.author
+        }
         val result = sourceManager.load(script)
         return result.fold(
             onSuccess = {
