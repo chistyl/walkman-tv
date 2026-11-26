@@ -145,9 +145,18 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
             enabled = true,
         )
         val old = _scripts.value.firstOrNull { it.name == script.name && it.author == script.author }
+        AppDiagnostics.record(
+            "SCRIPT_IMPORT_LOAD_BEGIN",
+            "name=${script.name}; version=${script.version}; replacing=${old != null}",
+        )
+        val loadStartedAt = System.currentTimeMillis()
         val result = sourceManager.load(script)
         return result.fold(
-            onSuccess = {
+            onSuccess = { capabilities ->
+                AppDiagnostics.record(
+                    "SCRIPT_IMPORT_LOAD_SUCCESS",
+                    "name=${script.name}; sourceCount=${capabilities.sources.size}; sources=${capabilities.sources.keys.joinToString(",") { source -> source.key }}; elapsedMs=${System.currentTimeMillis() - loadStartedAt}",
+                )
                 if (old != null) {
                     sourceManager.unload(old.id)
                     _scripts.value = _scripts.value.map { if (it.id == old.id) script else it }
@@ -157,7 +166,14 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
                 persist()
                 Result.success(Imported(script, old))
             },
-            onFailure = { Result.failure(it) },
+            onFailure = { error ->
+                AppDiagnostics.record(
+                    "SCRIPT_IMPORT_LOAD_ERROR",
+                    "name=${script.name}; error=${error.message ?: error::class.simpleName}; elapsedMs=${System.currentTimeMillis() - loadStartedAt}",
+                    error,
+                )
+                Result.failure(error)
+            },
         )
     }
 
