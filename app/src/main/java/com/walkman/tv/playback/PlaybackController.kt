@@ -394,10 +394,13 @@ class PlaybackController(
                     Result.failure(error)
                 }
             }
-            runCatching { playResolvedOrFail(track, resolved) }
+            if (generation != resolveGeneration || _state.value.currentTrack?.id != track.id) return@launch
+            runCatching { playResolvedOrFail(track, resolved, generation) }
                 .onFailure { e ->
-                    android.util.Log.e("PlaybackController", "playAt crashed", e)
-                    failAndAdvance(e.message ?: e::class.simpleName ?: "播放時發生錯誤")
+                    android.util.Log.e("PlaybackController", "playAt failed", e)
+                    if (generation == resolveGeneration && _state.value.currentTrack?.id == track.id) {
+                        failAndAdvance(e.message ?: e::class.simpleName ?: "播放時發生錯誤")
+                    }
                 }
         }
     }
