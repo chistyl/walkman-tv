@@ -586,6 +586,7 @@ class PlaybackController(
 
     /** Play an MV video url on the same player (UI attaches a PlayerView for output). */
     fun playMvUrl(url: String) {
+        resolveGeneration++
         resolveJob?.cancel()
         player.setMediaItem(MediaItem.fromUri(url))
         player.prepare()
