@@ -230,6 +230,9 @@ class PlaybackController(
     private var resolveJob: Job? = null
     private var lyricsJob: Job? = null
 
+    /** Invalidates late resolver results after a newer track/source selection. */
+    @Volatile private var resolveGeneration: Long = 0
+
     init {
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
