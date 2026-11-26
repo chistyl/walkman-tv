@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - feature/full-performance-optimization
+      - perf/startup-cache-render-optimization
   push:
     branches:
       - fix/taiwan-traditional-context-conversion
