@@ -159,6 +159,8 @@ class PlaybackController(
             PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE,
         )
         const val MAX_NETWORK_RETRIES = 3
+        /** A silent stall must not leave a requested track buffering forever. */
+        const val BUFFERING_TIMEOUT_MS = 30_000L
 
         /** Stop auto-skipping once this many tracks fail back-to-back (a whole playlist of dead
          *  links shouldn't spin forever). */
@@ -243,6 +245,7 @@ class PlaybackController(
     private var retryJob: Job? = null
     private var autoSkipJob: Job? = null
     private var tickerJob: Job? = null
+    private var bufferingWatchdogJob: Job? = null
     @Volatile private var activeMediaId: String? = null
 
     /** Invalidates late resolver results after a newer track/source selection. */
@@ -267,6 +270,13 @@ class PlaybackController(
                     else -> playbackState.toString()
                 }
                 AppDiagnostics.record("PLAYER_STATE", "playbackState=$stateName; isPlaying=${player.isPlaying}; playWhenReady=${player.playWhenReady}; source=${_state.value.currentTrack?.source?.key}")
+                when (playbackState) {
+                    Player.STATE_BUFFERING -> startBufferingWatchdog()
+                    Player.STATE_READY, Player.STATE_IDLE, Player.STATE_ENDED -> {
+                        bufferingWatchdogJob?.cancel()
+                        bufferingWatchdogJob = null
+                    }
+                }
                 if (playbackState == Player.STATE_ENDED) {
                     if (_state.value.isMv) exitMv() else handleEnded()
                 }
@@ -278,7 +288,18 @@ class PlaybackController(
                 }
             }
 
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (!playWhenReady) {
+                    bufferingWatchdogJob?.cancel()
+                    bufferingWatchdogJob = null
+                } else if (player.playbackState == Player.STATE_BUFFERING) {
+                    startBufferingWatchdog()
+                }
+            }
+
             override fun onPlayerError(error: PlaybackException) {
+                bufferingWatchdogJob?.cancel()
+                bufferingWatchdogJob = null
                 val eventMediaId = player.currentMediaItem?.mediaId
                 val expectedMediaId = activeMediaId
                 // Some Media3/TV implementations clear currentMediaItem while dispatching
@@ -541,6 +562,8 @@ class PlaybackController(
      */
     private fun tryNextSource(track: Track, expectedGeneration: Long, reason: String) {
         if (expectedGeneration != resolveGeneration || sourceFailoverInProgress) return
+        bufferingWatchdogJob?.cancel()
+        bufferingWatchdogJob = null
         val failedKey = activeResolverAttemptKey
         if (failedKey.isNullOrBlank()) {
             failAndAdvance(reason, expectedGeneration)
@@ -599,6 +622,8 @@ class PlaybackController(
             AppDiagnostics.record("AUTO_SKIP_STALE", "generation=$expectedGeneration; currentGeneration=$resolveGeneration; reason=$reason")
             return
         }
+        bufferingWatchdogJob?.cancel()
+        bufferingWatchdogJob = null
         // Stop whatever is still loaded (e.g. a cascade retry's half-played attempt) so a failed
         // track actually goes silent.
         runCatching { player.stop() }
@@ -800,6 +825,36 @@ class PlaybackController(
         return i
     }
 
+    /**
+     * ExoPlayer may remain in BUFFERING without ever dispatching onPlayerError (for example,
+     * a stalled CDN response). Treat only an actively requested, unchanged media item as a
+     * failed resolver; pausing cancels the timer and resuming while buffering starts it again.
+     */
+    private fun startBufferingWatchdog() {
+        if (!player.playWhenReady || _state.value.isMv || sourceFailoverInProgress) return
+        val generation = resolveGeneration
+        val mediaId = activeMediaId ?: return
+        bufferingWatchdogJob?.cancel()
+        bufferingWatchdogJob = scope.launch {
+            delay(BUFFERING_TIMEOUT_MS)
+            if (generation != resolveGeneration ||
+                mediaId != activeMediaId ||
+                player.playbackState != Player.STATE_BUFFERING ||
+                !player.playWhenReady ||
+                _state.value.isMv ||
+                sourceFailoverInProgress
+            ) return@launch
+
+            AppDiagnostics.record(
+                "PLAYER_BUFFERING_TIMEOUT",
+                "generation=$generation; mediaId=$mediaId; timeoutMs=$BUFFERING_TIMEOUT_MS; source=${_state.value.currentTrack?.source?.key}",
+            )
+            val track = _state.value.currentTrack
+            if (track != null) tryNextSource(track, generation, "BUFFERING_TIMEOUT")
+            else failAndAdvance("BUFFERING_TIMEOUT", generation)
+        }
+    }
+
     private fun startPositionTicker() {
         if (tickerJob?.isActive == true) return
         tickerJob = scope.launch {
@@ -818,6 +873,7 @@ class PlaybackController(
     fun release() {
         resolveGeneration++
         tickerJob?.cancel()
+        bufferingWatchdogJob?.cancel()
         probeJob?.cancel()
         probingUrl = null
         activeMediaId = null
