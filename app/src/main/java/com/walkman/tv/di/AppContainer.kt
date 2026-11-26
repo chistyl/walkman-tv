@@ -72,8 +72,12 @@ class AppContainer(val appContext: Context) {
     private val builtInLyricResolver by lazy { BuiltInLyricResolver(catalogHttp) }
     private val otherSourceFinder by lazy { OtherSourceFinder(catalogs) }
 
+    val sourceHealthStore: com.walkman.tv.source.SourceHealthStore by lazy {
+        com.walkman.tv.source.SourceHealthStore(appContext)
+    }
+
     val sourceManager: SourceManager by lazy {
-        SourceManager(preload, scriptHttp, otherSourceFinder, builtInResolver)
+        SourceManager(preload, scriptHttp, otherSourceFinder, builtInResolver, sourceHealthStore)
     }
 
     private val lyricsFetcher by lazy {
