@@ -31,6 +31,15 @@ data class LocalSubscriptionScript(
     val script: String,
 )
 
+/** Existing locally-managed subscription entry. Manual scripts must never be passed here. */
+data class LocalSubscriptionRecord(
+    val localId: String,
+    val remoteId: String,
+    val name: String,
+    val script: String,
+    val enabled: Boolean,
+)
+
 /**
  * Platform-neutral pieces of LX Enhanced subscription recovery.
  *
@@ -92,15 +101,6 @@ object SubscriptionCatalogCore {
         }
     }
 
-
-/** Existing locally-managed subscription entry. Manual scripts must never be passed here. */
-data class LocalSubscriptionRecord(
-    val localId: String,
-    val remoteId: String,
-    val name: String,
-    val script: String,
-    val enabled: Boolean,
-)
 
 /** A staged update; the consumer must keep [localId] and [enabled] unchanged. */
 data class PlannedSubscriptionUpdate(
