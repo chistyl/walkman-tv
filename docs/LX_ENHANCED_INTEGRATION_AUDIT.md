@@ -111,3 +111,14 @@ Before implementing automatic recovery, introduce an additive subscription model
 - The planner performs no storage, network, runtime loading, or mutation. A caller must stage all script bodies and validate the complete remote set before applying the plan.
 - Added two tests covering add/update/unchanged/retained behavior and rejection of ambiguous/manual identities. The subscription core suite now contains eight tests.
 - Latest catalog parser baseline Run #420 (commit 901b1641ccc09a553988a54f85cee42dd49ef11c) passed all regression tests and generated four ABI APKs plus source ZIP. The new planner commits are subsequent and require their own CI run.
+
+
+### Phase D progress: isolated catalog configuration and staging fetcher
+
+- Added `SubscriptionCatalogStore`, which persists only the explicitly configured catalog URL in its own `subscription_catalog.json`; it does not share or rewrite `scripts.json`.
+- Added `SubscriptionCatalogFetcher` and exposed both services through `AppContainer`.
+- Fetcher validates HTTP(S) URLs, downloads the catalog and every referenced script before returning a staged snapshot, and never mutates `ScriptStore`.
+- Bounds: catalog 512 KiB, each script 2 MiB, aggregate staged content 12 MiB, maximum 30 entries. Existing app OkHttp client bounds connect/read/call duration.
+- Requests are cancellation-aware; cancelling the coroutine cancels the active OkHttp call. Non-2xx responses, invalid catalog data, unsafe redirect targets, empty script bodies, and size-limit violations abort the complete stage.
+- No UI controls, auto-refresh, script activation, replacement, or deletion are enabled yet. Next integration gate is a transaction-style ScriptStore API that applies a fully staged and validated plan while preserving manual scripts, subscription IDs, enabled state, and list ordering, with rollback on runtime-load failure.
+- CI Run #420 passed for the parser baseline. Runs #422–#424 exposed an unresolved test-model scope error in the first update-plan commits; the local subscription projection was moved to top-level in commit `658de314`. Run #426 and subsequent commits are the verification path for the corrected model and fetcher.
