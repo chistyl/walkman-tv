@@ -461,7 +461,9 @@ class PlaybackController(
                 // (lyrics already loaded in playAt when the track switched)
             }.onFailure { e ->
                 // Couldn't get a play URL for this track — auto-skip (or stop after too many).
-                failAndAdvance(e.message ?: "無法播放")
+                if (generation == resolveGeneration && _state.value.currentTrack?.id == track.id) {
+                    failAndAdvance(e.message ?: "無法播放")
+                }
             }
     }
 
