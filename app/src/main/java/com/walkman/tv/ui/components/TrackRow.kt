@@ -41,7 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.focusGroup
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -229,8 +229,8 @@ private fun MvBadge() {
  * the top, the first press scrolls back to row 0 and refocuses it; only when already at the
  * top does back fall through to the parent BackHandler (which navigates out one layer).
  *
- * Uses `Modifier.focusRestorer()` on the LazyColumn so the previously-focused row regains
- * focus when the user returns from the player overlay (or any other modal that took focus).
+ * Uses `Modifier.focusGroup()` for D-pad traversal. Focus return from the player overlay is
+ * handled explicitly by the playerClosed event below, avoiding stale FocusRestorer nodes.
  * If [initialFocus] is true the list grabs focus on its first row on first composition —
  * used by overlays (songlist detail) where the list appears on top of something focused.
  */
@@ -315,9 +315,8 @@ fun TrackList(
 
     LazyColumn(
         state = listState,
-        // focusRestorer() remembers which row was last focused; when the player overlay closes
-        // and focus drops back into the list, it lands on that same row (instead of resetting).
-        modifier = modifier.focusRestorer(),
+        // Keep D-pad traversal grouped; focus restoration is handled by playerClosed above.
+        modifier = modifier.focusGroup(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
         contentPadding = contentPadding,
     ) {
