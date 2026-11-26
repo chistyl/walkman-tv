@@ -241,6 +241,7 @@ class PlaybackController(
     init {
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
+                AppDiagnostics.record("PLAYER_STATE", "isPlaying=$isPlaying; state=${player.playbackState}; source=${_state.value.currentTrack?.source?.key}")
                 _state.value = _state.value.copy(isPlaying = isPlaying)
                 // Pause: drop the audio level immediately so the waveform settles instead
                 // of holding whatever amplitude the last decoded chunk reported.
@@ -248,6 +249,7 @@ class PlaybackController(
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
+                AppDiagnostics.record("PLAYER_STATE", "playbackState=$playbackState; isPlaying=${player.isPlaying}; source=${_state.value.currentTrack?.source?.key}")
                 if (playbackState == Player.STATE_ENDED) {
                     if (_state.value.isMv) exitMv() else handleEnded()
                 }
