@@ -1,6 +1,7 @@
 package com.walkman.tv.playback
 
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -28,12 +29,15 @@ import java.io.InputStream
 class AudioSpecProbe(private val http: OkHttpClient) {
 
     suspend fun probe(url: String): AudioSpec? = withContext(Dispatchers.IO) {
-        runCatching {
+        try {
             val bytes = if (url.startsWith("http")) fetchRemote(url, 65_536) else readLocal(url, 65_536)
-            if (bytes == null || bytes.size < 32) return@runCatching null
-            parse(bytes, url)
-        }.onFailure { Log.d(TAG, "probe failed for $url: ${it.message}") }
-            .getOrNull()
+            if (bytes == null || bytes.size < 32) null else parse(bytes, url)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.d(TAG, "probe failed for $url: ${error.message}")
+            null
+        }
     }
 
     // MARK: - Bytes -------------------------------------------------------------------------

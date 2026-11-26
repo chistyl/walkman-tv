@@ -4,9 +4,11 @@ on:
   pull_request:
     branches:
       - feature/full-performance-optimization
+      - perf/startup-cache-render-optimization
   push:
     branches:
       - fix/taiwan-traditional-context-conversion
+      - fix/platform-source-switch-crash
 
 permissions:
   contents: read
@@ -42,5 +44,18 @@ jobs:
         with:
           name: walkman-tv-debug-apks
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Package complete source archive
+        if: success()
+        run: git archive --format=zip --output=walkman-tv-source.zip HEAD
+
+      - name: Upload complete source archive
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: walkman-tv-complete-source
+          path: walkman-tv-source.zip
           if-no-files-found: error
           retention-days: 14

@@ -108,7 +108,11 @@ class SourceManager(
 
         if (fallbackEnabled) {
             val qForFallback = if (track.qualities.contains(preferred)) preferred else (track.qualities.firstOrNull() ?: Quality.K128)
-            attempt { builtIn.resolve(track, qForFallback) }.getOrNull()?.let { res ->
+            attempt {
+                builtIn.resolve(track, qForFallback).let { result ->
+                    result.copy(url = PlayUrlValidator.requireHttpUrl(result.url))
+                }
+            }.getOrNull()?.let { res ->
                 return ResolvedTrack(res.url, ResolveOrigin.DirectFallback, qForFallback, res.warning)
             }
         }
@@ -145,7 +149,7 @@ class SourceManager(
         val obj = result as? JSONObject
         val url = obj?.optJSONObject("data")?.optString("url")?.ifEmpty { null }
             ?: obj?.optString("url")?.ifEmpty { null }
-        return url ?: throw SourceException("指令碼傳回無效結果")
+        return PlayUrlValidator.requireHttpUrl(url)
     }
 
     /** Ask a user script for lyric data — raw `{lyric, tlyric, rlyric, lxlyric}` (iOS `requestLyric`). */

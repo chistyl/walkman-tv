@@ -2,6 +2,7 @@ package com.walkman.tv.source
 
 import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.data.model.Track
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -20,7 +21,15 @@ class OtherSourceFinder(private val searcher: MusicSearcher) {
                 .filter { it != track.source }
                 .map { src ->
                     async {
-                        src to (runCatching { searcher.search(src, query, 10) }.getOrDefault(emptyList()))
+                        val results = try {
+                            searcher.search(src, query, 10)
+                        } catch (cancelled: CancellationException) {
+                            // A track/source switch must stop all in-flight alternative searches.
+                            throw cancelled
+                        } catch (_: Exception) {
+                            emptyList()
+                        }
+                        src to results
                     }
                 }
                 .awaitAll()

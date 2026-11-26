@@ -230,6 +230,9 @@ class PlaybackController(
     private var resolveJob: Job? = null
     private var lyricsJob: Job? = null
 
+    /** Invalidates late resolver results after a newer track/source selection. */
+    @Volatile private var resolveGeneration: Long = 0
+
     init {
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -349,6 +352,7 @@ class PlaybackController(
 
     fun playAt(index: Int, qualityCap: Quality? = null) {
         val track = _state.value.queue.getOrNull(index) ?: return
+        val generation = ++resolveGeneration
         // Fresh attempt (no cap) clears the last-attempted memory + the network retry counter;
         // cascade retries (cap != null) keep them so [onPlayerError] can keep stepping down or
         // continue counting retries within the same logical attempt.
@@ -390,15 +394,19 @@ class PlaybackController(
                     Result.failure(error)
                 }
             }
-            runCatching { playResolvedOrFail(track, resolved) }
+            if (generation != resolveGeneration || _state.value.currentTrack?.id != track.id) return@launch
+            runCatching { playResolvedOrFail(track, resolved, generation) }
                 .onFailure { e ->
-                    android.util.Log.e("PlaybackController", "playAt crashed", e)
-                    failAndAdvance(e.message ?: e::class.simpleName ?: "播放時發生錯誤")
+                    android.util.Log.e("PlaybackController", "playAt failed", e)
+                    if (generation == resolveGeneration && _state.value.currentTrack?.id == track.id) {
+                        failAndAdvance(e.message ?: e::class.simpleName ?: "播放時發生錯誤")
+                    }
                 }
         }
     }
 
-    private fun playResolvedOrFail(track: Track, resolved: Result<ResolvedTrack>) {
+    private fun playResolvedOrFail(track: Track, resolved: Result<ResolvedTrack>, generation: Long) {
+        if (generation != resolveGeneration || _state.value.currentTrack?.id != track.id) return
         resolved.onSuccess { r ->
                 val item = MediaItem.Builder()
                     .setUri(r.url)
@@ -453,7 +461,9 @@ class PlaybackController(
                 // (lyrics already loaded in playAt when the track switched)
             }.onFailure { e ->
                 // Couldn't get a play URL for this track — auto-skip (or stop after too many).
-                failAndAdvance(e.message ?: "無法播放")
+                if (generation == resolveGeneration && _state.value.currentTrack?.id == track.id) {
+                    failAndAdvance(e.message ?: "無法播放")
+                }
             }
     }
 
@@ -563,6 +573,7 @@ class PlaybackController(
     fun toggleShuffle() { _state.value = _state.value.copy(shuffle = !_state.value.shuffle) }
 
     fun stop() {
+        resolveGeneration++
         resolveJob?.cancel()
         lyricsJob?.cancel()
         player.stop()
@@ -575,6 +586,7 @@ class PlaybackController(
 
     /** Play an MV video url on the same player (UI attaches a PlayerView for output). */
     fun playMvUrl(url: String) {
+        resolveGeneration++
         resolveJob?.cancel()
         player.setMediaItem(MediaItem.fromUri(url))
         player.prepare()
@@ -662,6 +674,7 @@ class PlaybackController(
     }
 
     fun release() {
+        resolveGeneration++
         resolveJob?.cancel()
         lyricsJob?.cancel()
         probeJob?.cancel()

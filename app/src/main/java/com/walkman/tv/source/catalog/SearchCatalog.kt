@@ -4,6 +4,7 @@ import com.walkman.tv.data.model.Quality
 import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.data.model.Track
 import com.walkman.tv.source.MusicSearcher
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -31,13 +32,28 @@ class Catalogs(private val http: CatalogHttp) : MusicSearcher {
     fun serviceFor(source: SourceID): SongCatalog? = services[source]
 
     override suspend fun search(source: SourceID, keyword: String, page: Int): List<Track> =
-        runCatching { services[source]?.search(keyword, page) ?: emptyList() }.getOrDefault(emptyList())
+        try {
+            services[source]?.search(keyword, page) ?: emptyList()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            emptyList()
+        }
 
     /** Search every platform and interleave results (kw, wy, kg, tx, mg round-robin). */
     suspend fun searchAll(keyword: String, page: Int = 1): List<Track> {
         val groups: Map<SourceID, List<Track>> = coroutineScope {
             services.values.map { svc ->
-                async { svc.source to runCatching { svc.search(keyword, page) }.getOrDefault(emptyList()) }
+                async {
+                    val result = try {
+                        svc.search(keyword, page)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                    svc.source to result
+                }
             }.awaitAll().toMap()
         }
         return interleave(groups)
