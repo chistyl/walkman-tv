@@ -2,6 +2,7 @@ package com.walkman.tv.source
 
 import android.util.Log
 import com.walkman.tv.data.model.Quality
+import com.walkman.tv.diagnostics.AppDiagnostics
 import com.walkman.tv.data.model.ScriptCapabilities
 import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.data.model.Track
@@ -103,6 +104,7 @@ class SourceManager(
                     }
                     .onFailure {
                         Log.d(TAG, "script '${ls.script.name}' @${q.key} failed: ${it.message}")
+                        AppDiagnostics.record("SOURCE_SCRIPT_ERROR", "source=${track.source.key}; script=${ls.script.name}; quality=${q.key}", it)
                         timedOut = it is JsScriptRuntime.ScriptTimeoutException
                     }
                 // An unresponsive script won't answer at a lower tier either; don't wait out the
