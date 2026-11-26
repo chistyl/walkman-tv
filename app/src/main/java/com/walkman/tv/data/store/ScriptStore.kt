@@ -152,10 +152,14 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
         staged: com.walkman.tv.source.subscription.StagedSubscriptionCatalog,
     ): Result<SubscriptionApplySummary> = mutationMutex.withLock {
         val current = _scripts.value
+        val subscriptionPrefix = com.walkman.tv.source.subscription.SubscriptionCatalogCore.localId("")
+        if (current.any { it.id.startsWith(subscriptionPrefix) &&
+                com.walkman.tv.source.subscription.SubscriptionCatalogCore.remoteId(it.id) == null }) {
+            return@withLock Result.failure(IllegalStateException("本機訂閱音源識別碼無效"))
+        }
         val subscriptionScripts = current.filter {
-            it.id.startsWith(com.walkman.tv.source.subscription.SubscriptionCatalogCore.localId(""))
-                .not()
-        }.filter { com.walkman.tv.source.subscription.SubscriptionCatalogCore.remoteId(it.id) != null }
+            com.walkman.tv.source.subscription.SubscriptionCatalogCore.remoteId(it.id) != null
+        }
         val localRecords = subscriptionScripts.map { script ->
             val remoteId = com.walkman.tv.source.subscription.SubscriptionCatalogCore.remoteId(script.id)
                 ?: return@withLock Result.failure(IllegalStateException("訂閱音源識別碼無效"))
