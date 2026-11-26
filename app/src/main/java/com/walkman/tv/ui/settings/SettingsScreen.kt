@@ -91,6 +91,31 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
     var showQr by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<com.walkman.tv.data.model.UserScript?>(null) }
     var diagnosticLog by remember { mutableStateOf(AppDiagnostics.readAll()) }
+ 
+    fun refreshSubscriptionCatalog() {
+        val targetUrl = subscriptionCatalogUrl.trim()
+        if (subscriptionRefreshing || targetUrl.isBlank()) return
+        subscriptionRefreshing = true
+        subscriptionStatus = "正在下載及驗證訂閱目錄…"
+        appContainer.appScope.launch {
+            try {
+                val staged = appContainer.subscriptionCatalogFetcher.stage(targetUrl)
+                val applied = appContainer.scriptStore.applySubscriptionCatalog(staged).getOrThrow()
+                val savedUrl = runCatching {
+                    appContainer.subscriptionCatalogStore.saveCatalogUrl(targetUrl)
+                }
+                val summary = "更新完成：新增 ${applied.added}、更新 ${applied.updated}、未變更 ${applied.unchanged}、遠端缺少但保留 ${applied.retainedMissing}"
+                subscriptionStatus = if (savedUrl.isSuccess) summary
+                    else "$summary（目錄網址未能儲存，下次仍需重新輸入）"
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                subscriptionStatus = "更新失敗，原有音源未變更：${error.message ?: "未知錯誤"}"
+            } finally {
+                subscriptionRefreshing = false
+            }
+        }
+    }
 
     val diagnosticsExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         if (uri != null) {
@@ -540,25 +565,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                         modifier = Modifier.fillMaxWidth().then(fieldModifier),
                         placeholder = { Text("訂閱目錄 URL（https://...）", color = AppColors.TextMuted) },
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = {
-                            if (!subscriptionRefreshing && subscriptionCatalogUrl.isNotBlank()) {
-                                subscriptionRefreshing = true
-                                subscriptionStatus = "正在下載及驗證訂閱目錄…"
-                                appContainer.appScope.launch {
-                                    val result = runCatching {
-                                        val staged = appContainer.subscriptionCatalogFetcher.stage(subscriptionCatalogUrl.trim())
-                                        val applied = appContainer.scriptStore.applySubscriptionCatalog(staged).getOrThrow()
-                                        appContainer.subscriptionCatalogStore.saveCatalogUrl(subscriptionCatalogUrl.trim())
-                                        applied
-                                    }
-                                    subscriptionRefreshing = false
-                                    subscriptionStatus = result.fold(
-                                        { "更新完成：新增 ${it.added}、更新 ${it.updated}、未變更 ${it.unchanged}、遠端缺少但保留 ${it.retainedMissing}" },
-                                        { "更新失敗，原有音源未變更：${it.message ?: "未知錯誤"}" },
-                                    )
-                                }
-                            }
-                        }),
+                        keyboardActions = KeyboardActions(onDone = { refreshSubscriptionCatalog() }),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = AppColors.TextPrimary,
                             unfocusedTextColor = AppColors.TextPrimary,
@@ -570,25 +577,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 }
                 Spacer(Modifier.width(8.dp))
                 TvPill(
-                    onClick = {
-                        if (!subscriptionRefreshing && subscriptionCatalogUrl.isNotBlank()) {
-                            subscriptionRefreshing = true
-                            subscriptionStatus = "正在下載及驗證訂閱目錄…"
-                            appContainer.appScope.launch {
-                                val result = runCatching {
-                                    val staged = appContainer.subscriptionCatalogFetcher.stage(subscriptionCatalogUrl.trim())
-                                    val applied = appContainer.scriptStore.applySubscriptionCatalog(staged).getOrThrow()
-                                    appContainer.subscriptionCatalogStore.saveCatalogUrl(subscriptionCatalogUrl.trim())
-                                    applied
-                                }
-                                subscriptionRefreshing = false
-                                subscriptionStatus = result.fold(
-                                    { "更新完成：新增 ${it.added}、更新 ${it.updated}、未變更 ${it.unchanged}、遠端缺少但保留 ${it.retainedMissing}" },
-                                    { "更新失敗，原有音源未變更：${it.message ?: "未知錯誤"}" },
-                                )
-                            }
-                        }
-                    },
+                    onClick = { refreshSubscriptionCatalog() },
                     selected = true,
                 ) {
                     Text(if (subscriptionRefreshing) "更新中…" else "儲存並更新", fontSize = 13.sp)
