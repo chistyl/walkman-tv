@@ -271,8 +271,10 @@ class PlaybackController(
                     if (_state.value.isMv) exitMv() else handleEnded()
                 }
                 if (playbackState == Player.STATE_READY) {
-                    // A track actually started — clear the consecutive-failure streak.
+                    // A track actually started — clear the consecutive-failure streak and
+                    // the retry budget carried by an attempt that successfully reached READY.
                     consecutiveFailures = 0
+                    networkRetryCount = 0
                     _state.value = _state.value.copy(durationMs = player.duration.coerceAtLeast(0))
                 }
             }
@@ -504,9 +506,9 @@ class PlaybackController(
                 sourceFailoverInProgress = false
                 val host = runCatching { android.net.Uri.parse(r.url).host }.getOrNull() ?: "(local-or-unknown)"
                 AppDiagnostics.record("PLAY_RESOLVED", "source=${track.source.key}; quality=${r.quality.key}; host=$host; headerNames=${r.headers.keys.joinToString(",")}; customUA=${!r.userAgent.isNullOrBlank()}")
-                // Successful resolve + setMediaItem → reset the network retry counter so the
-                // next track gets a fresh budget.
-                networkRetryCount = 0
+                // Do not reset networkRetryCount merely because a URL resolved: a retry can
+                // resolve successfully and then fail again before reaching STATE_READY.
+                // The counter is reset when the player actually reaches READY.
                 if (r.headers.isEmpty() && r.userAgent.isNullOrBlank()) {
                     // Preserve the existing default pipeline for ordinary sources.
                     player.setMediaItem(item)
