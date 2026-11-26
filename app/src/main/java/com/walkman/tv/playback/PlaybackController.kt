@@ -699,6 +699,7 @@ class PlaybackController(
         resolveJob?.cancel()
         attemptedSources.clear()
         attemptedSources.add(currentSource)
+        attemptedSources.add(targetSource)
         _state.value = _state.value.copy(
             resolving = true,
             warning = "正在切換至「${targetSource.displayName}」…",
@@ -729,6 +730,11 @@ class PlaybackController(
                         warning = "切換至「${targetSource.displayName}」失敗：${error.message ?: "找不到相符歌曲"}",
                     )
                     AppDiagnostics.record("SOURCE_MANUAL_SWITCH_ERROR", "to=${targetSource.key}", error)
+                    // If the previous stream also failed while the manual search was running,
+                    // continue with the remaining platforms instead of leaving an idle player.
+                    if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+                        attemptSourceFailover(track, "手動切換失敗", generation)
+                    }
                 },
             )
         }
