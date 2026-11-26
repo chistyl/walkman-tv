@@ -352,6 +352,7 @@ class PlaybackController(
 
     fun playAt(index: Int, qualityCap: Quality? = null) {
         val track = _state.value.queue.getOrNull(index) ?: return
+        val generation = ++resolveGeneration
         // Fresh attempt (no cap) clears the last-attempted memory + the network retry counter;
         // cascade retries (cap != null) keep them so [onPlayerError] can keep stepping down or
         // continue counting retries within the same logical attempt.
