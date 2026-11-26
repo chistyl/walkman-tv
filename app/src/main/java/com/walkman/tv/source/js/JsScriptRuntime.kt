@@ -21,6 +21,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
 import java.util.UUID
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -310,13 +311,19 @@ class JsScriptRuntime(
             val ver = headerValue("ver")
             val sourceVer = headerValue("source-ver")
             val identifier = flowerSegments[4]
+            val queryParts = requestUri?.rawQuery?.split('&').orEmpty().filter { it.isNotEmpty() }
+            val queryKeys = queryParts.map { it.substringBefore('=') }.sorted().joinToString(",")
+            val queryValueLengths = queryParts.map { it.substringAfter('=', "").length }.sorted().joinToString(",")
             "; endpoint=flower; route=/flower/v1/url/{source}/{id}/{quality}" +
                 "; source=${flowerSegments[3]}; identifierPresent=${identifier.isNotEmpty()}" +
                 "; identifierLength=${identifier.length}; quality=${flowerSegments[5]}" +
+                "; queryKeys=$queryKeys; queryValueLengths=$queryValueLengths" +
                 "; headerNames=$headerNames; tagPresent=${tag != null}; tagLength=${tag?.length ?: 0}" +
-                "; tagHex=${tag?.matches(Regex("[0-9a-fA-F]+")) == true}" +
+                "; tagHex=${tag?.matches(Regex("[0-9a-fA-F]+")) == true}; tagFingerprint=${fingerprint(tag)}" +
                 "; userAgentPresent=${ua != null}; userAgentLength=${ua?.length ?: 0}" +
-                "; verLength=${ver?.length ?: 0}; sourceVerLength=${sourceVer?.length ?: 0}"
+                "; userAgentFingerprint=${fingerprint(ua)}; verLength=${ver?.length ?: 0}" +
+                "; verFingerprint=${fingerprint(ver)}; sourceVerLength=${sourceVer?.length ?: 0}" +
+                "; sourceVerFingerprint=${fingerprint(sourceVer)}"
         } else {
             ""
         }
@@ -409,6 +416,13 @@ class JsScriptRuntime(
             AppDiagnostics.record("SCRIPT_CALLBACK_ERROR", "request=" + requestKey.take(8) + "; error=" + errorMessage)
             deferred.completeExceptionally(ScriptException(errorMessage))
         }
+    }
+
+    /** Short one-way fingerprints let diagnostics compare request metadata without logging secrets. */
+    private fun fingerprint(value: String?): String {
+        if (value.isNullOrEmpty()) return "none"
+        val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
+        return digest.take(8).joinToString("") { "%02x".format(it) }
     }
 
     private fun parseObj(raw: String?): JSONObject? =
