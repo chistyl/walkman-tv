@@ -149,7 +149,7 @@ class SourceManager(
         val obj = result as? JSONObject
         val url = obj?.optJSONObject("data")?.optString("url")?.ifEmpty { null }
             ?: obj?.optString("url")?.ifEmpty { null }
-        return url ?: throw SourceException("指令碼傳回無效結果")
+        return PlayUrlValidator.requireHttpUrl(url)
     }
 
     /** Ask a user script for lyric data — raw `{lyric, tlyric, rlyric, lxlyric}` (iOS `requestLyric`). */
