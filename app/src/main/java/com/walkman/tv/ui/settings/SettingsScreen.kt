@@ -85,6 +85,9 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
     val scripts by appContainer.scriptStore.scripts.collectAsState()
     var url by remember { mutableStateOf("") }
     var status by remember { mutableStateOf<String?>(null) }
+    var subscriptionCatalogUrl by remember { mutableStateOf("") }
+    var subscriptionStatus by remember { mutableStateOf<String?>(null) }
+    var subscriptionRefreshing by remember { mutableStateOf(false) }
     var showQr by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<com.walkman.tv.data.model.UserScript?>(null) }
     var diagnosticLog by remember { mutableStateOf(AppDiagnostics.readAll()) }
@@ -197,6 +200,12 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         } else {
             dlPermLauncher.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
+    }
+
+    LaunchedEffect(Unit) {
+        subscriptionCatalogUrl = runCatching {
+            appContainer.subscriptionCatalogStore.load().catalogUrl
+        }.getOrDefault("")
     }
 
     // Receive script payloads from the phone-to-TV QR flow.
@@ -514,6 +523,85 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                     }
                 }
             }
+        }
+
+        Section("訂閱音源") {
+            Text(
+                "設定遠端音源目錄網址，手動刷新後會先完整下載並驗證，再安全更新訂閱音源。新加入的音源預設停用；本機手動匯入的音源不會被覆蓋或刪除。",
+                color = AppColors.TextMuted,
+                fontSize = 12.sp,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TvTextFieldHost(modifier = Modifier.weight(1f), shape = RoundedCornerShape(4.dp)) { fieldModifier ->
+                    OutlinedTextField(
+                        value = subscriptionCatalogUrl,
+                        onValueChange = { subscriptionCatalogUrl = it },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().then(fieldModifier),
+                        placeholder = { Text("訂閱目錄 URL（https://...）", color = AppColors.TextMuted) },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = {
+                            if (!subscriptionRefreshing && subscriptionCatalogUrl.isNotBlank()) {
+                                subscriptionRefreshing = true
+                                subscriptionStatus = "正在下載及驗證訂閱目錄…"
+                                appContainer.appScope.launch {
+                                    val result = runCatching {
+                                        val staged = appContainer.subscriptionCatalogFetcher.stage(subscriptionCatalogUrl.trim())
+                                        val applied = appContainer.scriptStore.applySubscriptionCatalog(staged).getOrThrow()
+                                        appContainer.subscriptionCatalogStore.saveCatalogUrl(subscriptionCatalogUrl.trim())
+                                        applied
+                                    }
+                                    subscriptionRefreshing = false
+                                    subscriptionStatus = result.fold(
+                                        { "更新完成：新增 ${it.added}、更新 ${it.updated}、未變更 ${it.unchanged}、遠端缺少但保留 ${it.retainedMissing}" },
+                                        { "更新失敗，原有音源未變更：${it.message ?: "未知錯誤"}" },
+                                    )
+                                }
+                            }
+                        }),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = AppColors.TextPrimary,
+                            unfocusedTextColor = AppColors.TextPrimary,
+                            focusedBorderColor = AppColors.AccentGreen,
+                            unfocusedBorderColor = AppColors.Card,
+                            cursorColor = AppColors.AccentGreen,
+                        ),
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                TvPill(
+                    onClick = {
+                        if (!subscriptionRefreshing && subscriptionCatalogUrl.isNotBlank()) {
+                            subscriptionRefreshing = true
+                            subscriptionStatus = "正在下載及驗證訂閱目錄…"
+                            appContainer.appScope.launch {
+                                val result = runCatching {
+                                    val staged = appContainer.subscriptionCatalogFetcher.stage(subscriptionCatalogUrl.trim())
+                                    val applied = appContainer.scriptStore.applySubscriptionCatalog(staged).getOrThrow()
+                                    appContainer.subscriptionCatalogStore.saveCatalogUrl(subscriptionCatalogUrl.trim())
+                                    applied
+                                }
+                                subscriptionRefreshing = false
+                                subscriptionStatus = result.fold(
+                                    { "更新完成：新增 ${it.added}、更新 ${it.updated}、未變更 ${it.unchanged}、遠端缺少但保留 ${it.retainedMissing}" },
+                                    { "更新失敗，原有音源未變更：${it.message ?: "未知錯誤"}" },
+                                )
+                            }
+                        }
+                    },
+                    selected = true,
+                ) {
+                    Text(if (subscriptionRefreshing) "更新中…" else "儲存並更新", fontSize = 13.sp)
+                }
+            }
+            subscriptionStatus?.let {
+                Text(it, color = if (it.startsWith("更新失敗")) AppColors.Warning else AppColors.TextSecondary, fontSize = 12.sp)
+            }
+            Text(
+                "訂閱音源目前共 ${scripts.count { com.walkman.tv.source.subscription.SubscriptionCatalogCore.remoteId(it.id) != null }} 個（啟用 ${scripts.count { it.enabled && com.walkman.tv.source.subscription.SubscriptionCatalogCore.remoteId(it.id) != null }} 個）。",
+                color = AppColors.TextMuted,
+                fontSize = 11.sp,
+            )
         }
 
         Section("閃退與播放紀錄") {
