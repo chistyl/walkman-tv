@@ -161,14 +161,14 @@ class SourceManager(
         preferred: Quality = Quality.K320,
     ): ResolvedTrack {
         if (targetSource == SourceID.LOCAL) throw SourceException("本機音源不可作為線上換源目標")
-        if (targetSource == track.source) return resolveMusicURL(track, preferred)
         val alternatives = otherSourceFinder.findMatches(
             track = track,
             includedSources = setOf(targetSource),
             excludedSources = emptySet(),
         )
-        return resolveAlternativeCandidates(track, preferred, alternatives)
+        val resolved = resolveAlternativeCandidates(track, preferred, alternatives)
             ?: throw SourceException("在「${targetSource.displayName}」找不到可播放的相符歌曲")
+        return resolved.copy(warning = "已切換至「${targetSource.displayName}」")
     }
 
     private suspend fun resolveAlternativeCandidates(
