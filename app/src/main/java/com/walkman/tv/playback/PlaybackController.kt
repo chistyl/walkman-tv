@@ -183,7 +183,8 @@ class PlaybackController(
             // Use Media3's stock audio sink and PCM conversion path. Keep decoder fallback
             // enabled so a device-specific hardware decoder rejection can fall back safely.
             val renderersFactory = DefaultRenderersFactory(appContext)
-                .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+                // LE Music's APK does not package libffmpegJNI.so; use Media3's built-in platform renderer path.
+                .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
                 .setEnableDecoderFallback(true)
                 .setMediaCodecSelector { mimeType, secure, tunneling ->
                     val all = MediaCodecSelector.DEFAULT.getDecoderInfos(mimeType, secure, tunneling)
