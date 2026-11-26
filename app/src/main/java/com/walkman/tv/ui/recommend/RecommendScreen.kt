@@ -237,13 +237,16 @@ private fun RecommendGrid(
   modifier: Modifier = Modifier,
 ) {
   val settings by appContainer.settingsStore.settings.collectAsState()
+  val settingsLoaded by appContainer.settingsStore.isLoaded.collectAsState()
   val home by appContainer.homeStore.state.collectAsState()
   val scope = androidx.compose.runtime.rememberCoroutineScope()
   var detail by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<DetailView?>(null) }
   var loadingDetail by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
-  androidx.compose.runtime.LaunchedEffect(settings.homeSources) {
-    appContainer.homeStore.loadIfNeeded(settings.homeSources)
+  // Do not start a full provider fan-out using default settings before persisted settings arrive.
+  // Otherwise a user's saved source selection can trigger one wasted request batch on cold start.
+  androidx.compose.runtime.LaunchedEffect(settingsLoaded, settings.homeSources) {
+    if (settingsLoaded) appContainer.homeStore.loadIfNeeded(settings.homeSources)
   }
 
   val activeLabel = ChineseText.toTaiwanTraditional(home.sources.joinToString(" · ") { it.displayName })
