@@ -83,8 +83,8 @@ class PlaybackController(
      *  to decide which tier to step down from on format-reject errors. */
     private var lastAttemptedQuality: Quality? = null
 
-    /** Number of consecutive network-error retries on the current track. Reset to 0 on a
-     *  successful play, on a fresh playAt(), or once we've given up and skipped to next. */
+    /** Number of network-error retries consumed by the current track. Reset on a fresh
+     *  playAt() or once we've given up and skipped to the next track. */
     private var networkRetryCount: Int = 0
 
     /** Number of consecutive *tracks* that have failed back-to-back (resolve failed or an
@@ -271,10 +271,9 @@ class PlaybackController(
                     if (_state.value.isMv) exitMv() else handleEnded()
                 }
                 if (playbackState == Player.STATE_READY) {
-                    // A track actually started — clear the consecutive-failure streak and
-                    // the retry budget carried by an attempt that successfully reached READY.
+                    // A track actually started — clear the consecutive-track failure streak.
+                    // Keep the per-track network retry budget so repeated read failures cannot loop forever.
                     consecutiveFailures = 0
-                    networkRetryCount = 0
                     _state.value = _state.value.copy(durationMs = player.duration.coerceAtLeast(0))
                 }
             }
