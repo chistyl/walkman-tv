@@ -19,6 +19,7 @@ import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import com.walkman.tv.data.store.PlaybackSnapshot
+import com.walkman.tv.diagnostics.AppDiagnostics
 import com.walkman.tv.data.model.Quality
 import com.walkman.tv.data.model.Track
 import com.walkman.tv.source.ResolveOrigin
@@ -258,6 +259,7 @@ class PlaybackController(
             }
 
             override fun onPlayerError(error: PlaybackException) {
+                AppDiagnostics.record("PLAYER_ERROR", "code=${error.errorCode} ${error.errorCodeName}; source=${_state.value.currentTrack?.source?.key}; quality=${lastAttemptedQuality?.key}", error)
                 // Format/codec rejections are the "encrypted .mgg" / "actually MP3 not FLAC" case
                 // from spec §3 — re-cascade from one tier below the current attempt. Network /
                 // unauthorized errors get surfaced as-is.
@@ -399,6 +401,9 @@ class PlaybackController(
                 }
             }
             if (generation != resolveGeneration || _state.value.currentTrack?.id != track.id) return@launch
+            resolved.exceptionOrNull()?.let {
+                AppDiagnostics.record("RESOLVE_ERROR", "source=${track.source.key}; quality=${effectivePreferred.key}", it)
+            }
             runCatching { playResolvedOrFail(track, resolved, generation) }
                 .onFailure { e ->
                     android.util.Log.e("PlaybackController", "playAt failed", e)
@@ -426,6 +431,8 @@ class PlaybackController(
                 // Remember the tier so onPlayerError can re-cascade from one tier below if
                 // ExoPlayer rejects the file format.
                 lastAttemptedQuality = r.quality
+                val host = runCatching { android.net.Uri.parse(r.url).host }.getOrNull() ?: "(local-or-unknown)"
+                AppDiagnostics.record("PLAY_RESOLVED", "source=${track.source.key}; quality=${r.quality.key}; host=$host; headerNames=${r.headers.keys.joinToString(",")}; customUA=${!r.userAgent.isNullOrBlank()}")
                 // Successful resolve + setMediaItem → reset the network retry counter so the
                 // next track gets a fresh budget.
                 networkRetryCount = 0
@@ -452,6 +459,7 @@ class PlaybackController(
                     player.setMediaSource(mediaSource)
                 }
                 player.prepare()
+                AppDiagnostics.record("PLAYER_PREPARE", "source=${track.source.key}; mediaItemCount=${player.mediaItemCount}; customHeaders=${r.headers.isNotEmpty() || !r.userAgent.isNullOrBlank()}")
                 // Fire the file-header probe so the badge can later clamp the claimed tier
                 // down if the bytes turn out to be lower-grade than the script reported.
                 // Spec §5.4: clear current spec first, run async, validate URL is still
