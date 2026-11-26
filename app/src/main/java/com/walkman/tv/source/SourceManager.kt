@@ -60,6 +60,66 @@ class SourceManager(
         }
     }
 
+    /**
+     * A fully initialized but not-yet-published subscription runtime snapshot.
+     * Callers must either commit it after durable persistence or discard it on failure.
+     */
+    class PreparedSubscriptionScripts internal constructor(
+        internal val activeScripts: List<LoadedScript>,
+    )
+
+    /**
+     * Initialize every candidate subscription script in isolation. Existing runtimes remain
+     * untouched until [commitSubscriptionScripts] is called. Disabled scripts are validated
+     * too, but their temporary runtimes are destroyed and never published.
+     */
+    suspend fun prepareSubscriptionScripts(scripts: List<UserScript>): Result<PreparedSubscriptionScripts> {
+        val staged = mutableListOf<LoadedScript>()
+        try {
+            for (script in scripts) {
+                val runtime = JsScriptRuntime(script, preload, http)
+                try {
+                    val capabilities = runtime.load()
+                    if (script.enabled) {
+                        staged += LoadedScript(script, runtime, capabilities)
+                    } else {
+                        runtime.destroy()
+                    }
+                } catch (cancelled: CancellationException) {
+                    runtime.destroy()
+                    throw cancelled
+                } catch (error: Exception) {
+                    runtime.destroy()
+                    throw error
+                }
+            }
+            return Result.success(PreparedSubscriptionScripts(staged.toList()))
+        } catch (cancelled: CancellationException) {
+            staged.forEach { it.runtime.destroy() }
+            throw cancelled
+        } catch (error: Exception) {
+            staged.forEach { it.runtime.destroy() }
+            return Result.failure(error)
+        }
+    }
+
+    /**
+     * Publish a previously prepared subscription snapshot in one StateFlow assignment.
+     * Manual scripts are retained in their existing order; old subscription runtimes are
+     * destroyed only after the replacement list is visible.
+     */
+    fun commitSubscriptionScripts(prepared: PreparedSubscriptionScripts) {
+        val previous = _loaded.value
+        val manual = previous.filterNot { it.script.id.startsWith(SUBSCRIPTION_SCRIPT_ID_PREFIX) }
+        _loaded.value = manual + prepared.activeScripts
+        previous.filter { it.script.id.startsWith(SUBSCRIPTION_SCRIPT_ID_PREFIX) }
+            .forEach { it.runtime.destroy() }
+    }
+
+    fun discardSubscriptionScripts(prepared: PreparedSubscriptionScripts) {
+        prepared.activeScripts.forEach { it.runtime.destroy() }
+    }
+
     fun unload(scriptId: String) {
         _loaded.value.firstOrNull { it.script.id == scriptId }?.runtime?.destroy()
         _loaded.value = _loaded.value.filter { it.script.id != scriptId }
