@@ -132,7 +132,7 @@ fun buildUpdatePlan(
     if (local.map { it.localId }.toSet().size != local.size) return null
     if (local.map { it.remoteId }.toSet().size != local.size) return null
     if (local.any { it.localId != localId(it.remoteId) }) return null
-    if (remote.any { it.id.isBlank() || it.name.isBlank() || it.script.isBlank() }) return null
+    if (remote.any { it.id.isBlank() || it.name.isBlank() || it.script.isBlank() || parseHttpUri(it.url) == null }) return null
     if (remote.map { it.id }.toSet().size != remote.size) return null
 
     val localByRemoteId = local.associateBy { it.remoteId }
