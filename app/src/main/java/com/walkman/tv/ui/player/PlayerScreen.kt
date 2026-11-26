@@ -35,6 +35,7 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Tune
@@ -73,6 +74,7 @@ import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.walkman.tv.data.model.Track
+import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.playback.LyricParser
 import com.walkman.tv.playback.RepeatMode
 import com.walkman.tv.ui.appContainer
@@ -92,6 +94,8 @@ fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
   val lyrics by controller.lyrics.collectAsState()
   val love by appContainer.libraryStore.love.collectAsState()
   val settings by appContainer.settingsStore.settings.collectAsState()
+  val loadedSourceScripts by appContainer.sourceManager.loaded.collectAsState()
+  val availableSources = remember(loadedSourceScripts) { appContainer.sourceManager.supportedSources() }
   val lyricSize = settings.lyricSize
   val scope = rememberCoroutineScope()
   val context = androidx.compose.ui.platform.LocalContext.current
@@ -107,6 +111,7 @@ fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
 
   var showEqDialog by remember { mutableStateOf(false) }
   var showPicker by remember { mutableStateOf(false) }
+  var showSourceDialog by remember { mutableStateOf(false) }
 
   // 核心自适应算法：获取屏幕物理总高度（DP），彻底摆脱内部组件相互挤压的局限
   val configuration = androidx.compose.ui.platform.LocalConfiguration.current
@@ -114,7 +119,7 @@ fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
   // 强制将黑胶总盘面尺寸锚定为全屏高度的 67%（大屏自动等比放大，且视觉效果极为饱满）
   val vinylAbsoluteSize = screenHeight * 0.67f
 
-  val wantsFocus = !state.isMv && !showMvQueue && !showEqDialog && !showPicker
+  val wantsFocus = !state.isMv && !showMvQueue && !showEqDialog && !showPicker && !showSourceDialog
   LaunchedEffect(wantsFocus) {
     if (wantsFocus) tryRequestFocus(playFocus)
   }
@@ -219,6 +224,12 @@ fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
           )
+          Text(
+            "音源：${(state.activeSource ?: track.source).displayName}",
+            color = AppColors.TextMuted,
+            fontSize = 11.sp,
+            maxLines = 1,
+          )
           // 播放调试信息（设置里开启）：获取地址 / 失败自动跳过 / 换源降级，排查音源问题用。
           val status = ChineseText.toTaiwanTraditional(state.error ?: (if (state.resolving) "正在取得播放網址…" else state.warning).orEmpty()).ifBlank { null }
           if (settings.showDebugInfo && status != null) {
@@ -303,6 +314,7 @@ fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
             onToggleFav = { showPicker = true },
             onShowQueue = { showMvQueue = true },
             onTuneClick = { showEqDialog = true },
+            onSwitchSource = { showSourceDialog = true },
             playFocusRequester = playFocus,
             progressFocusRequester = progressFocus,
           )
@@ -320,6 +332,17 @@ fun PlayerScreen(onClose: () -> Unit, modifier: Modifier = Modifier) {
 
     if (showEqDialog) {
       EqualizerDialog(onDismiss = { showEqDialog = false })
+    }
+    if (showSourceDialog) {
+      SourceSwitchDialog(
+        sources = availableSources,
+        currentSource = state.activeSource ?: track.source,
+        onSelect = { source ->
+          showSourceDialog = false
+          controller.switchSource(source)
+        },
+        onDismiss = { showSourceDialog = false },
+      )
     }
     if (showPicker) {
       com.walkman.tv.ui.components.PlaylistPickerDialog(
@@ -558,6 +581,65 @@ private fun EqualizerDialog(onDismiss: () -> Unit) {
   }
 }
 
+@Composable
+private fun SourceSwitchDialog(
+  sources: List<SourceID>,
+  currentSource: SourceID,
+  onSelect: (SourceID) -> Unit,
+  onDismiss: () -> Unit,
+) {
+  val firstFocus = remember { FocusRequester() }
+  LaunchedEffect(Unit) { tryRequestFocus(firstFocus) }
+  val alternatives = sources.filter { it != currentSource && it != SourceID.LOCAL }
+
+  androidx.compose.ui.window.Dialog(
+    onDismissRequest = onDismiss,
+    properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+  ) {
+    Column(
+      modifier = Modifier
+        .width(380.dp)
+        .clip(RoundedCornerShape(16.dp))
+        .background(AppColors.BgPanel)
+        .padding(horizontal = 22.dp, vertical = 20.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      Text("切換音源", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+      Text(
+        "重新搜尋同一首歌曲，改由其他平台解析與播放",
+        color = AppColors.TextSecondary,
+        fontSize = 12.sp,
+      )
+      if (alternatives.isEmpty()) {
+        Text("目前沒有其他已載入且支援播放的音源", color = AppColors.TextMuted, fontSize = 13.sp)
+      } else {
+        alternatives.forEachIndexed { index, source ->
+          TvFocusable(
+            onClick = { onSelect(source) },
+            modifier = Modifier
+              .fillMaxWidth()
+              .then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier),
+          ) {
+            Row(
+              modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Text(
+                source.displayName,
+                color = AppColors.TextPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f),
+              )
+              Text("切換", color = AppColors.AccentGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 private fun TransportBar(
@@ -571,11 +653,13 @@ private fun TransportBar(
   onToggleFav: () -> Unit,
   onShowQueue: () -> Unit,
   onTuneClick: () -> Unit,
+  onSwitchSource: () -> Unit,
   playFocusRequester: FocusRequester? = null,
   progressFocusRequester: FocusRequester? = null,
 ) {
   val track = state.currentTrack
   val faved = track?.let { t -> love.tracks.any { it.id == t.id } } ?: false
+  val switchFocus = remember { FocusRequester() }
   val tuneFocus = remember { FocusRequester() }
   val qualityFocus = remember { FocusRequester() }
   val repeatFocus = remember { FocusRequester() }
@@ -602,11 +686,20 @@ private fun TransportBar(
       horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
       IconPill(
+        Icons.Filled.SwapHoriz,
+        onClick = onSwitchSource,
+        focusRequester = switchFocus,
+        modifier = Modifier.focusProperties {
+          left = FocusRequester.Cancel
+          right = tuneFocus
+        },
+      )
+      IconPill(
         Icons.Filled.Tune,
         onClick = onTuneClick,
         focusRequester = tuneFocus,
         modifier = Modifier.focusProperties {
-          left = FocusRequester.Cancel
+          left = switchFocus
           right = if (hasQuality) qualityFocus else repeatFocus
         },
       )
