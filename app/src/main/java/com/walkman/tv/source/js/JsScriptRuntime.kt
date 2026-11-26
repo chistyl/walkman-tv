@@ -290,10 +290,40 @@ class JsScriptRuntime(
         val requestKey = obj.optString("requestKey").ifEmpty { return }
         val url = obj.optString("url").ifEmpty { return }
         val options = obj.optJSONObject("options") ?: JSONObject()
-        val requestHost = runCatching { java.net.URI(url).host }.getOrNull() ?: "unknown"
+        val requestUri = runCatching { java.net.URI(url) }.getOrNull()
+        val requestHost = requestUri?.host ?: "unknown"
         val requestMethod = options.optString("method", "GET").uppercase()
         val shortRequestKey = requestKey.take(8)
-        AppDiagnostics.record("SCRIPT_HTTP_BEGIN", "request=$shortRequestKey; host=$requestHost; method=$requestMethod")
+        val requestHeaders = options.optJSONObject("headers")
+        val headerNames = requestHeaders?.keys()?.asSequence()?.sorted()?.joinToString(",") ?: ""
+        val flowerSegments = requestUri?.path?.split('/')?.filter { it.isNotEmpty() }.orEmpty()
+        val flowerDiagnostic = if (requestHost == "97.64.37.235" &&
+            flowerSegments.size >= 6 && flowerSegments.take(3) == listOf("flower", "v1", "url")
+        ) {
+            fun headerValue(name: String): String? {
+                val key = requestHeaders?.keys()?.asSequence()
+                    ?.firstOrNull { it.equals(name, ignoreCase = true) } ?: return null
+                return requestHeaders.optString(key).takeIf { it.isNotEmpty() }
+            }
+            val tag = headerValue("tag")
+            val ua = headerValue("User-Agent")
+            val ver = headerValue("ver")
+            val sourceVer = headerValue("source-ver")
+            val identifier = flowerSegments[4]
+            "; endpoint=flower; route=/flower/v1/url/{source}/{id}/{quality}" +
+                "; source=${flowerSegments[3]}; identifierPresent=${identifier.isNotEmpty()}" +
+                "; identifierLength=${identifier.length}; quality=${flowerSegments[5]}" +
+                "; headerNames=$headerNames; tagPresent=${tag != null}; tagLength=${tag?.length ?: 0}" +
+                "; tagHex=${tag?.matches(Regex("[0-9a-fA-F]+")) == true}" +
+                "; userAgentPresent=${ua != null}; userAgentLength=${ua?.length ?: 0}" +
+                "; verLength=${ver?.length ?: 0}; sourceVerLength=${sourceVer?.length ?: 0}"
+        } else {
+            ""
+        }
+        AppDiagnostics.record(
+            "SCRIPT_HTTP_BEGIN",
+            "request=$shortRequestKey; host=$requestHost; method=$requestMethod$flowerDiagnostic"
+        )
         // The legacy 野花 musicUrl handler returns only a URL. Capture the User-Agent
         // supplied by that action's synchronous lx.request call and attach it to the result.
         val actionRequestKey = activeMusicUrlRequestKey
@@ -324,7 +354,16 @@ class JsScriptRuntime(
                         is org.json.JSONArray -> body.length()
                         else -> -1
                     }
-                    AppDiagnostics.record("SCRIPT_HTTP_RESULT", "request=$shortRequestKey; host=$requestHost; method=$requestMethod; statusCode=" + response.statusCode + "; statusMessage=" + response.statusMessage + "; bodyType=" + bodyType + "; bodyLength=" + bodyLength)
+                    val responseHeaderSummary = listOf("server", "content-type", "date", "x-request-id")
+                        .mapNotNull { name -> response.headers[name]?.take(120)?.let { "$name=$it" } }
+                        .joinToString("; ")
+                    AppDiagnostics.record(
+                        "SCRIPT_HTTP_RESULT",
+                        "request=$shortRequestKey; host=$requestHost; method=$requestMethod; statusCode=" +
+                            response.statusCode + "; statusMessage=" + response.statusMessage +
+                            "; bodyType=" + bodyType + "; bodyLength=" + bodyLength +
+                            if (responseHeaderSummary.isNotEmpty()) "; responseHeaders=$responseHeaderSummary" else ""
+                    )
                     payload.put("error", JSONObject.NULL)
                     payload.put(
                         "response",
