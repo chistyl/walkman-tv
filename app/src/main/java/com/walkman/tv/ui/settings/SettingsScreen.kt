@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.walkman.tv.data.model.Quality
+import com.walkman.tv.diagnostics.AppDiagnostics
 import com.walkman.tv.di.getLanIp
 import com.walkman.tv.ui.appContainer
 import com.walkman.tv.ui.components.QrDialog
@@ -81,6 +82,22 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
     var status by remember { mutableStateOf<String?>(null) }
     var showQr by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<com.walkman.tv.data.model.UserScript?>(null) }
+    var diagnosticLog by remember { mutableStateOf(AppDiagnostics.readAll()) }
+
+    val diagnosticsExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                val result = runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { output ->
+                        output.write(AppDiagnostics.readAll().toByteArray(Charsets.UTF_8))
+                    } ?: error("無法寫入選取的位置")
+                }
+                withContext(Dispatchers.Main) {
+                    status = result.fold({ "診斷紀錄已匯出" }, { "匯出失敗：${it.message}" })
+                }
+            }
+        }
+    }
 
     // System file picker (SAF) for .js scripts.
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -457,6 +474,29 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             }
         }
 
+        Section("閃退與播放紀錄") {
+            Text(
+                "若播放異常或 App 閃退，系統會自動保留錯誤紀錄。發生問題後回到此頁，按「重新整理紀錄」，再匯出檔案提供給開發者；不需要 ADB。",
+                color = AppColors.TextMuted,
+                fontSize = 12.sp,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TvPill(
+                    onClick = { diagnosticLog = AppDiagnostics.readAll() },
+                    selected = true,
+                ) { Text("重新整理紀錄", fontSize = 13.sp) }
+                TvPill(
+                    onClick = { diagnosticsExport.launch(AppDiagnostics.fileName()) },
+                ) { Text("匯出紀錄", fontSize = 13.sp) }
+            }
+            Text(
+                diagnosticLog.takeLast(12000),
+                color = AppColors.TextSecondary,
+                fontSize = 10.sp,
+                maxLines = 80,
+                overflow = TextOverflow.Clip,
+            )
+        }
     }
 
     pendingDelete?.let { target ->
