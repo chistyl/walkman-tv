@@ -69,22 +69,18 @@ class SourceManager(
     )
 
     /**
-     * Initialize every candidate subscription script in isolation. Existing runtimes remain
-     * untouched until [commitSubscriptionScripts] is called. Disabled scripts are validated
-     * too, but their temporary runtimes are destroyed and never published.
+     * Initialize enabled candidate subscription scripts in isolation. Existing runtimes remain
+     * untouched until [commitSubscriptionScripts] is called. Disabled scripts are persisted by
+     * ScriptStore but are never executed or published during catalog refresh.
      */
     suspend fun prepareSubscriptionScripts(scripts: List<UserScript>): Result<PreparedSubscriptionScripts> {
         val staged = mutableListOf<LoadedScript>()
         try {
-            for (script in scripts) {
+            for (script in scripts.filter { it.enabled }) {
                 val runtime = JsScriptRuntime(script, preload, http)
                 try {
                     val capabilities = runtime.load()
-                    if (script.enabled) {
-                        staged += LoadedScript(script, runtime, capabilities)
-                    } else {
-                        runtime.destroy()
-                    }
+                    staged += LoadedScript(script, runtime, capabilities)
                 } catch (cancelled: CancellationException) {
                     runtime.destroy()
                     throw cancelled
