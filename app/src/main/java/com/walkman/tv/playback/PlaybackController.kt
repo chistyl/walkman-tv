@@ -272,6 +272,11 @@ class PlaybackController(
                 if (playbackState == Player.STATE_ENDED) {
                     if (_state.value.isMv) exitMv() else handleEnded()
                 }
+                if (playbackState == Player.STATE_BUFFERING && player.playWhenReady && !_state.value.resolving && !_state.value.isMv) {
+                    player.currentMediaItem?.mediaId?.let { mediaId ->
+                        scheduleBufferingWatchdog(resolveGeneration, mediaId)
+                    }
+                }
                 if (playbackState == Player.STATE_READY) {
                     bufferingWatchdogJob?.cancel()
                     bufferingWatchdogJob = null
