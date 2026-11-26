@@ -31,8 +31,11 @@ class SourceManager(
         val script: UserScript,
         val runtime: JsScriptRuntime,
         val capabilities: ScriptCapabilities,
+        /** Stable persisted order; concurrent initialization must not change source priority. */
+        val priority: Int = Int.MAX_VALUE,
     )
 
+    private val loadedScriptsLock = Any()
     private val _loaded = MutableStateFlow<List<LoadedScript>>(emptyList())
     val loaded: StateFlow<List<LoadedScript>> = _loaded.asStateFlow()
 
@@ -40,13 +43,21 @@ class SourceManager(
 
     class SourceException(message: String) : Exception(message)
 
-    suspend fun load(script: UserScript): Result<ScriptCapabilities> {
+    suspend fun load(script: UserScript, priority: Int? = null): Result<ScriptCapabilities> {
         val runtime = JsScriptRuntime(script, preload, http)
         return try {
             val caps = runtime.load()
-            val previous = _loaded.value.firstOrNull { it.script.id == script.id }
-            _loaded.value = _loaded.value.filter { it.script.id != script.id } +
-                LoadedScript(script, runtime, caps)
+            // Script contexts initialize independently. Protect only the short publication step,
+            // and retain persisted priority so concurrent startup does not reorder source fallback.
+            val previous = synchronized(loadedScriptsLock) {
+                val current = _loaded.value
+                val old = current.firstOrNull { it.script.id == script.id }
+                val effectivePriority = priority ?: old?.priority
+                    ?: ((current.maxOfOrNull { it.priority } ?: -1) + 1)
+                _loaded.value = (current.filterNot { it.script.id == script.id } +
+                    LoadedScript(script, runtime, caps, effectivePriority)).sortedBy { it.priority }
+                old
+            }
             if (previous != null && previous.runtime !== runtime) previous.runtime.destroy()
             Result.success(caps)
         } catch (cancelled: CancellationException) {
@@ -60,8 +71,13 @@ class SourceManager(
     }
 
     fun unload(scriptId: String) {
-        _loaded.value.firstOrNull { it.script.id == scriptId }?.runtime?.destroy()
-        _loaded.value = _loaded.value.filter { it.script.id != scriptId }
+        val removed = synchronized(loadedScriptsLock) {
+            val current = _loaded.value
+            val previous = current.firstOrNull { it.script.id == scriptId }
+            _loaded.value = current.filterNot { it.script.id == scriptId }
+            previous
+        }
+        removed?.runtime?.destroy()
     }
 
     private suspend fun <T> attempt(block: suspend () -> T): Result<T> =
