@@ -7,6 +7,7 @@ on:
   push:
     branches:
       - fix/taiwan-traditional-context-conversion
+      - fix/platform-source-switch-crash
 
 permissions:
   contents: read
