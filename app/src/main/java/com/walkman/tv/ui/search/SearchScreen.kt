@@ -87,12 +87,33 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     var loading by remember { mutableStateOf(false) }
     var searched by remember { mutableStateOf(false) }
     var showQr by remember { mutableStateOf(false) }
-    var hotColumns by remember { mutableStateOf<List<com.walkman.tv.source.catalog.HotSearchColumn>>(emptyList()) }
+    var hotColumns by remember {
+        mutableStateOf(
+            listOf(SourceID.KW, SourceID.WY, SourceID.KG, SourceID.TX).map {
+                com.walkman.tv.source.catalog.HotSearchColumn(it, emptyList())
+            },
+        )
+    }
+    var hotLoading by remember { mutableStateOf(true) }
     var searchJob by remember { mutableStateOf<Job?>(null) }
 
-    // Load hot-search words once when the screen first appears (before any search).
+    suspend fun refreshHotSearch(force: Boolean = false) {
+        hotLoading = true
+        try {
+            val result = appContainer.hotSearch.fetchAll(forceRefresh = force)
+            hotColumns = result
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            android.util.Log.w("WalkmanHotSearch", "Unable to load hot-search columns", error)
+        } finally {
+            hotLoading = false
+        }
+    }
+
+    // Show the four platform columns immediately; fill them as soon as their providers respond.
     LaunchedEffect(Unit) {
-        hotColumns = runCatching { appContainer.hotSearch.fetchAll() }.getOrDefault(emptyList())
+        refreshHotSearch()
     }
 
     fun runSearch(searchText: String = queryValue.text) {
@@ -227,6 +248,8 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
             songlists = songlists,
             tracks = tracks,
             hotColumns = hotColumns,
+            hotLoading = hotLoading,
+            onRefreshHot = { scope.launch { refreshHotSearch(force = true) } },
             onOpenPlayer = onOpenPlayer,
             onPickHistory = { kw ->
                 queryValue = TextFieldValue(kw)
@@ -317,6 +340,8 @@ private fun ResultsPane(
     songlists: List<SonglistInfo>,
     tracks: List<Track>,
     hotColumns: List<com.walkman.tv.source.catalog.HotSearchColumn>,
+    hotLoading: Boolean,
+    onRefreshHot: () -> Unit,
     onOpenPlayer: () -> Unit,
     onPickSonglist: (SonglistInfo) -> Unit,
     onPickHistory: (String) -> Unit = {},
@@ -332,11 +357,12 @@ private fun ResultsPane(
                     SearchHistoryPane(history = history, onPick = onPickHistory)
                     Spacer(Modifier.padding(top = 10.dp))
                 }
-                if (hotColumns.any { it.words.isNotEmpty() }) {
-                    HotSearchGrid(columns = hotColumns, onPick = onPickHot)
-                } else if (history.isEmpty()) {
-                    EmptyHint("輸入關鍵字開始搜尋", Modifier.fillMaxSize())
-                }
+                HotSearchGrid(
+                    columns = hotColumns,
+                    loading = hotLoading,
+                    onRefresh = onRefreshHot,
+                    onPick = onPickHot,
+                )
             }
         }
         songlists.isEmpty() && tracks.isEmpty() ->
@@ -404,13 +430,24 @@ private fun sourceTint(source: SourceID): androidx.compose.ui.graphics.Color = w
 @Composable
 private fun HotSearchGrid(
     columns: List<com.walkman.tv.source.catalog.HotSearchColumn>,
+    loading: Boolean,
+    onRefresh: () -> Unit,
     onPick: (String) -> Unit,
 ) {
     val orderedSources = listOf(SourceID.KW, SourceID.WY, SourceID.KG, SourceID.TX)
     // Keep all four platform columns visible even when one provider temporarily has no data.
     val visibleColumns = orderedSources.mapNotNull { source -> columns.firstOrNull { it.source == source } }
     Column(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
-        SectionHeader("熱門搜尋")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SectionHeader("熱門搜尋")
+            Spacer(Modifier.weight(1f))
+            TvPill(
+                onClick = onRefresh,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+            ) {
+                Text(if (loading) "載入中…" else "重新載入", fontSize = 12.sp)
+            }
+        }
         Row(
             modifier = Modifier.fillMaxWidth().weight(1f),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -426,7 +463,7 @@ private fun HotSearchGrid(
                     )
                     if (col.words.isEmpty()) {
                         Text(
-                            "暫無熱門搜尋資料",
+                            if (loading) "載入中…" else "暫無熱門搜尋資料",
                             color = AppColors.TextMuted,
                             fontSize = 12.sp,
                             modifier = Modifier.padding(start = 4.dp, top = 8.dp),

@@ -18,6 +18,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -30,7 +32,6 @@ import com.walkman.tv.data.model.BoardInfo
 import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.data.model.Track
 import com.walkman.tv.ui.appContainer
-import com.walkman.tv.ui.fetchOr
 import com.walkman.tv.ui.components.EmptyHint
 import com.walkman.tv.ui.components.LoadingState
 import com.walkman.tv.ui.components.TrackList
@@ -41,6 +42,15 @@ import com.walkman.tv.ui.theme.AppColors
 import com.walkman.tv.util.ChineseText
 
 private val boardSources = listOf(SourceID.KW, SourceID.WY, SourceID.KG, SourceID.TX)
+
+private suspend fun <T> safeFetch(fallback: T, block: suspend () -> T): T = try {
+    block()
+} catch (cancelled: CancellationException) {
+    throw cancelled
+} catch (error: Exception) {
+    android.util.Log.w("WalkmanBoard", "Board request failed", error)
+    fallback
+}
 
 // Reuse previously loaded chart tracks immediately when users revisit a leaderboard.
 private val leaderboardTrackCache = LinkedHashMap<String, List<Track>>()
@@ -63,7 +73,7 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                     val firstBoard = svc.list.firstOrNull() ?: return@async
                     val key = firstBoard.source.key + ":" + firstBoard.bangid
                     if (leaderboardTrackCache[key].isNullOrEmpty()) {
-                        val result = fetchOr(emptyList()) { svc.fetchTracks(firstBoard.bangid, 1) }
+                        val result = safeFetch(emptyList()) { svc.fetchTracks(firstBoard.bangid, 1) }
                         if (result.isNotEmpty()) leaderboardTrackCache[key] = result
                     }
                 }
@@ -80,7 +90,7 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
         selected = initial.firstOrNull()
     }
     LaunchedEffect(source) {
-        val refreshed = fetchOr(emptyList()) {
+        val refreshed = safeFetch(emptyList()) {
             appContainer.boards.serviceFor(source)?.fetchBoards() ?: emptyList()
         }
         if (refreshed.isNotEmpty()) boards = refreshed
@@ -93,15 +103,22 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
         val cached = leaderboardTrackCache[cacheKey].orEmpty()
         tracks = cached
         loadingTracks = cached.isEmpty()
-        val fresh = fetchOr(cached) {
-            appContainer.boards.serviceFor(board.source)?.fetchTracks(board.bangid, 1) ?: emptyList()
+        try {
+            val fresh = withTimeout(18_000L) {
+                appContainer.boards.serviceFor(board.source)?.fetchTracks(board.bangid, 1) ?: emptyList()
+            }
+            if (fresh.isNotEmpty()) {
+                leaderboardTrackCache[cacheKey] = fresh
+                while (leaderboardTrackCache.size > 24) leaderboardTrackCache.remove(leaderboardTrackCache.keys.first())
+                tracks = fresh
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            android.util.Log.w("WalkmanBoard", "Chart load failed: ${board.source.key}/${board.bangid}", error)
+        } finally {
+            loadingTracks = false
         }
-        if (fresh.isNotEmpty()) {
-            leaderboardTrackCache[cacheKey] = fresh
-            while (leaderboardTrackCache.size > 24) leaderboardTrackCache.remove(leaderboardTrackCache.keys.first())
-            tracks = fresh
-        }
-        loadingTracks = false
     }
 
     Row(modifier = modifier.fillMaxSize().padding(top = 8.dp)) {

@@ -8,6 +8,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 
 /** One platform's hot-search words, in rank order. */
@@ -60,10 +61,16 @@ class HotSearch(private val http: CatalogHttp) {
         source: SourceID,
         fetch: suspend () -> List<String>,
     ): HotSearchColumn = try {
-        HotSearchColumn(source, fetch())
+        val words = withTimeoutOrNull(PROVIDER_TIMEOUT_MS) { fetch() }.orEmpty()
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .distinct()
+        android.util.Log.d(TAG, "hot-search ${source.key}: ${words.size} words")
+        HotSearchColumn(source, words)
     } catch (cancelled: CancellationException) {
         throw cancelled
-    } catch (_: Exception) {
+    } catch (error: Exception) {
+        android.util.Log.w(TAG, "hot-search ${source.key} failed", error)
         HotSearchColumn(source, emptyList())
     }
 
@@ -71,7 +78,7 @@ class HotSearch(private val http: CatalogHttp) {
         // Prefer the legacy hotkey endpoint, but fall back to QQ Music's current musicu API
         // when the legacy c.y.qq.com endpoint is blocked or no longer returns hotkey data.
         val legacy = runCatching {
-            val url = "https://c.y.qq.com/splcloud/fcgi-bin/gethotkey.fcg?format=json&inCharset=utf-8&outCharset=utf-8&notice=0&platform=h5&needNewCode=1"
+            val url = "https://c.y.qq.com/splcloud/fcgi-bin/gethotkey.fcg?g_tk=5381&uin=0&format=json&inCharset=utf-8&outCharset=utf-8&notice=0&platform=h5&needNewCode=1"
             val json = JSONObject(http.getText(url, mapOf("Referer" to "https://y.qq.com/", "User-Agent" to ua)))
             val arr = json.optJSONObject("data")?.optJSONArray("hotkey")
             (0 until (arr?.length() ?: 0)).mapNotNull {
@@ -111,7 +118,7 @@ class HotSearch(private val http: CatalogHttp) {
     }
 
     private suspend fun kugou(): List<String> {
-        val url = "http://msearchcdn.kugou.com/api/v3/search/hot?version=9108&plat=0&clientver=9108"
+        val url = "http://mobilecdn.kugou.com/api/v3/search/hot?format=json&plat=0&count=30&version=9108&clientver=9108"
         val json = JSONObject(http.getText(url, mapOf("User-Agent" to ua)))
         val arr = json.optJSONObject("data")?.optJSONArray("info") ?: return emptyList()
         return (0 until arr.length()).mapNotNull { arr.optJSONObject(it)?.optString("keyword")?.trim()?.ifEmpty { null } }
@@ -139,5 +146,6 @@ class HotSearch(private val http: CatalogHttp) {
     private companion object {
         const val TAG = "WalkmanPerf"
         const val CACHE_TTL_MS = 5 * 60 * 1_000L
+        const val PROVIDER_TIMEOUT_MS = 7_000L
     }
 }
