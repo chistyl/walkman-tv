@@ -133,7 +133,20 @@ class SourceManager(
             }
         }
 
-        tryOtherSources(track, preferred)?.let { return it }
+        // Cross-platform search is best-effort. A catalog/network exception here must not
+        // abort the final built-in resolver, otherwise a transient search outage makes otherwise
+        // playable tracks appear completely unavailable.
+        val otherSourceResult = attempt { tryOtherSources(track, preferred) }
+            .onFailure { error ->
+                Log.w(TAG, "other-source fallback search failed: ${error.message}")
+                AppDiagnostics.record(
+                    "OTHER_SOURCE_FALLBACK_ERROR",
+                    "source=${track.source.key}; action=continue-to-direct-fallback",
+                    error,
+                )
+            }
+            .getOrNull()
+        otherSourceResult?.let { return it }
 
         if (fallbackEnabled) {
             val qForFallback = if (track.qualities.contains(preferred)) preferred else (track.qualities.firstOrNull() ?: Quality.K128)
