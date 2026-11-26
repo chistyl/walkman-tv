@@ -302,72 +302,10 @@ class PlaybackController(
                     return
                 }
                 AppDiagnostics.record("PLAYER_ERROR", "generation=$errorGeneration; mediaId=$eventMediaId; code=${error.errorCode} ${error.errorCodeName}; source=${_state.value.currentTrack?.source?.key}; quality=${lastAttemptedQuality?.key}", error)
-                // Format/codec rejections are the "encrypted .mgg" / "actually MP3 not FLAC" case
-                // from spec §3 — re-cascade from one tier below the current attempt. Network /
-                // unauthorized errors get surfaced as-is.
-                val isFormatReject = error.errorCode in FORMAT_REJECT_CODES
-                val current = lastAttemptedQuality
+                // A resolved URL is not playback success. Any actual player failure must
+                // move to the next untried JS resolver for this same track. Do not retry the
+                // same URL or restart playAt(), which would reset the attempted-script set.
                 val track = _state.value.currentTrack
-                if (isFormatReject && track != null && current != null && current != Quality.K128) {
-                    val full = Quality.orderedHighToLow
-                    val idx = full.indexOf(current)
-                    val below = if (idx >= 0 && idx + 1 < full.size) full[idx + 1] else Quality.K128
-                    android.util.Log.w(
-                        "PlaybackController",
-                        "format reject @ ${current.key} (${error.errorCodeName}); re-cascading from ${below.key}",
-                    )
-                    _state.value = _state.value.copy(
-                        warning = "${current.displayName} 格式不支援，已降低音質至 ${below.displayName}",
-                    )
-                    networkRetryCount = 0 // format error path — separate from the network counter
-                    if (errorGeneration == resolveGeneration) playAt(_state.value.index, qualityCap = below)
-                    return
-                }
-                // Transient network — exponential backoff retry up to MAX_NETWORK_RETRIES.
-                // After that, advance to next so playback doesn't dead-stop the queue.
-                if (error.errorCode in NETWORK_RETRY_CODES && track != null) {
-                    if (networkRetryCount < MAX_NETWORK_RETRIES) {
-                        networkRetryCount++
-                        val delayMs = 500L shl (networkRetryCount - 1) // 500ms / 1s / 2s
-                        android.util.Log.w(
-                            "PlaybackController",
-                            "network error (${error.errorCodeName}); retry ${networkRetryCount}/$MAX_NETWORK_RETRIES in ${delayMs}ms",
-                        )
-                        _state.value = _state.value.copy(
-                            warning = "網路不穩定，正在重試 ($networkRetryCount/$MAX_NETWORK_RETRIES)…",
-                            resolving = true,
-                            error = null,
-                        )
-                        val trackIdAtRetry = track.id
-                        val mediaIdAtRetry = eventMediaId
-                        retryJob?.cancel()
-                        retryJob = scope.launch {
-                            kotlinx.coroutines.delay(delayMs)
-                            // Track ID alone is insufficient: the same song can be selected again.
-                            if (errorGeneration == resolveGeneration &&
-                                _state.value.currentTrack?.id == trackIdAtRetry &&
-                                player.currentMediaItem?.mediaId == mediaIdAtRetry &&
-                                activeMediaId == mediaIdAtRetry
-                            ) {
-                                // Retry the already-resolved media item. Re-running playAt()
-                                // would execute the same JS resolver again and defeat the
-                                // one-attempt-per-JS failover guard.
-                                player.prepare()
-                                player.playWhenReady = true
-                            }
-                        }
-                        return
-                    }
-                    // Retries exhausted — the current URL is likely unusable. Try another
-                    // resolver once before giving up on this track.
-                    android.util.Log.w(
-                        "PlaybackController",
-                        "network retries exhausted on ${track.name}; trying source failover",
-                    )
-                    tryNextSource(track, errorGeneration, "網路播放失敗")
-                    return
-                }
-                // Any other media error — attempt a different resolver before skipping.
                 if (track != null) {
                     tryNextSource(track, errorGeneration, error.errorCodeName)
                 } else {
