@@ -72,6 +72,16 @@ class AppContainer(val appContext: Context) {
     private val builtInLyricResolver by lazy { BuiltInLyricResolver(catalogHttp) }
     private val otherSourceFinder by lazy { OtherSourceFinder(catalogs) }
 
+    /** User-configured remote source catalog; kept separate from manually imported scripts. */
+    val subscriptionCatalogStore: com.walkman.tv.source.subscription.SubscriptionCatalogStore by lazy {
+        com.walkman.tv.source.subscription.SubscriptionCatalogStore(appContext)
+    }
+
+    /** Downloads a complete catalog snapshot without mutating ScriptStore. */
+    val subscriptionCatalogFetcher: com.walkman.tv.source.subscription.SubscriptionCatalogFetcher by lazy {
+        com.walkman.tv.source.subscription.SubscriptionCatalogFetcher(httpClient)
+    }
+
     val sourceHealthStore: com.walkman.tv.source.SourceHealthStore by lazy {
         com.walkman.tv.source.SourceHealthStore(appContext)
     }
