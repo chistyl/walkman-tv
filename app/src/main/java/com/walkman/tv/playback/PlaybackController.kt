@@ -611,7 +611,7 @@ class PlaybackController(
         resolveJob?.cancel()
         resolveJob = scope.launch {
             val result = try {
-                Result.success(sources.resolveMusicURL(track, preferredQuality, attemptedResolverKeys.toSet()))
+                Result.success(sources.resolveMusicURL(track, preferredQuality, attemptedResolverKeys.toSet(), scriptsOnly = true))
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
