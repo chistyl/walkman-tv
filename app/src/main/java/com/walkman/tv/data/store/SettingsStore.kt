@@ -3,6 +3,8 @@ package com.walkman.tv.data.store
 import android.content.Context
 import com.walkman.tv.data.model.Quality
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -82,6 +84,7 @@ class SettingsStore(context: Context) {
         Settings(),
     )
 
+    private val updateMutex = Mutex()
     private val _settings = MutableStateFlow(Settings())
     val settings: StateFlow<Settings> = _settings.asStateFlow()
 
@@ -103,7 +106,10 @@ class SettingsStore(context: Context) {
     }
 
     suspend fun update(transform: (Settings) -> Settings) {
-        _settings.value = transform(_settings.value)
-        withContext(Dispatchers.IO) { store.save(_settings.value) }
+        updateMutex.withLock {
+            val updated = transform(_settings.value)
+            _settings.value = updated
+            withContext(Dispatchers.IO) { store.save(updated) }
+        }
     }
 }
