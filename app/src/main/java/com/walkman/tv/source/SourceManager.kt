@@ -183,12 +183,12 @@ class SourceManager(
                 val first = pickPlayQuality(preferred, alt.qualities.toSet(), scriptQs)
                 val cascade = qualityCascade(first, alt.qualities.toSet(), scriptQs)
                 for (q in cascade) {
-                    val play = try {
-                        attempt { resolveViaScript(alt, q, altLS) }.getOrNull()
+                    val result = try {
+                        attempt { resolveViaScript(alt, q, altLS) }
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     }
-                    if (play != null) {
+                    result.getOrNull()?.let { play ->
                         return ResolvedTrack(
                             url = play.url,
                             origin = ResolveOrigin.OtherSource(alt.source),
@@ -198,6 +198,8 @@ class SourceManager(
                             userAgent = play.userAgent,
                         )
                     }
+                    // A timed-out script is unlikely to answer at a lower quality either.
+                    if (result.exceptionOrNull() is JsScriptRuntime.ScriptTimeoutException) break
                 }
             }
         }
