@@ -98,3 +98,16 @@ The pinned Enhanced implementation separates portable catalog parsing/change det
 ### Phase D implementation gate
 
 Before implementing automatic recovery, introduce an additive subscription model/store with explicit URL and stable remote IDs, and define user-facing opt-in/import semantics. Keep the existing `UserScript` JSON schema backward-compatible through defaults or a separate store. First implement and test pure parsing, URL resolution, identity mapping, and atomic plan generation; only then wire network fetching and ScriptStore mutation. The playback recovery trigger must be bounded to one refresh per song/subscription and rate-limited per catalog URL, following the Enhanced policy without importing its mutable module-global state.
+
+
+### Phase D progress: atomic update planning core
+
+- Added a platform-neutral update-plan model alongside the catalog parser.
+- The planner accepts only explicit subscription-owned local records whose local IDs match the stable subscription ID namespace. Manual-script IDs are rejected.
+- Remote duplicate IDs and ambiguous local identities invalidate the plan.
+- The plan separates additions, content/name updates and unchanged entries.
+- Local subscription entries missing from the latest remote catalog are returned as retained entries; they are never deleted implicitly.
+- Update records carry the existing local ID. Consumers must preserve the existing enabled/disabled value and list position when applying updates.
+- The planner performs no storage, network, runtime loading, or mutation. A caller must stage all script bodies and validate the complete remote set before applying the plan.
+- Added two tests covering add/update/unchanged/retained behavior and rejection of ambiguous/manual identities. The subscription core suite now contains eight tests.
+- Latest catalog parser baseline Run #420 (commit 901b1641ccc09a553988a54f85cee42dd49ef11c) passed all regression tests and generated four ABI APKs plus source ZIP. The new planner commits are subsequent and require their own CI run.
