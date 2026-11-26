@@ -28,6 +28,10 @@ data class ResolvedTrack(
     val origin: ResolveOrigin,
     val quality: Quality,
     val warning: String? = null,
+    /** Per-track HTTP request properties returned by a user source script. */
+    val headers: Map<String, String> = emptyMap(),
+    /** Optional per-track User-Agent; never applied globally to other sources. */
+    val userAgent: String? = null,
 )
 
 /** Implemented by the catalog layer so [OtherSourceFinder] can search other platforms. */
