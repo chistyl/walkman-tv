@@ -200,11 +200,11 @@ class ScriptHttpClient(private val client: OkHttpClient) {
             builder.method(method, body ?: ByteArray(0).toRequestBody(null))
         }
 
-        // Preserve caller-supplied headers. The JS bridge used by LE Music forwards the
-        // lx.request options without synthesizing an Accept header; adding application/json
-        // here changes the actual request sent to source APIs (including the flower endpoint).
+        // Restore the prior default Accept behavior while preserving explicit caller values.
+        // Run #59 removed this fallback and the user reported that all playback stopped.
         val hb = Headers.Builder()
         callerHeaders.forEach { (k, v) -> hb.add(k, v) }
+        if (headerCI(callerHeaders, "Accept") == null) hb.add("Accept", "application/json")
         if (headerCI(callerHeaders, "User-Agent") == null) hb.add("User-Agent", DEFAULT_UA)
         builder.headers(hb.build())
         return builder.build()
