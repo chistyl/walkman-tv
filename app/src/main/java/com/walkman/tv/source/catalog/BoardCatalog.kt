@@ -341,7 +341,10 @@ private class QQBoard(private val http: CatalogHttp) : BoardService {
 /** Shared QQ track builder for boards + songlists (mirrors iOS `QQTrackBuilder`). */
 internal fun buildQqTrack(d: JSONObject?): Track? {
     d ?: return null
-    val mid = d.optString("mid").ifEmpty { return null }
+    // QQ leaderboard responses use "mid"/"name", while the legacy playlist-detail
+    // endpoint may return "songmid"/"songname". Accept both shapes so playlist tracks
+    // are not silently discarded by the shared builder.
+    val mid = d.optString("mid").ifEmpty { d.optString("songmid") }.ifEmpty { return null }
     val singers = d.optJSONArray("singer")
     val singer = (0 until (singers?.length() ?: 0))
         .mapNotNull { singers?.optJSONObject(it)?.optString("name") }
@@ -366,7 +369,7 @@ internal fun buildQqTrack(d: JSONObject?): Track? {
     }
     return Track(
         id = Track.makeID(SourceID.TX, mid),
-        name = d.optString("name").ifEmpty { d.optString("title", "未知") },
+        name = d.optString("name").ifEmpty { d.optString("songname").ifEmpty { d.optString("title", "未知") } },
         singer = singer.ifEmpty { "未知" },
         albumName = album?.optString("name")?.ifEmpty { null },
         albumId = album?.opt("id")?.toString(),
