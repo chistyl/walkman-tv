@@ -173,7 +173,7 @@ class SourceManager(
     }
 
     private fun scriptAttemptKey(track: Track, script: LoadedScript): String =
-        "script:${script.script.id}:${track.source.key}:${track.id}"
+        "script:${script.script.id}:${track.source.key}"
 
     private data class ScriptPlayResult(
         val url: String,
