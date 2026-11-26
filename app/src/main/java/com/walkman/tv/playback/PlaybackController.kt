@@ -422,6 +422,8 @@ class PlaybackController(
         _audioSpec.value = null
         retryJob?.cancel()
         retryJob = null
+        bufferingWatchdogJob?.cancel()
+        bufferingWatchdogJob = null
         autoSkipJob?.cancel()
         autoSkipJob = null
         activeMediaId = "$generation:${track.id}"
@@ -871,6 +873,8 @@ class PlaybackController(
         _audioSpec.value = null
         retryJob?.cancel()
         autoSkipJob?.cancel()
+        bufferingWatchdogJob?.cancel()
+        bufferingWatchdogJob = null
         val mediaId = "mv:$generation"
         activeMediaId = mediaId
         resolveJob?.cancel()
