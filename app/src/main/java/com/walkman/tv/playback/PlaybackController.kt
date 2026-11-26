@@ -731,8 +731,12 @@ class PlaybackController(
                     AppDiagnostics.record("SOURCE_MANUAL_SWITCH_ERROR", "to=${targetSource.key}", error)
                     // If the previous stream also failed while the manual search was running,
                     // continue with the remaining platforms instead of leaving an idle player.
-                    if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
-                        attemptSourceFailover(track, "手動切換失敗", generation)
+                    when (player.playbackState) {
+                        Player.STATE_IDLE, Player.STATE_ENDED ->
+                            attemptSourceFailover(track, "手動切換失敗", generation)
+                        Player.STATE_BUFFERING -> if (player.playWhenReady) {
+                            activeMediaId?.let { scheduleBufferingWatchdog(generation, it) }
+                        }
                     }
                 },
             )
