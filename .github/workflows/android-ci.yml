@@ -12,6 +12,7 @@ on:
       - fix/platform-source-switch-crash
       - fix/kugou-qq-playback
       - fix/match-le-music-media3-1.8.0
+      - fix/restore-media3-1.10.1-audio-test
 
 permissions:
   contents: read
