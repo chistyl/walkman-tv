@@ -129,7 +129,7 @@ class HomeStore(
                 }
 
                 val groups = recommendationsJob.await()
-                if (generation != loadGeneration) return@launch
+                if (generation != loadGeneration) return@coroutineScope
                 val heroes = srcs.mapNotNull { s -> groups[s]?.firstOrNull()?.let { HeroItem(it, s) } }
 
                 val tails = srcs.associateWith { groups[it].orEmpty().drop(1).take(8) }
@@ -144,7 +144,7 @@ class HomeStore(
                 }
 
                 val boardResults = boardsJob.await()
-                if (generation != loadGeneration) return@launch
+                if (generation != loadGeneration) return@coroutineScope
                 val boardList = balanceBoards(srcs, boardResults, totalTarget = 12)
                 val completed = HomeState(
                     isLoading = false,
