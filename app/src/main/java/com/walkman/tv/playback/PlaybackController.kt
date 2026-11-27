@@ -595,10 +595,15 @@ class PlaybackController(
     fun next() {
         val s = _state.value
         if (s.queue.isEmpty()) return
-        val candidates = if (s.shuffle) s.queue.indices.shuffled() else s.queue.indices.toList()
-        val ordered = candidates.filter { it > s.index } +
-            if (s.repeatMode != RepeatMode.OFF) candidates.filter { it <= s.index } else emptyList()
-        val nextIdx = ordered.firstOrNull { isSourceEnabled(s.queue[it]) }
+        val eligible = s.queue.indices.filter { it != s.index && isSourceEnabled(s.queue[it]) }
+        val nextIdx = if (s.shuffle) {
+            eligible.randomOrNull()
+        } else {
+            s.queue.indices.firstOrNull { it > s.index && isSourceEnabled(s.queue[it]) }
+                ?: if (s.repeatMode != RepeatMode.OFF) {
+                    s.queue.indices.firstOrNull { isSourceEnabled(s.queue[it]) }
+                } else null
+        }
         if (nextIdx == null) { player.pause(); return }
         playAt(nextIdx)
     }
@@ -607,9 +612,13 @@ class PlaybackController(
         val s = _state.value
         if (s.queue.isEmpty()) return
         if (player.currentPosition > 3000) { player.seekTo(0); return }
-        val candidates = if (s.shuffle) s.queue.indices.shuffled() else s.queue.indices.reversed().toList()
-        val ordered = candidates.filter { it < s.index } + candidates.filter { it >= s.index }
-        val prevIdx = ordered.firstOrNull { isSourceEnabled(s.queue[it]) } ?: return
+        val eligible = s.queue.indices.filter { it != s.index && isSourceEnabled(s.queue[it]) }
+        val prevIdx = if (s.shuffle) {
+            eligible.randomOrNull()
+        } else {
+            s.queue.indices.reversed().firstOrNull { it < s.index && isSourceEnabled(s.queue[it]) }
+                ?: s.queue.indices.reversed().firstOrNull { isSourceEnabled(s.queue[it]) }
+        } ?: return
         playAt(prevIdx)
     }
 
