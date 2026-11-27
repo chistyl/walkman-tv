@@ -131,7 +131,7 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                 launch {
                     val result = try {
                         if (f == null) appContainer.songlists.searchAll(q, enabledSources = enabledSources)
-                        else if (f in enabledSources) appContainer.songlists.search(f, q, 1) else emptyList() else emptyList()
+                        else if (f in enabledSources) appContainer.songlists.search(f, q, 1) else emptyList()
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {
