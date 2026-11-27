@@ -10,6 +10,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import org.json.JSONObject
 
 interface BoardService {
@@ -88,8 +89,11 @@ private object KuwoCoverCache {
     // Shared by every catalog screen/fetch invocation, not recreated per playlist or board.
     // This keeps total first-time Kuwo artwork traffic bounded across concurrent screens.
     val requests = Semaphore(6)
-    private val lock = Any()
+    internal val lock = Any()
+    internal val inFlight = mutableMapOf<String, CompletableDeferred<String?>>()
     private val entries = LinkedHashMap<String, Entry>(64, 0.75f, true)
+    // One in-flight lookup per songmid; waiters share the owner's result.
+    private val inFlight = mutableMapOf<String, CompletableDeferred<String?>>()
 
     fun get(songmid: String): String? = synchronized(lock) {
         val entry = entries[songmid] ?: return@synchronized null
@@ -115,20 +119,53 @@ internal suspend fun fillKuwoCovers(http: CatalogHttp, tracks: List<Track>): Lis
         async {
             if (!track.picURL.isNullOrBlank()) return@async track
             KuwoCoverCache.get(track.songmid)?.let { return@async track.copy(picURL = it) }
-            KuwoCoverCache.requests.withPermit {
-                KuwoCoverCache.get(track.songmid)?.let { return@withPermit track.copy(picURL = it) }
-                val url = "http://artistpicserver.kuwo.cn/pic.web?corp=kuwo&type=rid_pic&pictype=500&size=500&rid=${track.songmid}"
-                val pic = try {
-                    http.getText(url).trim()
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (_: Exception) {
-                    null
+
+            // Register before waiting for the global semaphore so duplicate songs do not
+            // occupy multiple permits or issue duplicate network requests.
+            val (pending, isOwner) = synchronized(KuwoCoverCache.lock) {
+                val existing = KuwoCoverCache.inFlight[track.songmid]
+                if (existing != null) existing to false
+                else CompletableDeferred<String?>().also {
+                    KuwoCoverCache.inFlight[track.songmid] = it
+                } to true
+            }
+
+            if (!isOwner) {
+                val sharedUrl = pending.await()
+                return@async if (!sharedUrl.isNullOrBlank()) track.copy(picURL = sharedUrl) else track
+            }
+
+            try {
+                val resolved = KuwoCoverCache.requests.withPermit {
+                    KuwoCoverCache.get(track.songmid)?.let { return@withPermit it }
+                    val url = "http://artistpicserver.kuwo.cn/pic.web?corp=kuwo&type=rid_pic&pictype=500&size=500&rid=${track.songmid}"
+                    val pic = try {
+                        http.getText(url).trim()
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        null
+                    }
+                    if (!pic.isNullOrBlank() && pic.startsWith("http")) {
+                        KuwoCoverCache.put(track.songmid, pic)
+                        pic
+                    } else null
                 }
-                if (!pic.isNullOrBlank() && pic.startsWith("http")) {
-                    KuwoCoverCache.put(track.songmid, pic)
-                    track.copy(picURL = pic)
-                } else track
+                pending.complete(resolved)
+                if (!resolved.isNullOrBlank()) track.copy(picURL = resolved) else track
+            } catch (cancelled: CancellationException) {
+                // Release waiters with an empty result; cancellation belongs to the owner only.
+                pending.complete(null)
+                throw cancelled
+            } catch (_: Exception) {
+                pending.complete(null)
+                track
+            } finally {
+                synchronized(KuwoCoverCache.lock) {
+                    if (KuwoCoverCache.inFlight[track.songmid] === pending) {
+                        KuwoCoverCache.inFlight.remove(track.songmid)
+                    }
+                }
             }
         }
     }.awaitAll()
