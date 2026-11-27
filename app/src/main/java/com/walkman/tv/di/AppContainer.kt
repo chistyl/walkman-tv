@@ -162,51 +162,41 @@ class AppContainer(val appContext: Context) {
         }
     }
 
-    // Hot-search JSON cache for the phone page (/api/hotsearch). Fetched at most once per 5 min;
-    // called from NanoHTTPD's worker thread, so blocking here is fine.
-    @Volatile private var hotSearchCache: String = "[]"
-    @Volatile private var hotSearchCachedAt: Long = 0L
-
-    /** Blocking hot-search JSON: [{"source":"kw","name":"酷我","words":[...]}, ...]. */
+    /** Blocking hot-search JSON for the phone page (/api/hotsearch).
+     *  HotSearch owns the five-minute network cache; apply the current global source switches
+     *  on every request so a setting change is reflected immediately without waiting for TTL.
+     */
     @Synchronized
-    private fun hotSearchJsonBlocking(): String {
-        val now = System.currentTimeMillis()
-        if (now - hotSearchCachedAt < 5 * 60_000L) return hotSearchCache
-        val json = runCatching {
-            kotlinx.coroutines.runBlocking {
-                val cols = hotSearch.fetchAll()
-                buildString {
-                    // Emit JSON punctuation as characters; provider text is escaped centrally.
-                    append('[')
-                    cols.forEachIndexed { i, col ->
-                        if (i > 0) append(',')
-                        append('{')
-                        append('"').append("source").append('"').append(':').append('"').append(jsonEscape(col.source.key)).append('"')
-                        append(',').append('"').append("name").append('"').append(':').append('"').append(jsonEscape(col.source.displayName)).append('"')
-                        append(',').append('"').append("words").append('"').append(':').append('[')
-                        col.words.forEachIndexed { j, w ->
-                            if (j > 0) append(',')
-                            append('"').append(jsonEscape(w)).append('"')
-                        }
-                        append("]}")
+    private fun hotSearchJsonBlocking(): String = runCatching {
+        kotlinx.coroutines.runBlocking {
+            val enabledSources = settingsStore.settings.value.homeSources
+            val cols = hotSearch.fetchAll().filter { it.source in enabledSources }
+            buildString {
+                append('[')
+                cols.forEachIndexed { i, col ->
+                    if (i > 0) append(',')
+                    append('{')
+                    append('"').append("source").append('"').append(':').append('"').append(jsonEscape(col.source.key)).append('"')
+                    append(',').append('"').append("name").append('"').append(':').append('"').append(jsonEscape(col.source.displayName)).append('"')
+                    append(',').append('"').append("words").append('"').append(':').append('[')
+                    col.words.forEachIndexed { j, word ->
+                        if (j > 0) append(',')
+                        append('"').append(jsonEscape(word)).append('"')
                     }
-                    append(']')
+                    append("]}")
                 }
+                append(']')
             }
-        }.getOrDefault("[]")
-        // Cache empty/error responses too; otherwise an unavailable provider set triggers a
-        // full four-platform network fan-out on every phone-page refresh.
-        hotSearchCache = json
-        hotSearchCachedAt = System.currentTimeMillis()
-        return json
-    }
+        }
+    }.getOrDefault("[]")
+
     private fun jsonEscape(s: String): String = buildString {
         for (c in s) when (c) {
             '"' -> append("\\\"")
-            '\\' -> append("\\\\")
-            '\n' -> append("\\n")
-            '\r' -> append("\\r")
-            '\t' -> append("\\t")
+            '\\\\' -> append("\\\\\\\\")
+            '\\n' -> append("\\\\n")
+            '\\r' -> append("\\\\r")
+            '\\t' -> append("\\\\t")
             else -> append(c)
         }
     }
