@@ -1,5 +1,6 @@
 package com.walkman.tv.source.catalog
 
+import android.os.SystemClock
 import com.walkman.tv.data.model.Quality
 import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.data.model.Track
@@ -10,6 +11,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.LinkedHashMap
 
 interface SongCatalog {
     val source: SourceID
@@ -31,14 +33,43 @@ class Catalogs(private val http: CatalogHttp) : MusicSearcher {
 
     fun serviceFor(source: SourceID): SongCatalog? = services[source]
 
-    override suspend fun search(source: SourceID, keyword: String, page: Int): List<Track> =
-        try {
+    // Short-lived in-memory cache avoids repeating provider parsing/enrichment on revisits.
+    private data class CachedSearch(val tracks: List<Track>, val cachedAt: Long)
+    private val searchCache = LinkedHashMap<String, CachedSearch>(32, 0.75f, true)
+    private val cacheLock = Any()
+
+    private fun cached(key: String): List<Track>? = synchronized(cacheLock) {
+        val entry = searchCache[key] ?: return@synchronized null
+        if (SystemClock.elapsedRealtime() - entry.cachedAt >= SEARCH_CACHE_TTL_MS) {
+            searchCache.remove(key)
+            null
+        } else entry.tracks
+    }
+
+    private fun remember(key: String, tracks: List<Track>) {
+        if (tracks.isEmpty()) return // Never cache transient failures or empty responses.
+        synchronized(cacheLock) {
+            searchCache[key] = CachedSearch(tracks, SystemClock.elapsedRealtime())
+            while (searchCache.size > SEARCH_CACHE_MAX_ENTRIES) {
+                val oldest = searchCache.entries.iterator()
+                if (oldest.hasNext()) { oldest.next(); oldest.remove() } else break
+            }
+        }
+    }
+
+    override suspend fun search(source: SourceID, keyword: String, page: Int): List<Track> {
+        val key = source.key + "|" + keyword.trim() + "|" + page
+        cached(key)?.let { return it }
+        val result = try {
             services[source]?.search(keyword, page) ?: emptyList()
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
             emptyList()
         }
+        remember(key, result)
+        return result
+    }
 
     /** Search every platform and interleave results (kw, wy, kg, tx, mg round-robin). */
     suspend fun searchAll(
@@ -46,6 +77,9 @@ class Catalogs(private val http: CatalogHttp) : MusicSearcher {
         page: Int = 1,
         enabledSources: Set<SourceID> = SourceID.onlineSources.toSet(),
     ): List<Track> {
+        val sourceKey = enabledSources.map { it.key }.sorted().joinToString(",")
+        val cacheKey = "all|" + keyword.trim() + "|" + page + "|" + sourceKey
+        cached(cacheKey)?.let { return it }
         val groups: Map<SourceID, List<Track>> = coroutineScope {
             services.values.filter { it.source in enabledSources }.map { svc ->
                 async {
@@ -60,7 +94,12 @@ class Catalogs(private val http: CatalogHttp) : MusicSearcher {
                 }
             }.awaitAll().toMap()
         }
-        return interleave(groups)
+        return interleave(groups).also { remember(cacheKey, it) }
+    }
+
+    private companion object {
+        const val SEARCH_CACHE_TTL_MS = 90_000L
+        const val SEARCH_CACHE_MAX_ENTRIES = 48
     }
 
     private fun interleave(groups: Map<SourceID, List<Track>>): List<Track> {
