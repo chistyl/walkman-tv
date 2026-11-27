@@ -25,6 +25,7 @@ class LocalServer private constructor(
     // Returns hot-search columns as a JSON string: [{"source":"kw","name":"酷我","words":[...]}].
     // Supplied by AppContainer; called on NanoHTTPD's worker thread (blocking is fine here).
     private val hotSearchJson: () -> String,
+    private val diagnosticsText: () -> String?,
     port: Int,
 ) : NanoHTTPD(port) {
 
@@ -55,6 +56,7 @@ class LocalServer private constructor(
 
     private fun handleGet(session: IHTTPSession): Response = when (session.uri.trimEnd('/')) {
         "/api/hotsearch" -> json(runCatching { hotSearchJson() }.getOrDefault("[]"))
+        "/api/diagnostics" -> diagnosticsDownload()
         "/search" -> html(SEARCH_HTML)
         "/script" -> html(SCRIPT_HTML)
         "/playlist-name" -> html(PLAYLIST_NAME_HTML)
@@ -108,6 +110,15 @@ class LocalServer private constructor(
     private fun json(body: String): Response =
         newFixedLengthResponse(Response.Status.OK, "application/json; charset=utf-8", body)
 
+    private fun diagnosticsDownload(): Response {
+        val report = runCatching { diagnosticsText() }.getOrNull()
+            ?: return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "尚無播放診斷紀錄")
+        val response = newFixedLengthResponse(Response.Status.OK, "text/plain; charset=utf-8", report)
+        response.addHeader("Content-Disposition", "attachment; filename=walkman-tv-playback-diagnostics.txt")
+        response.addHeader("Cache-Control", "no-store")
+        return response
+    }
+
     private fun notFound(): Response =
         newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found")
 
@@ -115,9 +126,13 @@ class LocalServer private constructor(
         private const val TAG = "LocalServer"
 
         /** Start the local server, trying a small range of ports in case 8765 is busy. */
-        fun start(events: AppEvents, hotSearchJson: () -> String = { "[]" }): LocalServer? {
+        fun start(
+            events: AppEvents,
+            hotSearchJson: () -> String = { "[]" },
+            diagnosticsText: () -> String? = { null },
+        ): LocalServer? {
             for (port in listOf(8765, 8766, 8767, 8768)) {
-                val server = LocalServer(events, hotSearchJson, port)
+                val server = LocalServer(events, hotSearchJson, diagnosticsText, port)
                 if (server.tryStart()) return server
             }
             return null
