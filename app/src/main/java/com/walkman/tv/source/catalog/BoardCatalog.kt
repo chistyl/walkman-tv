@@ -85,6 +85,9 @@ private object KuwoCoverCache {
     private data class Entry(val url: String, val cachedAt: Long)
     private const val TTL_MS = 6 * 60 * 60 * 1000L
     private const val MAX_ENTRIES = 800
+    // Shared by every catalog screen/fetch invocation, not recreated per playlist or board.
+    // This keeps total first-time Kuwo artwork traffic bounded across concurrent screens.
+    val requests = Semaphore(6)
     private val lock = Any()
     private val entries = LinkedHashMap<String, Entry>(64, 0.75f, true)
 
@@ -108,12 +111,11 @@ private object KuwoCoverCache {
  * A failed artwork lookup must not fail the chart, but coroutine cancellation must propagate.
  */
 internal suspend fun fillKuwoCovers(http: CatalogHttp, tracks: List<Track>): List<Track> = coroutineScope {
-    val requests = Semaphore(6)
     tracks.map { track ->
         async {
             if (!track.picURL.isNullOrBlank()) return@async track
             KuwoCoverCache.get(track.songmid)?.let { return@async track.copy(picURL = it) }
-            requests.withPermit {
+            KuwoCoverCache.requests.withPermit {
                 KuwoCoverCache.get(track.songmid)?.let { return@withPermit track.copy(picURL = it) }
                 val url = "http://artistpicserver.kuwo.cn/pic.web?corp=kuwo&type=rid_pic&pictype=500&size=500&rid=${track.songmid}"
                 val pic = try {
