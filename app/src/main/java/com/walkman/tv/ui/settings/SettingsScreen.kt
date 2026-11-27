@@ -450,6 +450,27 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                                 contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
                             ) { Text("刪除", fontSize = 13.sp, fontWeight = FontWeight.Bold) }
                         }
+                        androidx.compose.foundation.layout.FlowRow(
+                            modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            com.walkman.tv.data.model.SourceID.homePageOrder.forEach { provider ->
+                                val active = provider in s.enabledSources
+                                TvPill(
+                                    onClick = {
+                                        scope.launch {
+                                            val next = if (active) s.enabledSources - provider else s.enabledSources + provider
+                                            appContainer.scriptStore.setEnabledSources(s.id, next)
+                                        }
+                                    },
+                                    selected = active,
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp),
+                                ) {
+                                    Text(provider.displayName, fontSize = 12.sp)
+                                }
+                            }
+                        }
                     }
                 }
             }

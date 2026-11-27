@@ -15,6 +15,8 @@ data class UserScript(
     val rawScript: String,
     val importedAt: Long = System.currentTimeMillis(),
     val enabled: Boolean = true,
+    /** Music platforms this script may serve; independent for each imported script. */
+    val enabledSources: Set<SourceID> = setOf(SourceID.KW, SourceID.WY, SourceID.KG, SourceID.TX),
 )
 
 /** Capabilities a script reports via `lx.send('inited', { sources })`. */

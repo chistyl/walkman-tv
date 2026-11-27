@@ -138,6 +138,17 @@ class ScriptStore(private val context: Context, private val sourceManager: Sourc
         }
     }
 
+    /** Persist provider availability independently for this one custom script. */
+    suspend fun setEnabledSources(id: String, sources: Set<com.walkman.tv.data.model.SourceID>) {
+        mutationMutex.withLock {
+            val updated = _scripts.value.firstOrNull { it.id == id } ?: return@withLock
+            val next = updated.copy(enabledSources = sources)
+            _scripts.value = _scripts.value.map { if (it.id == id) next else it }
+            sourceManager.updateScriptSettings(next)
+            persist()
+        }
+    }
+
     suspend fun remove(id: String) = mutationMutex.withLock {
         sourceManager.unload(id)
         _scripts.value = _scripts.value.filter { it.id != id }

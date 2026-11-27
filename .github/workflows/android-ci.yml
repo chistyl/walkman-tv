@@ -5,10 +5,12 @@ on:
     branches:
       - feature/full-performance-optimization
       - perf/startup-cache-render-optimization
+      - fix/platform-switch-playback-stability
   push:
     branches:
       - fix/taiwan-traditional-context-conversion
       - fix/platform-source-switch-crash
+      - feature/per-script-provider-toggles
 
 permissions:
   contents: read
