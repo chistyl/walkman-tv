@@ -24,20 +24,56 @@ interface SonglistService {
 
 /** Songlist (歌单) plaza via each platform's API, ported from iOS `Songlists`. */
 class Songlists(private val http: CatalogHttp) {
+    private data class CachedSearch(val items: List<SonglistInfo>, val cachedAt: Long)
+    private val cacheLock = Any()
+    private val searchCache = object : LinkedHashMap<String, CachedSearch>(32, 0.75f, true) {}
+    private val cacheTtlMs = 90_000L
+    private val maxCacheEntries = 48
     private val services = listOf(
         KuwoSonglist(http), NetEaseSonglist(http), KugouSonglist(http), QQSonglist(http),
     )
     fun serviceFor(source: SourceID): SonglistService? = services.firstOrNull { it.source == source }
     fun servicesAll(): List<SonglistService> = services
 
-    /** Search every platform's playlists in parallel; results are concatenated platform-by-platform. */
+    private fun cacheKey(source: SourceID, keyword: String, page: Int) =
+        "${source.key}|${keyword.trim()}|$page"
+
+    private fun cached(key: String): List<SonglistInfo>? = synchronized(cacheLock) {
+        val entry = searchCache[key] ?: return@synchronized null
+        if (android.os.SystemClock.elapsedRealtime() - entry.cachedAt >= cacheTtlMs) {
+            searchCache.remove(key)
+            null
+        } else entry.items
+    }
+
+    private fun remember(key: String, items: List<SonglistInfo>) {
+        if (items.isEmpty()) return
+        synchronized(cacheLock) {
+            searchCache[key] = CachedSearch(items.toList(), android.os.SystemClock.elapsedRealtime())
+            while (searchCache.size > maxCacheEntries) {
+                searchCache.entries.iterator().run { next(); remove() }
+            }
+        }
+    }
+
+    /** Search one provider; only non-empty responses are cached, so empty/error responses retry. */
+    suspend fun search(source: SourceID, keyword: String, page: Int = 1): List<SonglistInfo> {
+        val svc = serviceFor(source) ?: return emptyList()
+        val key = cacheKey(source, keyword, page)
+        cached(key)?.let { return it }
+        val result = svc.search(keyword, page)
+        remember(key, result)
+        return result
+    }
+
+    /** Search every platform in parallel. Provider-level caching lets failed/empty providers retry. */
     suspend fun searchAll(
         keyword: String,
         page: Int = 1,
         enabledSources: Set<SourceID> = SourceID.onlineSources.toSet(),
     ): List<SonglistInfo> = coroutineScope {
         services.filter { it.source in enabledSources }.map { svc ->
-            async { runCatching { svc.search(keyword, page) }.getOrDefault(emptyList()) }
+            async { runCatching { search(svc.source, keyword, page) }.getOrDefault(emptyList()) }
         }.awaitAll().flatten()
     }
 }
