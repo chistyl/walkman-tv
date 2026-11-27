@@ -31,8 +31,12 @@ class Songlists(private val http: CatalogHttp) {
     fun servicesAll(): List<SonglistService> = services
 
     /** Search every platform's playlists in parallel; results are concatenated platform-by-platform. */
-    suspend fun searchAll(keyword: String, page: Int = 1): List<SonglistInfo> = coroutineScope {
-        services.map { svc ->
+    suspend fun searchAll(
+        keyword: String,
+        page: Int = 1,
+        enabledSources: Set<SourceID> = SourceID.onlineSources.toSet(),
+    ): List<SonglistInfo> = coroutineScope {
+        services.filter { it.source in enabledSources }.map { svc ->
             async { runCatching { svc.search(keyword, page) }.getOrDefault(emptyList()) }
         }.awaitAll().flatten()
     }
