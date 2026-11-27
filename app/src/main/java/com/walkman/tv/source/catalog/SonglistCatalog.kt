@@ -195,7 +195,7 @@ private class KuwoSonglist(private val http: CatalogHttp) : SonglistService {
             source = SourceID.KW,
             songmid = id,
             duration = d.optString("duration").toIntOrNull()?.takeIf { it > 0 },
-            picURL = null,
+            picURL = kuwoCoverUrl(d),
             qualities = qs,
             extras = extras,
         )
