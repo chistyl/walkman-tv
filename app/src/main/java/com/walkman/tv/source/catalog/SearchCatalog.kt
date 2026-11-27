@@ -38,7 +38,7 @@ class Catalogs(private val http: CatalogHttp) : MusicSearcher {
     private data class CachedSearch(val tracks: List<Track>, val cachedAt: Long)
     private val searchCache = LinkedHashMap<String, CachedSearch>(32, 0.75f, true)
     private val cacheLock = Any()
-    private val searchInFlight = mutableMapOf<String, CompletableDeferred<List<Track>>>()
+    private val searchInFlight = mutableMapOf<String, CompletableDeferred<List<Track>?>>()
 
     private fun cached(key: String): List<Track>? = synchronized(cacheLock) {
         val entry = searchCache[key] ?: return@synchronized null
@@ -80,7 +80,7 @@ class Catalogs(private val http: CatalogHttp) : MusicSearcher {
         }
         cachedResult?.let { return it }
         val sharedRequest = checkNotNull(request)
-        if (!isRequestOwner) return sharedRequest.await()
+        if (!isRequestOwner) return sharedRequest.await() ?: search(source, keyword, page)
 
         try {
             val result = try {
@@ -95,7 +95,7 @@ class Catalogs(private val http: CatalogHttp) : MusicSearcher {
             return result
         } catch (cancelled: CancellationException) {
             // Do not cancel independent callers waiting on this request; let them retry later.
-            sharedRequest.complete(emptyList())
+            sharedRequest.complete(null)
             throw cancelled
         } finally {
             synchronized(cacheLock) {
