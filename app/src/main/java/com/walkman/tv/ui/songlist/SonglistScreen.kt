@@ -175,7 +175,7 @@ fun SonglistScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                         MediaCard(title = sl.displayName, picURL = sl.picURL, subtitle = sl.playCount?.let { "▶ $it" }) {
                             scope.launch {
                                 loadingDetail = true
-                                val d = fetchOr(null) { service?.fetchDetail(sl) }
+                                val d = fetchOr(null) { appContainer.songlists.fetchDetail(sl) }
                                 detail = sl to (d?.tracks ?: emptyList())
                                 loadingDetail = false
                             }
