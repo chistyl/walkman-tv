@@ -62,7 +62,7 @@ class Catalogs(private val http: CatalogHttp) : MusicSearcher {
     override suspend fun search(source: SourceID, keyword: String, page: Int): List<Track> {
         val key = source.key + "|" + keyword.trim() + "|" + page
         var cachedResult: List<Track>? = null
-        var request: CompletableDeferred<List<Track>>? = null
+        var request: CompletableDeferred<List<Track>?>? = null
         var isRequestOwner = false
         synchronized(cacheLock) {
             val entry = searchCache[key]
