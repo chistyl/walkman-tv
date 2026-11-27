@@ -173,7 +173,7 @@ private class KuwoSearch(private val http: CatalogHttp) : SongCatalog {
             source = SourceID.KW,
             songmid = songmid,
             duration = d.optString("DURATION").toIntOrNull(),
-            picURL = null,
+            picURL = kuwoCoverUrl(d),
             qualities = qs,
             extras = extras,
         )
