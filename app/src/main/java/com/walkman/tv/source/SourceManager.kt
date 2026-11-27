@@ -55,8 +55,15 @@ class SourceManager(
     }
 
     fun unload(scriptId: String) {
-        _loaded.value.firstOrNull { it.script.id == scriptId }?.runtime?.destroy()
+        // Remove the runtime from discovery first so no new playback/lyric request can acquire it.
+        // Existing QuickJS work is then drained and its native context is destroyed on its own
+        // single-thread dispatcher by JsScriptRuntime.destroy().
+        val removed = _loaded.value.filter { it.script.id == scriptId }
         _loaded.value = _loaded.value.filter { it.script.id != scriptId }
+        removed.forEach { loaded ->
+            runCatching { loaded.runtime.destroy() }
+                .onFailure { Log.w(TAG, "unload '${loaded.script.name}' failed: ${it.message}") }
+        }
     }
 
     private suspend fun <T> attempt(block: suspend () -> T): Result<T> =
