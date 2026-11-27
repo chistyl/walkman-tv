@@ -33,8 +33,8 @@ class Songlists(private val http: CatalogHttp) {
     private val maxCacheEntries = 48
     private data class CachedDetail(val detail: SonglistDetail, val cachedAt: Long)
     private val detailCache = object : LinkedHashMap<String, CachedDetail>(16, 0.75f, true) {}
-    private val detailInFlight = mutableMapOf<String, CompletableDeferred<SonglistDetail>>()
-    private val searchInFlight = mutableMapOf<String, CompletableDeferred<List<SonglistInfo>>>()
+    private val detailInFlight = mutableMapOf<String, CompletableDeferred<SonglistDetail?>>()
+    private val searchInFlight = mutableMapOf<String, CompletableDeferred<List<SonglistInfo>?>>()
     private val detailCacheTtlMs = 3 * 60_000L
     private val maxDetailCacheEntries = 12
     private val services = listOf(
@@ -87,7 +87,7 @@ class Songlists(private val http: CatalogHttp) {
         }
         cachedResult?.let { return it }
         val sharedRequest = checkNotNull(request)
-        if (!isRequestOwner) return sharedRequest.await()
+        if (!isRequestOwner) return sharedRequest.await() ?: search(source, keyword, page)
 
         try {
             val result = svc.search(keyword, page)
@@ -95,7 +95,7 @@ class Songlists(private val http: CatalogHttp) {
             sharedRequest.complete(result)
             return result
         } catch (cancelled: CancellationException) {
-            sharedRequest.complete(emptyList())
+            sharedRequest.complete(null)
             throw cancelled
         } catch (error: Exception) {
             sharedRequest.completeExceptionally(error)
@@ -130,7 +130,7 @@ class Songlists(private val http: CatalogHttp) {
         }
         cachedResult?.let { return it }
         val sharedRequest = checkNotNull(request)
-        if (!isRequestOwner) return sharedRequest.await()
+        if (!isRequestOwner) return sharedRequest.await() ?: fetchDetail(list)
 
         try {
             val service = serviceFor(list.source)
@@ -145,6 +145,9 @@ class Songlists(private val http: CatalogHttp) {
             }
             sharedRequest.complete(result)
             return result
+        } catch (cancelled: CancellationException) {
+            sharedRequest.complete(null)
+            throw cancelled
         } catch (error: Throwable) {
             sharedRequest.completeExceptionally(error)
             throw error
