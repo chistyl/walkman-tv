@@ -54,7 +54,17 @@ private val songlistPageCache = LinkedHashMap<String, List<SonglistInfo>>()
 @Composable
 fun SonglistScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
-    var source by remember { mutableStateOf(SourceID.KW) }
+    val settings by appContainer.settingsStore.settings.collectAsState()
+    val enabledSources = settings.homeSources
+    val visibleSonglistSources = songlistSources.filter { it in enabledSources }
+    var source by remember { mutableStateOf(visibleSonglistSources.firstOrNull() ?: SourceID.KW) }
+    LaunchedEffect(visibleSonglistSources) {
+        if (source !in visibleSonglistSources) {
+            source = visibleSonglistSources.firstOrNull() ?: SourceID.KW
+            detail = null
+            lists = emptyList()
+        }
+    }
     // Seed with the default source's first order (not null): the sibling effect below re-writes
     // it with an *equal* value on first run, so mutableStateOf's structural equality skips the
     // invalidation — the list effect runs exactly once on entry instead of fetch → cancel →
@@ -75,7 +85,7 @@ fun SonglistScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     // The active provider is handled by the normal screen effect and is intentionally excluded.
     LaunchedEffect(Unit) {
         coroutineScope {
-            songlistSources.filter { it != source }.map { sourceId ->
+            visibleSonglistSources.filter { it != source }.map { sourceId ->
                 async {
                     val svc = appContainer.songlists.serviceFor(sourceId) ?: return@async
                     val order = svc.orders.firstOrNull() ?: return@async
@@ -119,10 +129,15 @@ fun SonglistScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     // grid scroll position and the previously-focused card. Rendering detail as an overlay keeps
     // the grid alive (state, focus, fetched lists), so back-navigation is instant and preserves
     // the selection.
+    if (visibleSonglistSources.isEmpty()) {
+        EmptyHint("目前沒有啟用的音源，請至設定開啟音源", Modifier.fillMaxSize())
+        return
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().padding(top = 25.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                songlistSources.forEach { s ->
+                visibleSonglistSources.forEach { s ->
                     TvPill(onClick = { source = s }, selected = source == s) { Text(s.displayName, fontSize = 12.sp) }
                 }
                 Spacer(Modifier.padding(start = 8.dp))
