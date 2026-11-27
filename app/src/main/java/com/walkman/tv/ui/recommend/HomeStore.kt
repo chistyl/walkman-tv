@@ -135,7 +135,7 @@ class HomeStore(
                 val groups = recommendationResults.mapValues { it.value.orEmpty() }
                 val heroes = srcs.mapNotNull { s -> groups[s].orEmpty().firstOrNull()?.let { HeroItem(it, s) } }
 
-                val tails = srcs.associateWith { groups[it].drop(1).take(8) }
+                val tails = srcs.associateWith { groups[it].orEmpty().drop(1).take(8) }
                 val recs = mutableListOf<SonglistInfo>()
                 val maxSize = tails.values.maxOfOrNull { it.size } ?: 0
                 for (i in 0 until maxSize) {
