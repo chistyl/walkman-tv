@@ -18,6 +18,7 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import com.walkman.tv.data.store.PlaybackSnapshot
 import com.walkman.tv.data.model.Quality
 import com.walkman.tv.data.model.Track
+import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.source.ResolveOrigin
 import com.walkman.tv.source.ResolvedTrack
 import com.walkman.tv.source.SourceManager
@@ -86,6 +87,9 @@ class PlaybackController(
      *  [MAX_CONSECUTIVE_FAILURES]. Reset to 0 when any track actually reaches READY, and on a
      *  fresh user-initiated queue. Distinct from [networkRetryCount], which retries one track. */
     private var consecutiveFailures: Int = 0
+
+    /** Enabled online providers. Local files remain available regardless of provider settings. */
+    @Volatile private var enabledSources: Set<SourceID> = SourceID.onlineSources.toSet() + SourceID.LOCAL
 
     /**
      * Optional local-first URL resolver. When set, [playAt] checks it before going to
@@ -318,6 +322,44 @@ class PlaybackController(
 
     // MARK: - queue control
 
+    /** Apply global provider visibility to playback without deleting the saved queue. */
+    fun updateEnabledSources(sources: Set<SourceID>) {
+        enabledSources = sources + SourceID.LOCAL
+        val state = _state.value
+        val current = state.currentTrack ?: return
+        if (isSourceEnabled(current)) return
+
+        // The current provider was disabled: stop it immediately, then continue at the next
+        // enabled queue entry. Keep the original queue intact so re-enabling restores its entries.
+        resolveJob?.cancel()
+        lyricsJob?.cancel()
+        runCatching { player.stop() }
+        val nextIndex = findEnabledIndex(state.index, forward = true, includeCurrent = false)
+        if (nextIndex == null) {
+            _state.value = state.copy(isPlaying = false, resolving = false, positionMs = 0, error = null)
+        } else {
+            _state.value = state.copy(isPlaying = false, resolving = false, positionMs = 0)
+            playAt(nextIndex)
+        }
+    }
+
+    private fun isSourceEnabled(track: Track): Boolean =
+        track.source == SourceID.LOCAL || track.source in enabledSources
+
+    private fun findEnabledIndex(from: Int, forward: Boolean, includeCurrent: Boolean = true): Int? {
+        val queue = _state.value.queue
+        if (queue.isEmpty()) return null
+        val indices = if (forward) queue.indices else queue.indices.reversed()
+        val ordered = if (forward) {
+            indices.filter { if (includeCurrent) it >= from else it > from } +
+                indices.filter { if (includeCurrent) it < from else it <= from }
+        } else {
+            indices.filter { if (includeCurrent) it <= from else it < from } +
+                indices.filter { if (includeCurrent) it > from else it >= from }
+        }
+        return ordered.firstOrNull { isSourceEnabled(queue[it]) }
+    }
+
     fun setQueue(tracks: List<Track>, startIndex: Int = 0, autoPlay: Boolean = true) {
         if (tracks.isEmpty()) return
         consecutiveFailures = 0 // fresh user-initiated queue — start the failure streak over
@@ -352,6 +394,14 @@ class PlaybackController(
 
     fun playAt(index: Int, qualityCap: Quality? = null) {
         val track = _state.value.queue.getOrNull(index) ?: return
+        if (!isSourceEnabled(track)) {
+            val nextEnabled = findEnabledIndex(index, forward = true, includeCurrent = false)
+            if (nextEnabled != null) playAt(nextEnabled, qualityCap) else {
+                runCatching { player.stop() }
+                _state.value = _state.value.copy(isPlaying = false, resolving = false, error = null)
+            }
+            return
+        }
         val generation = ++resolveGeneration
         // Fresh attempt (no cap) clears the last-attempted memory + the network retry counter;
         // cascade retries (cap != null) keep them so [onPlayerError] can keep stepping down or
@@ -545,12 +595,11 @@ class PlaybackController(
     fun next() {
         val s = _state.value
         if (s.queue.isEmpty()) return
-        val nextIdx = when {
-            s.shuffle -> if (s.queue.size <= 1) s.index else randomOther(s.index, s.queue.size)
-            s.index + 1 < s.queue.size -> s.index + 1
-            s.repeatMode != RepeatMode.OFF -> 0
-            else -> { player.pause(); return }
-        }
+        val candidates = if (s.shuffle) s.queue.indices.shuffled() else s.queue.indices.toList()
+        val ordered = candidates.filter { it > s.index } +
+            if (s.repeatMode != RepeatMode.OFF) candidates.filter { it <= s.index } else emptyList()
+        val nextIdx = ordered.firstOrNull { isSourceEnabled(s.queue[it]) }
+        if (nextIdx == null) { player.pause(); return }
         playAt(nextIdx)
     }
 
@@ -558,11 +607,9 @@ class PlaybackController(
         val s = _state.value
         if (s.queue.isEmpty()) return
         if (player.currentPosition > 3000) { player.seekTo(0); return }
-        val prevIdx = when {
-            s.shuffle -> if (s.queue.size <= 1) s.index else randomOther(s.index, s.queue.size)
-            s.index - 1 >= 0 -> s.index - 1
-            else -> s.queue.size - 1
-        }
+        val candidates = if (s.shuffle) s.queue.indices.shuffled() else s.queue.indices.reversed().toList()
+        val ordered = candidates.filter { it < s.index } + candidates.filter { it >= s.index }
+        val prevIdx = ordered.firstOrNull { isSourceEnabled(s.queue[it]) } ?: return
         playAt(prevIdx)
     }
 
