@@ -347,17 +347,23 @@ class PlaybackController(
         track.source == SourceID.LOCAL || track.source in enabledSources
 
     private fun findEnabledIndex(from: Int, forward: Boolean, includeCurrent: Boolean = true): Int? {
-        val queue = _state.value.queue
+        val state = _state.value
+        val queue = state.queue
         if (queue.isEmpty()) return null
         val indices = if (forward) queue.indices else queue.indices.reversed()
-        val ordered = if (forward) {
-            indices.filter { if (includeCurrent) it >= from else it > from } +
-                indices.filter { if (includeCurrent) it < from else it <= from }
+        val primary = if (forward) {
+            indices.filter { if (includeCurrent) it >= from else it > from }
         } else {
-            indices.filter { if (includeCurrent) it <= from else it < from } +
-                indices.filter { if (includeCurrent) it > from else it >= from }
+            indices.filter { if (includeCurrent) it <= from else it < from }
         }
-        return ordered.firstOrNull { isSourceEnabled(queue[it]) }
+        primary.firstOrNull { isSourceEnabled(queue[it]) }?.let { return it }
+        if (state.repeatMode == RepeatMode.OFF) return null
+        val wrapped = if (forward) {
+            indices.filter { if (includeCurrent) it < from else it <= from }
+        } else {
+            indices.filter { if (includeCurrent) it > from else it >= from }
+        }
+        return wrapped.firstOrNull { isSourceEnabled(queue[it]) }
     }
 
     fun setQueue(tracks: List<Track>, startIndex: Int = 0, autoPlay: Boolean = true) {
