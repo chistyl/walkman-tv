@@ -31,7 +31,7 @@ class Boards(private val http: CatalogHttp) {
     private val cacheLock = Any()
     private val boardCache = LinkedHashMap<SourceID, CachedBoards>()
     private val trackCache = LinkedHashMap<String, CachedTracks>(32, 0.75f, true)
-    private val trackInFlight = mutableMapOf<String, CompletableDeferred<List<Track>>>()
+    private val trackInFlight = mutableMapOf<String, CompletableDeferred<List<Track>?>>()
 
     fun serviceFor(source: SourceID): BoardService? = services.firstOrNull { it.source == source }
     fun servicesAll(): List<BoardService> = services
@@ -61,7 +61,7 @@ class Boards(private val http: CatalogHttp) {
     suspend fun fetchTracks(source: SourceID, bangid: String, page: Int = 1): List<Track> {
         val key = "${source.key}|${bangid.trim()}|$page"
         var cachedResult: List<Track>? = null
-        var pending: CompletableDeferred<List<Track>>? = null
+        var pending: CompletableDeferred<List<Track>?>? = null
         var owner = false
         synchronized(cacheLock) {
             val now = android.os.SystemClock.elapsedRealtime()
@@ -80,7 +80,9 @@ class Boards(private val http: CatalogHttp) {
         }
         cachedResult?.let { return it }
         val shared = checkNotNull(pending)
-        if (!owner) return shared.await()
+        // A null result means the original owner was cancelled. Retry as a new owner instead
+        // of returning an empty chart to a still-active screen waiting on the shared request.
+        if (!owner) return shared.await() ?: fetchTracks(source, bangid, page)
 
         try {
             val result = serviceFor(source)?.fetchTracks(bangid, page).orEmpty()
@@ -95,8 +97,9 @@ class Boards(private val http: CatalogHttp) {
             shared.complete(result)
             return result
         } catch (cancelled: CancellationException) {
-            // Cancellation belongs to the requesting screen; other waiters can retry later.
-            shared.complete(emptyList())
+            // Do not turn an owner's cancellation into a successful empty result for other screens.
+            // Null is an internal retry signal; active waiters will compete to own a fresh request.
+            shared.complete(null)
             throw cancelled
         } catch (error: Exception) {
             shared.completeExceptionally(error)
