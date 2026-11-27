@@ -55,8 +55,34 @@ class Boards(private val http: CatalogHttp) {
     }
 }
 
+/** Positive-only, bounded cache for stable Kuwo artwork URLs shared by search,
+ * leaderboards and playlist details. It avoids repeating artistpicserver lookups
+ * when users revisit the same songs; first-time lookups still require network access.
+ */
+private object KuwoCoverCache {
+    private data class Entry(val url: String, val cachedAt: Long)
+    private const val TTL_MS = 6 * 60 * 60 * 1000L
+    private const val MAX_ENTRIES = 800
+    private val lock = Any()
+    private val entries = LinkedHashMap<String, Entry>(64, 0.75f, true)
+
+    fun get(songmid: String): String? = synchronized(lock) {
+        val entry = entries[songmid] ?: return@synchronized null
+        if (android.os.SystemClock.elapsedRealtime() - entry.cachedAt >= TTL_MS) {
+            entries.remove(songmid)
+            null
+        } else entry.url
+    }
+
+    fun put(songmid: String, url: String) = synchronized(lock) {
+        entries[songmid] = Entry(url, android.os.SystemClock.elapsedRealtime())
+        while (entries.size > MAX_ENTRIES) entries.remove(entries.keys.first())
+    }
+}
+
 /** Fill per-song covers via Kuwo's artistpicserver (plain-text URL body).
  * Limit parallel lookups so a 100-song chart does not flood the platform endpoint.
+ * Reuse positive cached URLs across catalog screens; failures are not cached.
  * A failed artwork lookup must not fail the chart, but coroutine cancellation must propagate.
  */
 internal suspend fun fillKuwoCovers(http: CatalogHttp, tracks: List<Track>): List<Track> = coroutineScope {
@@ -64,7 +90,9 @@ internal suspend fun fillKuwoCovers(http: CatalogHttp, tracks: List<Track>): Lis
     tracks.map { track ->
         async {
             if (!track.picURL.isNullOrBlank()) return@async track
+            KuwoCoverCache.get(track.songmid)?.let { return@async track.copy(picURL = it) }
             requests.withPermit {
+                KuwoCoverCache.get(track.songmid)?.let { return@withPermit track.copy(picURL = it) }
                 val url = "http://artistpicserver.kuwo.cn/pic.web?corp=kuwo&type=rid_pic&pictype=500&size=500&rid=${track.songmid}"
                 val pic = try {
                     http.getText(url).trim()
@@ -73,7 +101,10 @@ internal suspend fun fillKuwoCovers(http: CatalogHttp, tracks: List<Track>): Lis
                 } catch (_: Exception) {
                     null
                 }
-                if (!pic.isNullOrBlank() && pic.startsWith("http")) track.copy(picURL = pic) else track
+                if (!pic.isNullOrBlank() && pic.startsWith("http")) {
+                    KuwoCoverCache.put(track.songmid, pic)
+                    track.copy(picURL = pic)
+                } else track
             }
         }
     }.awaitAll()
