@@ -14,11 +14,15 @@ import kotlin.math.abs
  */
 class OtherSourceFinder(private val searcher: MusicSearcher) {
 
-    suspend fun findMatches(track: Track, maxIntervalDiff: Int = 5): List<Track> {
+    suspend fun findMatches(
+        track: Track,
+        maxIntervalDiff: Int = 5,
+        allowedSources: Set<SourceID> = SourceID.onlineSources.toSet(),
+    ): List<Track> {
         val query = "${track.name} ${track.singer}".trim()
         val groups: Map<SourceID, List<Track>> = coroutineScope {
             SourceID.onlineSources
-                .filter { it != track.source }
+                .filter { it != track.source && it in allowedSources }
                 .map { src ->
                     async {
                         val results = try {
