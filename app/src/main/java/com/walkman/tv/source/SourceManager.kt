@@ -84,7 +84,17 @@ class SourceManager(
         }
 
     private fun scriptsFor(source: SourceID, action: String): List<LoadedScript> =
-        _loaded.value.filter { it.capabilities.sources[source]?.actions?.contains(action) == true }
+        _loaded.value.filter {
+            source in it.script.enabledSources &&
+                it.capabilities.sources[source]?.actions?.contains(action) == true
+        }
+
+    /** Update persisted per-script provider settings without recreating its JS runtime. */
+    fun updateScriptSettings(script: UserScript) {
+        _loaded.value = _loaded.value.map { loaded ->
+            if (loaded.script.id == script.id) loaded.copy(script = script) else loaded
+        }
+    }
 
     private fun scriptFor(source: SourceID, action: String): LoadedScript? =
         scriptsFor(source, action).firstOrNull()
@@ -203,14 +213,17 @@ class SourceManager(
 
     fun availableQualities(source: SourceID): List<Quality> {
         val set = mutableSetOf<Quality>()
-        _loaded.value.forEach { it.capabilities.sources[source]?.qualities?.forEach(set::add) }
+        _loaded.value.filter { source in it.script.enabledSources }
+            .forEach { it.capabilities.sources[source]?.qualities?.forEach(set::add) }
         return Quality.entries.filter { set.contains(it) }
     }
 
     fun supportedSources(): List<SourceID> {
         val set = mutableSetOf<SourceID>()
         _loaded.value.forEach { ls ->
-            ls.capabilities.sources.forEach { (src, cap) -> if (cap.actions.contains("musicUrl")) set.add(src) }
+            ls.capabilities.sources.forEach { (src, cap) ->
+                if (src in ls.script.enabledSources && cap.actions.contains("musicUrl")) set.add(src)
+            }
         }
         return SourceID.entries.filter { set.contains(it) }
     }
