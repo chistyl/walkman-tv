@@ -69,7 +69,7 @@ class Songlists(private val http: CatalogHttp) {
         val svc = serviceFor(source) ?: return emptyList()
         val key = cacheKey(source, keyword, page)
         var cachedResult: List<SonglistInfo>? = null
-        var request: CompletableDeferred<List<SonglistInfo>>? = null
+        var request: CompletableDeferred<List<SonglistInfo>?>? = null
         var isRequestOwner = false
         synchronized(cacheLock) {
             val entry = searchCache[key]
@@ -112,7 +112,7 @@ class Songlists(private val http: CatalogHttp) {
         val key = "${list.source.key}|${list.id}"
         val now = android.os.SystemClock.elapsedRealtime()
         var cachedResult: SonglistDetail? = null
-        var request: CompletableDeferred<SonglistDetail>? = null
+        var request: CompletableDeferred<SonglistDetail?>? = null
         var isRequestOwner = false
         synchronized(cacheLock) {
             val cached = detailCache[key]
