@@ -29,6 +29,10 @@ class Songlists(private val http: CatalogHttp) {
     private val searchCache = object : LinkedHashMap<String, CachedSearch>(32, 0.75f, true) {}
     private val cacheTtlMs = 90_000L
     private val maxCacheEntries = 48
+    private data class CachedDetail(val detail: SonglistDetail, val cachedAt: Long)
+    private val detailCache = object : LinkedHashMap<String, CachedDetail>(16, 0.75f, true) {}
+    private val detailCacheTtlMs = 3 * 60_000L
+    private val maxDetailCacheEntries = 12
     private val services = listOf(
         KuwoSonglist(http), NetEaseSonglist(http), KugouSonglist(http), QQSonglist(http),
     )
@@ -63,6 +67,28 @@ class Songlists(private val http: CatalogHttp) {
         cached(key)?.let { return it }
         val result = svc.search(keyword, page)
         remember(key, result)
+        return result
+    }
+
+    /** Fetch a playlist detail once and reuse successful non-empty results on revisit. */
+    suspend fun fetchDetail(list: SonglistInfo): SonglistDetail {
+        val key = "${list.source.key}|${list.id}"
+        val now = android.os.SystemClock.elapsedRealtime()
+        synchronized(cacheLock) {
+            val cached = detailCache[key]
+            if (cached != null && now - cached.cachedAt < detailCacheTtlMs) return cached.detail
+            if (cached != null) detailCache.remove(key)
+        }
+        val service = serviceFor(list.source) ?: return SonglistDetail(list, emptyList())
+        val result = service.fetchDetail(list)
+        if (result.tracks.isNotEmpty()) {
+            synchronized(cacheLock) {
+                detailCache[key] = CachedDetail(result, android.os.SystemClock.elapsedRealtime())
+                while (detailCache.size > maxDetailCacheEntries) {
+                    detailCache.entries.iterator().run { next(); remove() }
+                }
+            }
+        }
         return result
     }
 
