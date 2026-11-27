@@ -93,7 +93,6 @@ private object KuwoCoverCache {
     internal val inFlight = mutableMapOf<String, CompletableDeferred<String?>>()
     private val entries = LinkedHashMap<String, Entry>(64, 0.75f, true)
     // One in-flight lookup per songmid; waiters share the owner's result.
-    private val inFlight = mutableMapOf<String, CompletableDeferred<String?>>()
 
     fun get(songmid: String): String? = synchronized(lock) {
         val entry = entries[songmid] ?: return@synchronized null
