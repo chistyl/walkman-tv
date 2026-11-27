@@ -52,6 +52,11 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     val visibleBoardSources = boardSources.filter { it in enabledSources }
     var source by remember { mutableStateOf(visibleBoardSources.firstOrNull() ?: SourceID.KW) }
 
+    var boards by remember { mutableStateOf<List<BoardInfo>>(emptyList()) }
+    var selected by remember { mutableStateOf<BoardInfo?>(null) }
+    var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var loadingTracks by remember { mutableStateOf(false) }
+
     LaunchedEffect(visibleBoardSources) {
         if (source !in visibleBoardSources) {
             source = visibleBoardSources.firstOrNull() ?: SourceID.KW
@@ -60,10 +65,6 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
             tracks = emptyList()
         }
     }
-    var boards by remember { mutableStateOf<List<BoardInfo>>(emptyList()) }
-    var selected by remember { mutableStateOf<BoardInfo?>(null) }
-    var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
-    var loadingTracks by remember { mutableStateOf(false) }
 
     // Preload the first chart from other providers concurrently while the current chart is shown.
     // This avoids waiting for the first network round-trip when users switch leaderboard sources.
