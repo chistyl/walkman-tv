@@ -70,14 +70,18 @@ class HotSearch(private val http: CatalogHttp) {
     private suspend fun qq(): List<String> {
         // Prefer the legacy hotkey endpoint, but fall back to QQ Music's current musicu API
         // when the legacy c.y.qq.com endpoint is blocked or no longer returns hotkey data.
-        val legacy = runCatching {
+        val legacy = try {
             val url = "https://c.y.qq.com/splcloud/fcgi-bin/gethotkey.fcg?format=json&inCharset=utf-8&outCharset=utf-8&notice=0&platform=h5&needNewCode=1"
             val json = JSONObject(http.getText(url, mapOf("Referer" to "https://y.qq.com/", "User-Agent" to ua)))
             val arr = json.optJSONObject("data")?.optJSONArray("hotkey")
             (0 until (arr?.length() ?: 0)).mapNotNull {
                 arr?.optJSONObject(it)?.optString("k")?.trim()?.ifEmpty { null }
             }
-        }.getOrDefault(emptyList())
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            emptyList()
+        }
         if (legacy.isNotEmpty()) return legacy
 
         val request = JSONObject()

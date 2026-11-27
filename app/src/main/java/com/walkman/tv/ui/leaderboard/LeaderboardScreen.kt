@@ -74,7 +74,7 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                     val firstBoard = svc.list.firstOrNull() ?: return@async
                     val key = firstBoard.source.key + ":" + firstBoard.bangid
                     if (leaderboardTrackCache[key].isNullOrEmpty()) {
-                        val result = fetchOr(emptyList()) { svc.fetchTracks(firstBoard.bangid, 1) }
+                        val result = fetchOr(emptyList()) { appContainer.boards.fetchTracks(sourceId, firstBoard.bangid, 1) }
                         if (result.isNotEmpty()) leaderboardTrackCache[key] = result
                     }
                 }
@@ -99,7 +99,7 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     LaunchedEffect(source, visibleBoardSources) {
         if (source !in visibleBoardSources) return@LaunchedEffect
         val refreshed = fetchOr(emptyList()) {
-            appContainer.boards.serviceFor(source)?.fetchBoards() ?: emptyList()
+            appContainer.boards.fetchBoards(source)
         }
         if (refreshed.isNotEmpty()) boards = refreshed
     }
@@ -112,7 +112,7 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
         tracks = cached
         loadingTracks = cached.isEmpty()
         val fresh = fetchOr(cached) {
-            appContainer.boards.serviceFor(board.source)?.fetchTracks(board.bangid, 1) ?: emptyList()
+            appContainer.boards.fetchTracks(board.source, board.bangid, 1)
         }
         if (fresh.isNotEmpty()) {
             leaderboardTrackCache[cacheKey] = fresh

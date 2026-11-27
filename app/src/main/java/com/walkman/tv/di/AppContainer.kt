@@ -216,7 +216,16 @@ class AppContainer(val appContext: Context) {
     fun bootstrap() {
         // Bring up the LAN HTTP server (best-effort; QR features just won't work if it fails).
         if (localServer == null) {
-            localServer = LocalServer.start(events, hotSearchJson = { hotSearchJsonBlocking() })
+            localServer = LocalServer.start(
+                events,
+                hotSearchJson = { hotSearchJsonBlocking() },
+                diagnosticsText = {
+                    java.io.File(appContext.filesDir, "playback-diagnostics.txt")
+                        .takeIf { it.isFile && it.length() > 0L }
+                        ?.readText()
+                        ?.takeLast(100_000)
+                },
+            )
         }
         appScope.launch {
             settingsStore.loadAll()

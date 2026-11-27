@@ -94,7 +94,13 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
 
     // Load hot-search words once; disabled sources are filtered from the visible columns.
     LaunchedEffect(Unit) {
-        hotColumns = runCatching { appContainer.hotSearch.fetchAll() }.getOrDefault(emptyList())
+        hotColumns = try {
+            appContainer.hotSearch.fetchAll()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
     fun runSearch(searchText: String = queryValue.text) {
@@ -131,7 +137,7 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                 launch {
                     val result = try {
                         if (f == null) appContainer.songlists.searchAll(q, enabledSources = enabledSources)
-                        else if (f in enabledSources) appContainer.songlists.serviceFor(f)?.search(q, 1) ?: emptyList() else emptyList()
+                        else if (f in enabledSources) appContainer.songlists.search(f, q, 1) else emptyList()
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {
@@ -242,7 +248,13 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
             onPickSonglist = { info ->
                 scope.launch {
                     val svc = appContainer.songlists.serviceFor(info.source) ?: return@launch
-                    val detail = runCatching { svc.fetchDetail(info) }.getOrNull()
+                    val detail = try {
+                        appContainer.songlists.fetchDetail(info)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        null
+                    }
                     val ts = detail?.tracks.orEmpty()
                     if (ts.isNotEmpty()) {
                         playList(ts, 0); onOpenPlayer()

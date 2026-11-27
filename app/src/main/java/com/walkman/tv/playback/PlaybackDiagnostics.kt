@@ -57,7 +57,7 @@ object PlaybackDiagnostics {
  }
  private fun captureLogcat(file: File) {
   val p = runCatching { ProcessBuilder("logcat", "-d", "-t", "350").redirectErrorStream(true).start() }.getOrNull() ?: return
-  val lines = runCatching { p.inputStream.bufferedReader().useLines { seq -> seq.filter { line -> val l = line.lowercase(Locale.ROOT); listOf("fatal exception", "fatal signal", "am_crash", "androidruntime", "mediacodec", "audiotrack", "exoplayer", "playbackcontroller", "playbackservice", "outofmemory").any { l.contains(it) } }.toList() } }.getOrDefault(emptyList())
+  val lines = runCatching { p.inputStream.bufferedReader().useLines { seq -> seq.filter { line -> val l = line.lowercase(Locale.ROOT); listOf("fatal exception", "fatal signal", "am_crash", "androidruntime", "mediacodec", "audiotrack", "exoplayer", "playbackcontroller", "playbackservice", "sourcemanager", "othersourcefinder", "alternative_search", "alternative_resolve", "script_resolve", "builtin_fallback", "outofmemory").any { l.contains(it) } }.toList() } }.getOrDefault(emptyList())
   runCatching { p.destroy() }
   if (lines.isNotEmpty()) append(file, "---- 系統播放器／崩潰相關紀錄 ----\n" + lines.takeLast(120).joinToString("\n", postfix = "\n"))
  }

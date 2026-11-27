@@ -1,15 +1,18 @@
 package com.walkman.tv.source.catalog
 
+import android.os.SystemClock
 import com.walkman.tv.data.model.Quality
 import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.data.model.Track
 import com.walkman.tv.source.MusicSearcher
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.LinkedHashMap
 
 interface SongCatalog {
     val source: SourceID
@@ -31,14 +34,75 @@ class Catalogs(private val http: CatalogHttp) : MusicSearcher {
 
     fun serviceFor(source: SourceID): SongCatalog? = services[source]
 
-    override suspend fun search(source: SourceID, keyword: String, page: Int): List<Track> =
-        try {
-            services[source]?.search(keyword, page) ?: emptyList()
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            emptyList()
+    // Short-lived in-memory cache avoids repeating provider parsing/enrichment on revisits.
+    private data class CachedSearch(val tracks: List<Track>, val cachedAt: Long)
+    private val searchCache = LinkedHashMap<String, CachedSearch>(32, 0.75f, true)
+    private val cacheLock = Any()
+    private val searchInFlight = mutableMapOf<String, CompletableDeferred<List<Track>?>>()
+
+    private fun cached(key: String): List<Track>? = synchronized(cacheLock) {
+        val entry = searchCache[key] ?: return@synchronized null
+        if (SystemClock.elapsedRealtime() - entry.cachedAt >= SEARCH_CACHE_TTL_MS) {
+            searchCache.remove(key)
+            null
+        } else entry.tracks
+    }
+
+    private fun remember(key: String, tracks: List<Track>) {
+        if (tracks.isEmpty()) return // Never cache transient failures or empty responses.
+        synchronized(cacheLock) {
+            searchCache[key] = CachedSearch(tracks, SystemClock.elapsedRealtime())
+            while (searchCache.size > SEARCH_CACHE_MAX_ENTRIES) {
+                val oldest = searchCache.entries.iterator()
+                if (oldest.hasNext()) { oldest.next(); oldest.remove() } else break
+            }
         }
+    }
+
+    override suspend fun search(source: SourceID, keyword: String, page: Int): List<Track> {
+        val key = source.key + "|" + keyword.trim() + "|" + page
+        var cachedResult: List<Track>? = null
+        var request: CompletableDeferred<List<Track>?>? = null
+        var isRequestOwner = false
+        synchronized(cacheLock) {
+            val entry = searchCache[key]
+            if (entry != null && SystemClock.elapsedRealtime() - entry.cachedAt < SEARCH_CACHE_TTL_MS) {
+                cachedResult = entry.tracks
+            } else {
+                if (entry != null) searchCache.remove(key)
+                request = searchInFlight[key]
+                if (request == null) {
+                    request = CompletableDeferred()
+                    searchInFlight[key] = request!!
+                    isRequestOwner = true
+                }
+            }
+        }
+        cachedResult?.let { return it }
+        val sharedRequest = checkNotNull(request)
+        if (!isRequestOwner) return sharedRequest.await() ?: search(source, keyword, page)
+
+        try {
+            val result = try {
+                services[source]?.search(keyword, page) ?: emptyList()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                emptyList()
+            }
+            remember(key, result)
+            sharedRequest.complete(result)
+            return result
+        } catch (cancelled: CancellationException) {
+            // Do not cancel independent callers waiting on this request; let them retry later.
+            sharedRequest.complete(null)
+            throw cancelled
+        } finally {
+            synchronized(cacheLock) {
+                if (searchInFlight[key] === sharedRequest) searchInFlight.remove(key)
+            }
+        }
+    }
 
     /** Search every platform and interleave results (kw, wy, kg, tx, mg round-robin). */
     suspend fun searchAll(
@@ -46,7 +110,10 @@ class Catalogs(private val http: CatalogHttp) : MusicSearcher {
         page: Int = 1,
         enabledSources: Set<SourceID> = SourceID.onlineSources.toSet(),
     ): List<Track> {
-        val groups: Map<SourceID, List<Track>> = coroutineScope {
+        val sourceKey = enabledSources.map { it.key }.sorted().joinToString(",")
+        val cacheKey = "all|" + keyword.trim() + "|" + page + "|" + sourceKey
+        cached(cacheKey)?.let { return it }
+        val results = coroutineScope {
             services.values.filter { it.source in enabledSources }.map { svc ->
                 async {
                     val result = try {
@@ -54,13 +121,24 @@ class Catalogs(private val http: CatalogHttp) : MusicSearcher {
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (_: Exception) {
-                        emptyList()
+                        null // A failed provider must not be mistaken for a successful empty response.
                     }
                     svc.source to result
                 }
-            }.awaitAll().toMap()
+            }.awaitAll()
         }
-        return interleave(groups)
+        val groups = results.mapNotNull { (source, tracks) ->
+            tracks?.let { source to it }
+        }.toMap()
+        val merged = interleave(groups)
+        // Cache only complete multi-provider responses. Partial failures can recover on retry.
+        if (results.all { it.second != null }) remember(cacheKey, merged)
+        return merged
+    }
+
+    private companion object {
+        const val SEARCH_CACHE_TTL_MS = 90_000L
+        const val SEARCH_CACHE_MAX_ENTRIES = 48
     }
 
     private fun interleave(groups: Map<SourceID, List<Track>>): List<Track> {
@@ -128,7 +206,7 @@ private class KuwoSearch(private val http: CatalogHttp) : SongCatalog {
             source = SourceID.KW,
             songmid = songmid,
             duration = d.optString("DURATION").toIntOrNull(),
-            picURL = null,
+            picURL = kuwoCoverUrl(d),
             qualities = qs,
             extras = extras,
         )

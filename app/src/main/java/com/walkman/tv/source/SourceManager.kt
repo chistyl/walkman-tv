@@ -1,5 +1,6 @@
 package com.walkman.tv.source
 
+import android.os.SystemClock
 import android.util.Log
 import com.walkman.tv.data.model.Quality
 import com.walkman.tv.data.model.ScriptCapabilities
@@ -110,7 +111,10 @@ class SourceManager(
             val cascade = qualityCascade(first, track.qualities.toSet(), scriptQs)
             for ((idx, q) in cascade.withIndex()) {
                 var timedOut = false
-                attempt { resolveViaScript(track, q, ls) }
+                val scriptResolveStartedAt = SystemClock.elapsedRealtime()
+                val scriptResult = attempt { resolveViaScript(track, q, ls) }
+                Log.d(TAG, "script_resolve source=${track.source.key} quality=${q.key} elapsed_ms=${SystemClock.elapsedRealtime() - scriptResolveStartedAt} success=${scriptResult.isSuccess}")
+                scriptResult
                     .onSuccess { url ->
                         val warn = when {
                             scriptIdx > 0 -> "已切換至音源「${ls.script.name}」"
@@ -133,11 +137,14 @@ class SourceManager(
 
         if (fallbackEnabled) {
             val qForFallback = if (track.qualities.contains(preferred)) preferred else (track.qualities.firstOrNull() ?: Quality.K128)
-            attempt {
+            val fallbackStartedAt = SystemClock.elapsedRealtime()
+            val fallbackResult = attempt {
                 builtIn.resolve(track, qForFallback).let { result ->
                     result.copy(url = PlayUrlValidator.requireHttpUrl(result.url))
                 }
-            }.getOrNull()?.let { res ->
+            }
+            Log.d(TAG, "builtin_fallback source=${track.source.key} quality=${qForFallback.key} elapsed_ms=${SystemClock.elapsedRealtime() - fallbackStartedAt} success=${fallbackResult.isSuccess}")
+            fallbackResult.getOrNull()?.let { res ->
                 return ResolvedTrack(res.url, ResolveOrigin.DirectFallback, qForFallback, res.warning)
             }
         }
@@ -156,7 +163,9 @@ class SourceManager(
     }
 
     private suspend fun tryOtherSources(track: Track, preferred: Quality): ResolvedTrack? {
+        val searchStartedAt = SystemClock.elapsedRealtime()
         val alternatives = otherSourceFinder.findMatches(track, allowedSources = enabledSources)
+        Log.d(TAG, "alternative_search_total_ms=${SystemClock.elapsedRealtime() - searchStartedAt} candidate_count=${alternatives.size}")
         if (alternatives.isEmpty()) return null
         for (alt in alternatives.take(5)) {
             val altLS = scriptFor(alt.source, "musicUrl") ?: continue
@@ -165,7 +174,10 @@ class SourceManager(
                 alt.qualities.toSet(),
                 altLS.capabilities.sources[alt.source]?.qualities?.toSet() ?: emptySet(),
             )
-            attempt { resolveViaScript(alt, q, altLS) }.getOrNull()?.let { url ->
+            val resolveStartedAt = SystemClock.elapsedRealtime()
+            val resolvedUrl = attempt { resolveViaScript(alt, q, altLS) }.getOrNull()
+            Log.d(TAG, "alternative_resolve source=${alt.source.key} quality=${q.key} elapsed_ms=${SystemClock.elapsedRealtime() - resolveStartedAt} success=${resolvedUrl != null}")
+            resolvedUrl?.let { url ->
                 val warn = "原本的 ${track.source.displayName} 音源無法取得播放網址，已切換至 ${alt.source.displayName}"
                 return ResolvedTrack(url, ResolveOrigin.OtherSource(alt.source), q, warn)
             }

@@ -3,6 +3,7 @@ package com.walkman.tv.di
 import android.util.Log
 import fi.iki.elonen.NanoHTTPD
 import java.io.File
+import java.net.InetAddress
 
 /**
  * Tiny in-app HTTP server that exposes mobile-friendly forms over the LAN so the user's phone
@@ -25,6 +26,7 @@ class LocalServer private constructor(
     // Returns hot-search columns as a JSON string: [{"source":"kw","name":"酷我","words":[...]}].
     // Supplied by AppContainer; called on NanoHTTPD's worker thread (blocking is fine here).
     private val hotSearchJson: () -> String,
+    private val diagnosticsText: () -> String?,
     port: Int,
 ) : NanoHTTPD(port) {
 
@@ -55,6 +57,7 @@ class LocalServer private constructor(
 
     private fun handleGet(session: IHTTPSession): Response = when (session.uri.trimEnd('/')) {
         "/api/hotsearch" -> json(runCatching { hotSearchJson() }.getOrDefault("[]"))
+        "/api/diagnostics" -> diagnosticsDownload(session)
         "/search" -> html(SEARCH_HTML)
         "/script" -> html(SCRIPT_HTML)
         "/playlist-name" -> html(PLAYLIST_NAME_HTML)
@@ -108,6 +111,37 @@ class LocalServer private constructor(
     private fun json(body: String): Response =
         newFixedLengthResponse(Response.Status.OK, "application/json; charset=utf-8", body)
 
+    private fun diagnosticsDownload(session: IHTTPSession): Response {
+        if (!isPrivateLanClient(session.remoteIpAddress)) {
+            return newFixedLengthResponse(Response.Status.FORBIDDEN, MIME_PLAINTEXT, "僅允許區域網路裝置下載")
+        }
+        val report = runCatching { diagnosticsText() }.getOrNull()
+            ?: return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "尚無播放診斷紀錄")
+        val response = newFixedLengthResponse(Response.Status.OK, "text/plain; charset=utf-8", report)
+        response.addHeader("Content-Disposition", "attachment; filename=walkman-tv-playback-diagnostics.txt")
+        response.addHeader("Cache-Control", "no-store")
+        return response
+    }
+
+    private fun isPrivateLanClient(remoteIp: String): Boolean = runCatching {
+        val address = InetAddress.getByName(remoteIp)
+        val bytes = address.address
+        val first = bytes[0].toInt() and 0xff
+        val second = bytes[1].toInt() and 0xff
+        val ipv4Private = bytes.size == 4 && (
+            first == 10 ||
+            (first == 172 && second in 16..31) ||
+            (first == 192 && second == 168) ||
+            first == 127 ||
+            (first == 169 && second == 254)
+        )
+        val ipv6Private = bytes.size == 16 && (
+            address.isLoopbackAddress || address.isLinkLocalAddress ||
+            address.isSiteLocalAddress || (first and 0xfe) == 0xfc
+        )
+        ipv4Private || ipv6Private
+    }.getOrDefault(false)
+
     private fun notFound(): Response =
         newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found")
 
@@ -115,9 +149,13 @@ class LocalServer private constructor(
         private const val TAG = "LocalServer"
 
         /** Start the local server, trying a small range of ports in case 8765 is busy. */
-        fun start(events: AppEvents, hotSearchJson: () -> String = { "[]" }): LocalServer? {
+        fun start(
+            events: AppEvents,
+            hotSearchJson: () -> String = { "[]" },
+            diagnosticsText: () -> String? = { null },
+        ): LocalServer? {
             for (port in listOf(8765, 8766, 8767, 8768)) {
-                val server = LocalServer(events, hotSearchJson, port)
+                val server = LocalServer(events, hotSearchJson, diagnosticsText, port)
                 if (server.tryStart()) return server
             }
             return null

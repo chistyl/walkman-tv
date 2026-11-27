@@ -236,6 +236,8 @@ class PlaybackController(
 
     /** Invalidates late resolver results after a newer track/source selection. */
     @Volatile private var resolveGeneration: Long = 0
+    /** Monotonic timestamps for playback pipeline diagnostics; never include media URLs. */
+    @Volatile private var prepareStartedAtMs: Long = 0L
 
     init {
         player.addListener(object : Player.Listener {
@@ -253,6 +255,14 @@ class PlaybackController(
                 if (playbackState == Player.STATE_READY) {
                     // A track actually started — clear the consecutive-failure streak.
                     consecutiveFailures = 0
+                    val preparedAt = prepareStartedAtMs
+                    if (preparedAt > 0L) {
+                        android.util.Log.i(
+                            "PlaybackController",
+                            "player_ready_ms=${android.os.SystemClock.elapsedRealtime() - preparedAt}",
+                        )
+                        prepareStartedAtMs = 0L
+                    }
                     _state.value = _state.value.copy(durationMs = player.duration.coerceAtLeast(0))
                 }
             }
@@ -468,7 +478,13 @@ class PlaybackController(
                 )
             } else {
                 try {
-                    Result.success(sources.resolveMusicURL(track, effectivePreferred))
+                    val resolveStartedAt = android.os.SystemClock.elapsedRealtime()
+                    val result = sources.resolveMusicURL(track, effectivePreferred)
+                    android.util.Log.i(
+                        "PlaybackController",
+                        "resolve_ms=${android.os.SystemClock.elapsedRealtime() - resolveStartedAt}, source=${track.source.key}, quality=${result.quality.key}, origin=${result.origin::class.simpleName}",
+                    )
+                    Result.success(result)
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (error: Exception) {
@@ -507,6 +523,7 @@ class PlaybackController(
                 // next track gets a fresh budget.
                 networkRetryCount = 0
                 player.setMediaItem(item)
+                prepareStartedAtMs = android.os.SystemClock.elapsedRealtime()
                 player.prepare()
                 // Fire the file-header probe so the badge can later clamp the claimed tier
                 // down if the bytes turn out to be lower-grade than the script reported.

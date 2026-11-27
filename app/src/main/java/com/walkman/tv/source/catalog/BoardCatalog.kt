@@ -10,6 +10,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import org.json.JSONObject
 
 interface BoardService {
@@ -21,33 +22,211 @@ interface BoardService {
 
 /** Leaderboards via each platform's own API, ported from iOS `Boards`. */
 class Boards(private val http: CatalogHttp) {
+    private data class CachedBoards(val items: List<BoardInfo>, val cachedAt: Long)
+    private data class CachedTracks(val items: List<Track>, val cachedAt: Long)
+
     private val services: List<BoardService> = listOf(
         KuwoBoard(http), NetEaseBoard(http), KugouBoard(http), QQBoard(http),
     )
+    private val cacheLock = Any()
+    private val boardCache = LinkedHashMap<SourceID, CachedBoards>()
+    private val trackCache = LinkedHashMap<String, CachedTracks>(32, 0.75f, true)
+    private val trackInFlight = mutableMapOf<String, CompletableDeferred<List<Track>?>>()
 
     fun serviceFor(source: SourceID): BoardService? = services.firstOrNull { it.source == source }
     fun servicesAll(): List<BoardService> = services
+
+    /** Reuse refreshed board names/covers when revisiting a provider; keep provider fallback data on failure. */
+    suspend fun fetchBoards(source: SourceID): List<BoardInfo> {
+        val now = android.os.SystemClock.elapsedRealtime()
+        synchronized(cacheLock) {
+            val cached = boardCache[source]
+            if (cached != null && now - cached.cachedAt < BOARD_CACHE_TTL_MS) return cached.items
+            if (cached != null) boardCache.remove(source)
+        }
+        val result = serviceFor(source)?.fetchBoards().orEmpty()
+        if (result.isNotEmpty()) {
+            synchronized(cacheLock) {
+                boardCache[source] = CachedBoards(result.toList(), android.os.SystemClock.elapsedRealtime())
+                while (boardCache.size > services.size) boardCache.remove(boardCache.keys.first())
+            }
+        }
+        return result
+    }
+
+    /**
+     * Share chart-song requests between leaderboard preloading and the active chart screen.
+     * Only non-empty metadata results are cached; playback URLs are never part of Track.
+     */
+    suspend fun fetchTracks(source: SourceID, bangid: String, page: Int = 1): List<Track> {
+        val key = "${source.key}|${bangid.trim()}|$page"
+        var cachedResult: List<Track>? = null
+        var pending: CompletableDeferred<List<Track>?>? = null
+        var owner = false
+        synchronized(cacheLock) {
+            val now = android.os.SystemClock.elapsedRealtime()
+            val cached = trackCache[key]
+            if (cached != null && now - cached.cachedAt < TRACK_CACHE_TTL_MS) {
+                cachedResult = cached.items
+            } else {
+                if (cached != null) trackCache.remove(key)
+                pending = trackInFlight[key]
+                if (pending == null) {
+                    pending = CompletableDeferred()
+                    trackInFlight[key] = pending!!
+                    owner = true
+                }
+            }
+        }
+        cachedResult?.let { return it }
+        val shared = checkNotNull(pending)
+        // A null result means the original owner was cancelled. Retry as a new owner instead
+        // of returning an empty chart to a still-active screen waiting on the shared request.
+        if (!owner) return shared.await() ?: fetchTracks(source, bangid, page)
+
+        try {
+            val result = serviceFor(source)?.fetchTracks(bangid, page).orEmpty()
+            if (result.isNotEmpty()) {
+                synchronized(cacheLock) {
+                    trackCache[key] = CachedTracks(result.toList(), android.os.SystemClock.elapsedRealtime())
+                    while (trackCache.size > TRACK_CACHE_MAX_ENTRIES) {
+                        trackCache.remove(trackCache.keys.first())
+                    }
+                }
+            }
+            shared.complete(result)
+            return result
+        } catch (cancelled: CancellationException) {
+            // Do not turn an owner's cancellation into a successful empty result for other screens.
+            // Null is an internal retry signal; active waiters will compete to own a fresh request.
+            shared.complete(null)
+            throw cancelled
+        } catch (error: Exception) {
+            shared.completeExceptionally(error)
+            throw error
+        } finally {
+            synchronized(cacheLock) {
+                if (trackInFlight[key] === shared) trackInFlight.remove(key)
+            }
+        }
+    }
+
+    private companion object {
+        const val BOARD_CACHE_TTL_MS = 3 * 60 * 1000L
+        const val TRACK_CACHE_TTL_MS = 3 * 60 * 1000L
+        const val TRACK_CACHE_MAX_ENTRIES = 24
+    }
+}
+
+/** Positive-only, bounded cache for stable Kuwo artwork URLs shared by search,
+ * leaderboards and playlist details. It avoids repeating artistpicserver lookups
+ * when users revisit the same songs; first-time lookups still require network access.
+ */
+/** Build a Kuwo album-cover URL directly from catalog metadata when the API provides it.
+ * This avoids an extra artistpicserver request for tracks that already include artwork.
+ * Short paths such as "120/98/24/xxx.jpg" are normalized to Kuwo's albumcover CDN.
+ */
+internal fun kuwoCoverUrl(d: JSONObject?): String? {
+    d ?: return null
+    val directKeys = listOf("pic", "PIC", "albumpic", "ALBUMPIC", "img")
+    for (key in directKeys) {
+        val value = d.optString(key).trim()
+        if (value.startsWith("https://") || value.startsWith("http://")) return value
+    }
+    val short = listOf("web_albumpic_short", "web_album_short")
+        .firstNotNullOfOrNull { key -> d.optString(key).trim().takeIf { it.isNotEmpty() && it != "null" } }
+        ?: return null
+    if (short.startsWith("https://") || short.startsWith("http://")) return short
+    val firstSlash = short.indexOf('/')
+    if (firstSlash < 0 || firstSlash == short.lastIndex) return null
+    val path = short.substring(firstSlash).trimStart('/')
+    if (path.isBlank()) return null
+    return "https://img4.kuwo.cn/star/albumcover/500/$path"
+}
+
+private object KuwoCoverCache {
+    private data class Entry(val url: String, val cachedAt: Long)
+    private const val TTL_MS = 6 * 60 * 60 * 1000L
+    private const val MAX_ENTRIES = 800
+    // Shared by every catalog screen/fetch invocation, not recreated per playlist or board.
+    // This keeps total first-time Kuwo artwork traffic bounded across concurrent screens.
+    val requests = Semaphore(6)
+    internal val lock = Any()
+    internal val inFlight = mutableMapOf<String, CompletableDeferred<String?>>()
+    private val entries = LinkedHashMap<String, Entry>(64, 0.75f, true)
+    // One in-flight lookup per songmid; waiters share the owner's result.
+
+    fun get(songmid: String): String? = synchronized(lock) {
+        val entry = entries[songmid] ?: return@synchronized null
+        if (android.os.SystemClock.elapsedRealtime() - entry.cachedAt >= TTL_MS) {
+            entries.remove(songmid)
+            null
+        } else entry.url
+    }
+
+    fun put(songmid: String, url: String) = synchronized(lock) {
+        entries[songmid] = Entry(url, android.os.SystemClock.elapsedRealtime())
+        while (entries.size > MAX_ENTRIES) entries.remove(entries.keys.first())
+    }
 }
 
 /** Fill per-song covers via Kuwo's artistpicserver (plain-text URL body).
  * Limit parallel lookups so a 100-song chart does not flood the platform endpoint.
+ * Reuse positive cached URLs across catalog screens; failures are not cached.
  * A failed artwork lookup must not fail the chart, but coroutine cancellation must propagate.
  */
 internal suspend fun fillKuwoCovers(http: CatalogHttp, tracks: List<Track>): List<Track> = coroutineScope {
-    val requests = Semaphore(6)
     tracks.map { track ->
         async {
             if (!track.picURL.isNullOrBlank()) return@async track
-            requests.withPermit {
-                val url = "http://artistpicserver.kuwo.cn/pic.web?corp=kuwo&type=rid_pic&pictype=500&size=500&rid=${track.songmid}"
-                val pic = try {
-                    http.getText(url).trim()
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (_: Exception) {
-                    null
+            KuwoCoverCache.get(track.songmid)?.let { return@async track.copy(picURL = it) }
+
+            // Register before waiting for the global semaphore so duplicate songs do not
+            // occupy multiple permits or issue duplicate network requests.
+            val (pending, isOwner) = synchronized(KuwoCoverCache.lock) {
+                val existing = KuwoCoverCache.inFlight[track.songmid]
+                if (existing != null) existing to false
+                else CompletableDeferred<String?>().also {
+                    KuwoCoverCache.inFlight[track.songmid] = it
+                } to true
+            }
+
+            if (!isOwner) {
+                val sharedUrl = pending.await()
+                return@async if (!sharedUrl.isNullOrBlank()) track.copy(picURL = sharedUrl) else track
+            }
+
+            try {
+                val resolved = KuwoCoverCache.requests.withPermit {
+                    KuwoCoverCache.get(track.songmid)?.let { return@withPermit it }
+                    val url = "http://artistpicserver.kuwo.cn/pic.web?corp=kuwo&type=rid_pic&pictype=500&size=500&rid=${track.songmid}"
+                    val pic = try {
+                        http.getText(url).trim()
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        null
+                    }
+                    if (!pic.isNullOrBlank() && pic.startsWith("http")) {
+                        KuwoCoverCache.put(track.songmid, pic)
+                        pic
+                    } else null
                 }
-                if (!pic.isNullOrBlank() && pic.startsWith("http")) track.copy(picURL = pic) else track
+                pending.complete(resolved)
+                if (!resolved.isNullOrBlank()) track.copy(picURL = resolved) else track
+            } catch (cancelled: CancellationException) {
+                // Release waiters with an empty result; cancellation belongs to the owner only.
+                pending.complete(null)
+                throw cancelled
+            } catch (_: Exception) {
+                pending.complete(null)
+                track
+            } finally {
+                synchronized(KuwoCoverCache.lock) {
+                    if (KuwoCoverCache.inFlight[track.songmid] === pending) {
+                        KuwoCoverCache.inFlight.remove(track.songmid)
+                    }
+                }
             }
         }
     }.awaitAll()
@@ -123,7 +302,7 @@ private class KuwoBoard(private val http: CatalogHttp) : BoardService {
             source = SourceID.KW,
             songmid = id,
             duration = duration?.takeIf { it > 0 },
-            picURL = null,
+            picURL = kuwoCoverUrl(d),
             qualities = qs,
             extras = extras,
         )

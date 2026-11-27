@@ -11,6 +11,8 @@ import com.walkman.tv.data.model.Track
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import org.json.JSONObject
 
 interface SonglistService {
@@ -24,20 +26,154 @@ interface SonglistService {
 
 /** Songlist (歌单) plaza via each platform's API, ported from iOS `Songlists`. */
 class Songlists(private val http: CatalogHttp) {
+    private data class CachedSearch(val items: List<SonglistInfo>, val cachedAt: Long)
+    private val cacheLock = Any()
+    private val searchCache = object : LinkedHashMap<String, CachedSearch>(32, 0.75f, true) {}
+    private val cacheTtlMs = 90_000L
+    private val maxCacheEntries = 48
+    private data class CachedDetail(val detail: SonglistDetail, val cachedAt: Long)
+    private val detailCache = object : LinkedHashMap<String, CachedDetail>(16, 0.75f, true) {}
+    private val detailInFlight = mutableMapOf<String, CompletableDeferred<SonglistDetail?>>()
+    private val searchInFlight = mutableMapOf<String, CompletableDeferred<List<SonglistInfo>?>>()
+    private val detailCacheTtlMs = 3 * 60_000L
+    private val maxDetailCacheEntries = 12
     private val services = listOf(
         KuwoSonglist(http), NetEaseSonglist(http), KugouSonglist(http), QQSonglist(http),
     )
     fun serviceFor(source: SourceID): SonglistService? = services.firstOrNull { it.source == source }
     fun servicesAll(): List<SonglistService> = services
 
-    /** Search every platform's playlists in parallel; results are concatenated platform-by-platform. */
+    private fun cacheKey(source: SourceID, keyword: String, page: Int) =
+        "${source.key}|${keyword.trim()}|$page"
+
+    private fun cached(key: String): List<SonglistInfo>? = synchronized(cacheLock) {
+        val entry = searchCache[key] ?: return@synchronized null
+        if (android.os.SystemClock.elapsedRealtime() - entry.cachedAt >= cacheTtlMs) {
+            searchCache.remove(key)
+            null
+        } else entry.items
+    }
+
+    private fun remember(key: String, items: List<SonglistInfo>) {
+        if (items.isEmpty()) return
+        synchronized(cacheLock) {
+            searchCache[key] = CachedSearch(items.toList(), android.os.SystemClock.elapsedRealtime())
+            while (searchCache.size > maxCacheEntries) {
+                searchCache.entries.iterator().run { next(); remove() }
+            }
+        }
+    }
+
+    /** Search one provider; only non-empty responses are cached, so empty/error responses retry. */
+    suspend fun search(source: SourceID, keyword: String, page: Int = 1): List<SonglistInfo> {
+        val svc = serviceFor(source) ?: return emptyList()
+        val key = cacheKey(source, keyword, page)
+        var cachedResult: List<SonglistInfo>? = null
+        var request: CompletableDeferred<List<SonglistInfo>?>? = null
+        var isRequestOwner = false
+        synchronized(cacheLock) {
+            val entry = searchCache[key]
+            if (entry != null && android.os.SystemClock.elapsedRealtime() - entry.cachedAt < cacheTtlMs) {
+                cachedResult = entry.items
+            } else {
+                if (entry != null) searchCache.remove(key)
+                request = searchInFlight[key]
+                if (request == null) {
+                    request = CompletableDeferred()
+                    searchInFlight[key] = request!!
+                    isRequestOwner = true
+                }
+            }
+        }
+        cachedResult?.let { return it }
+        val sharedRequest = checkNotNull(request)
+        if (!isRequestOwner) return sharedRequest.await() ?: search(source, keyword, page)
+
+        try {
+            val result = svc.search(keyword, page)
+            remember(key, result)
+            sharedRequest.complete(result)
+            return result
+        } catch (cancelled: CancellationException) {
+            sharedRequest.complete(null)
+            throw cancelled
+        } catch (error: Exception) {
+            sharedRequest.completeExceptionally(error)
+            throw error
+        } finally {
+            synchronized(cacheLock) {
+                if (searchInFlight[key] === sharedRequest) searchInFlight.remove(key)
+            }
+        }
+    }
+
+    /** Fetch a playlist detail once; concurrent callers for the same list share the in-flight request. */
+    suspend fun fetchDetail(list: SonglistInfo): SonglistDetail {
+        val key = "${list.source.key}|${list.id}"
+        val now = android.os.SystemClock.elapsedRealtime()
+        var cachedResult: SonglistDetail? = null
+        var request: CompletableDeferred<SonglistDetail?>? = null
+        var isRequestOwner = false
+        synchronized(cacheLock) {
+            val cached = detailCache[key]
+            if (cached != null && now - cached.cachedAt < detailCacheTtlMs) {
+                cachedResult = cached.detail
+            } else {
+                if (cached != null) detailCache.remove(key)
+                request = detailInFlight[key]
+                if (request == null) {
+                    request = CompletableDeferred()
+                    detailInFlight[key] = request!!
+                    isRequestOwner = true
+                }
+            }
+        }
+        cachedResult?.let { return it }
+        val sharedRequest = checkNotNull(request)
+        if (!isRequestOwner) return sharedRequest.await() ?: fetchDetail(list)
+
+        try {
+            val service = serviceFor(list.source)
+            val result = if (service == null) SonglistDetail(list, emptyList()) else service.fetchDetail(list)
+            if (result.tracks.isNotEmpty()) {
+                synchronized(cacheLock) {
+                    detailCache[key] = CachedDetail(result, android.os.SystemClock.elapsedRealtime())
+                    while (detailCache.size > maxDetailCacheEntries) {
+                        detailCache.entries.iterator().run { next(); remove() }
+                    }
+                }
+            }
+            sharedRequest.complete(result)
+            return result
+        } catch (cancelled: CancellationException) {
+            sharedRequest.complete(null)
+            throw cancelled
+        } catch (error: Throwable) {
+            sharedRequest.completeExceptionally(error)
+            throw error
+        } finally {
+            synchronized(cacheLock) {
+                if (detailInFlight[key] === sharedRequest) detailInFlight.remove(key)
+            }
+        }
+    }
+
+    /** Search every platform in parallel. Provider-level caching lets failed/empty providers retry. */
     suspend fun searchAll(
         keyword: String,
         page: Int = 1,
         enabledSources: Set<SourceID> = SourceID.onlineSources.toSet(),
     ): List<SonglistInfo> = coroutineScope {
         services.filter { it.source in enabledSources }.map { svc ->
-            async { runCatching { svc.search(keyword, page) }.getOrDefault(emptyList()) }
+            async {
+                try {
+                    search(svc.source, keyword, page)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    emptyList()
+                }
+            }
         }.awaitAll().flatten()
     }
 }
@@ -122,8 +258,13 @@ private class KuwoSonglist(private val http: CatalogHttp) : SonglistService {
 
     override suspend fun fetchDetail(list: SonglistInfo): SonglistDetail {
         val url = "http://nplserver.kuwo.cn/pl.svc?op=getlistinfo&pid=${list.id}&pn=0&rn=300&encode=utf8&keyset=pl2012&identity=kuwo&pcmp4=1&vipver=MUSIC_9.0.5.0_W1&newver=1"
-        val json = runCatching { JSONObject(http.getText(url, mapOf("User-Agent" to UA))) }.getOrNull()
-            ?: return SonglistDetail(list, emptyList())
+        val json = try {
+            JSONObject(http.getText(url, mapOf("User-Agent" to UA)))
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            return SonglistDetail(list, emptyList())
+        }
         if (json.optString("result") != "ok") return SonglistDetail(list, emptyList())
         val ml = json.optJSONArray("musiclist") ?: return SonglistDetail(list, emptyList())
         val raw = (0 until ml.length()).mapNotNull { build(ml.optJSONObject(it)) }
@@ -159,7 +300,7 @@ private class KuwoSonglist(private val http: CatalogHttp) : SonglistService {
             source = SourceID.KW,
             songmid = id,
             duration = d.optString("duration").toIntOrNull()?.takeIf { it > 0 },
-            picURL = null,
+            picURL = kuwoCoverUrl(d),
             qualities = qs,
             extras = extras,
         )
