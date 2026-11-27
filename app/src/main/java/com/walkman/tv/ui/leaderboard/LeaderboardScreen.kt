@@ -59,7 +59,14 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     // Preload the first chart from other providers concurrently while the current chart is shown.
     // This avoids waiting for the first network round-trip when users switch leaderboard sources.
     LaunchedEffect(enabledSources) {
-        if (source !in enabledSources) source = visibleBoardSources.firstOrNull() ?: SourceID.KW
+        if (source !in visibleBoardSources) source = visibleBoardSources.firstOrNull() ?: SourceID.KW
+        if (visibleBoardSources.isEmpty()) {
+            boards = emptyList()
+            selected = null
+            tracks = emptyList()
+            loadingTracks = false
+            return@LaunchedEffect
+        }
         coroutineScope {
             visibleBoardSources.filter { it != source }.map { sourceId ->
                 async {
@@ -77,13 +84,20 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
 
     // Show the built-in board catalogue immediately; refresh remote names/covers in parallel.
     // The old flow waited for fetchBoards() before it even started fetching the first board's songs.
-    LaunchedEffect(source) {
+    LaunchedEffect(source, visibleBoardSources) {
+        if (source !in visibleBoardSources) {
+            boards = emptyList()
+            selected = null
+            tracks = emptyList()
+            return@LaunchedEffect
+        }
         val service = appContainer.boards.serviceFor(source)
         val initial = service?.list.orEmpty()
         boards = initial
         selected = initial.firstOrNull()
     }
-    LaunchedEffect(source) {
+    LaunchedEffect(source, visibleBoardSources) {
+        if (source !in visibleBoardSources) return@LaunchedEffect
         val refreshed = fetchOr(emptyList()) {
             appContainer.boards.serviceFor(source)?.fetchBoards() ?: emptyList()
         }
@@ -125,7 +139,9 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
             }
             Spacer(Modifier.padding(top = 6.dp))
             val uniqueBoards = remember(boards) { boards.distinctBy { it.id } }
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (visibleBoardSources.isEmpty()) {
+                EmptyHint("請先啟用排行榜支援的音源", Modifier.fillMaxSize())
+            } else LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(uniqueBoards, key = { it.id }) { b ->
                     TvFocusable(onClick = { selected = b }, modifier = Modifier.fillMaxWidth()) {
                         Text(
@@ -143,6 +159,7 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
         Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
             Text(ChineseText.toTaiwanTraditional(selected?.displayName ?: "排行榜"), color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             when {
+                visibleBoardSources.isEmpty() -> EmptyHint("目前沒有啟用的排行榜音源", Modifier.fillMaxSize())
                 loadingTracks -> LoadingState(Modifier.fillMaxSize())
                 tracks.isNotEmpty() -> {
                     val nowId = appContainer.playbackController.state.collectAsState().value.currentTrack?.id
