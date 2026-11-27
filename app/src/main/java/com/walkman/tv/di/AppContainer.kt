@@ -137,6 +137,7 @@ class AppContainer(val appContext: Context) {
                 lyricsFetcher,
                 com.walkman.tv.playback.AudioSpecProbe(httpClient),
             )
+            playbackController.updateEnabledSources(settingsStore.settings.value.homeSources)
             playbackController.onTrackStarted = { track ->
                 appScope.launch { libraryStore.recordHistory(track) }
             }
@@ -233,7 +234,12 @@ class AppContainer(val appContext: Context) {
             // In particular, DownloadStore.loadAll() must see the user's configured root/tree
             // URI; relying only on launchIn(StateFlow) can race the parallel startup jobs below.
             applySettings(settingsStore.settings.value)
-            settingsStore.settings.onEach(::applySettings).launchIn(appScope)
+            settingsStore.settings.onEach { settings ->
+                applySettings(settings)
+                if (::playbackController.isInitialized) {
+                    playbackController.updateEnabledSources(settings.homeSources)
+                }
+            }.launchIn(appScope)
 
             // These stores are independent at startup. Load them concurrently instead of
             // serially waiting for each disk read; custom scripts still finish before snapshot
