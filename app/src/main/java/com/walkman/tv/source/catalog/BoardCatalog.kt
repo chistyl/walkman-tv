@@ -59,6 +59,28 @@ class Boards(private val http: CatalogHttp) {
  * leaderboards and playlist details. It avoids repeating artistpicserver lookups
  * when users revisit the same songs; first-time lookups still require network access.
  */
+/** Build a Kuwo album-cover URL directly from catalog metadata when the API provides it.
+ * This avoids an extra artistpicserver request for tracks that already include artwork.
+ * Short paths such as "120/98/24/xxx.jpg" are normalized to Kuwo's albumcover CDN.
+ */
+internal fun kuwoCoverUrl(d: JSONObject?): String? {
+    d ?: return null
+    val directKeys = listOf("pic", "PIC", "albumpic", "ALBUMPIC", "img")
+    for (key in directKeys) {
+        val value = d.optString(key).trim()
+        if (value.startsWith("https://") || value.startsWith("http://")) return value
+    }
+    val short = listOf("web_albumpic_short", "web_album_short")
+        .firstNotNullOfOrNull { key -> d.optString(key).trim().takeIf { it.isNotEmpty() && it != "null" } }
+        ?: return null
+    if (short.startsWith("https://") || short.startsWith("http://")) return short
+    val firstSlash = short.indexOf('/')
+    if (firstSlash < 0 || firstSlash == short.lastIndex) return null
+    val path = short.substring(firstSlash).trimStart('/')
+    if (path.isBlank()) return null
+    return "https://img4.kuwo.cn/star/albumcover/500/$path"
+}
+
 private object KuwoCoverCache {
     private data class Entry(val url: String, val cachedAt: Long)
     private const val TTL_MS = 6 * 60 * 60 * 1000L
@@ -180,7 +202,7 @@ private class KuwoBoard(private val http: CatalogHttp) : BoardService {
             source = SourceID.KW,
             songmid = id,
             duration = duration?.takeIf { it > 0 },
-            picURL = null,
+            picURL = kuwoCoverUrl(d),
             qualities = qs,
             extras = extras,
         )
