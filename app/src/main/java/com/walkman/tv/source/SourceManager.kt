@@ -80,11 +80,18 @@ class SourceManager(
         scriptsFor(source, action).firstOrNull()
 
     /** Resolve a play URL — mirrors `resolveMusicURL`. */
-    suspend fun resolveMusicURL(track: Track, quality: Quality? = null): ResolvedTrack {
+    suspend fun resolveMusicURL(
+        track: Track,
+        quality: Quality? = null,
+        excludedAttempts: Set<String> = emptySet(),
+        scriptsOnly: Boolean = false,
+    ): ResolvedTrack {
         val preferred = quality ?: Quality.K320
 
-        val scripts = scriptsFor(track.source, "musicUrl")
+        val attempted = excludedAttempts.toMutableSet()
+        val scripts = scriptsFor(track.source, "musicUrl").filter { scriptAttemptKey(track, it) !in attempted }
         scripts.forEachIndexed { scriptIdx, ls ->
+            attempted.add(scriptAttemptKey(track, ls))
             val scriptQs = ls.capabilities.sources[track.source]?.qualities?.toSet() ?: emptySet()
             val first = pickPlayQuality(preferred, track.qualities.toSet(), scriptQs)
             val cascade = qualityCascade(first, track.qualities.toSet(), scriptQs)
@@ -104,6 +111,8 @@ class SourceManager(
                             warning = warn,
                             headers = play.headers,
                             userAgent = play.userAgent,
+                            attemptKey = scriptAttemptKey(track, ls),
+                            attemptedKeys = attempted.toSet(),
                         )
                     }
                     .onFailure {
@@ -117,16 +126,23 @@ class SourceManager(
             }
         }
 
-        tryOtherSources(track, preferred)?.let { return it }
+        // Playback failover is deliberately limited to alternate JS files for this
+        // same track/source. Cross-platform search and built-in direct resolution are
+        // existing first-resolution fallbacks, not JS-file failover candidates.
+        if (!scriptsOnly) {
+            tryOtherSources(track, preferred, attempted)?.let { return it }
+        }
 
-        if (fallbackEnabled) {
+        val directAttemptKey = "direct:${track.source.key}:${track.id}"
+        if (!scriptsOnly && fallbackEnabled && directAttemptKey !in attempted) {
+            attempted.add(directAttemptKey)
             val qForFallback = if (track.qualities.contains(preferred)) preferred else (track.qualities.firstOrNull() ?: Quality.K128)
             attempt {
                 builtIn.resolve(track, qForFallback).let { result ->
                     result.copy(url = PlayUrlValidator.requireHttpUrl(result.url))
                 }
             }.getOrNull()?.let { res ->
-                return ResolvedTrack(res.url, ResolveOrigin.DirectFallback, qForFallback, res.warning)
+                return ResolvedTrack(res.url, ResolveOrigin.DirectFallback, qForFallback, res.warning, attemptKey = directAttemptKey, attemptedKeys = attempted.toSet())
             }
         }
 
@@ -136,30 +152,40 @@ class SourceManager(
         throw SourceException("這首 ${track.source.displayName} 歌曲無法取得播放網址，請換一首歌曲或更換可用的指令碼")
     }
 
-    private suspend fun tryOtherSources(track: Track, preferred: Quality): ResolvedTrack? {
+    private suspend fun tryOtherSources(track: Track, preferred: Quality, attempted: MutableSet<String>): ResolvedTrack? {
         val alternatives = otherSourceFinder.findMatches(track)
         if (alternatives.isEmpty()) return null
         for (alt in alternatives.take(5)) {
-            val altLS = scriptFor(alt.source, "musicUrl") ?: continue
-            val q = pickPlayQuality(
-                preferred,
-                alt.qualities.toSet(),
-                altLS.capabilities.sources[alt.source]?.qualities?.toSet() ?: emptySet(),
-            )
-            attempt { resolveViaScript(alt, q, altLS) }.getOrNull()?.let { play ->
-                val warn = "原本的 ${track.source.displayName} 音源無法取得播放網址，已切換至 ${alt.source.displayName}"
-                return ResolvedTrack(
-                    url = play.url,
-                    origin = ResolveOrigin.OtherSource(alt.source),
-                    quality = q,
-                    warning = warn,
-                    headers = play.headers,
-                    userAgent = play.userAgent,
+            val altScripts = scriptsFor(alt.source, "musicUrl")
+            for (altLS in altScripts) {
+                val attemptKey = scriptAttemptKey(alt, altLS)
+                if (attemptKey in attempted) continue
+                attempted.add(attemptKey)
+                val q = pickPlayQuality(
+                    preferred,
+                    alt.qualities.toSet(),
+                    altLS.capabilities.sources[alt.source]?.qualities?.toSet() ?: emptySet(),
                 )
+                attempt { resolveViaScript(alt, q, altLS) }.getOrNull()?.let { play ->
+                    val warn = "原本的 ${track.source.displayName} 音源無法取得播放網址，已切換至 ${alt.source.displayName}"
+                    return ResolvedTrack(
+                        url = play.url,
+                        origin = ResolveOrigin.OtherSource(alt.source),
+                        quality = q,
+                        warning = warn,
+                        headers = play.headers,
+                        userAgent = play.userAgent,
+                        attemptKey = attemptKey,
+                        attemptedKeys = attempted.toSet(),
+                    )
+                }
             }
         }
         return null
     }
+
+    private fun scriptAttemptKey(track: Track, script: LoadedScript): String =
+        "script:${script.script.id}:${track.source.key}"
 
     private data class ScriptPlayResult(
         val url: String,

@@ -59,7 +59,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
@@ -87,22 +86,6 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
     var status by remember { mutableStateOf<String?>(null) }
     var showQr by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<com.walkman.tv.data.model.UserScript?>(null) }
-    var diagnosticLog by remember { mutableStateOf(AppDiagnostics.readAll()) }
-
-    val diagnosticsExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
-        if (uri != null) {
-            scope.launch(Dispatchers.IO) {
-                val result = runCatching {
-                    context.contentResolver.openOutputStream(uri)?.use { output ->
-                        output.write(AppDiagnostics.readAll().toByteArray(Charsets.UTF_8))
-                    } ?: error("無法寫入選取的位置")
-                }
-                withContext(Dispatchers.Main) {
-                    status = result.fold({ "診斷紀錄已匯出" }, { "匯出失敗：${it.message}" })
-                }
-            }
-        }
-    }
 
     val diagnosticsPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -516,35 +499,15 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        Section("閃退與播放紀錄") {
+        Section("診斷紀錄") {
             Text(
-                "若播放異常或 App 閃退，系統會自動保留錯誤紀錄。可直接儲存到電視的「下載」資料夾，不依賴系統檔案選擇器；也可使用另存位置。",
+                "播放異常或 App 閃退時，系統會自動保留紀錄。下載後可使用電視的檔案管理員開啟查看。",
                 color = AppColors.TextMuted,
                 fontSize = 12.sp,
             )
-            androidx.compose.foundation.layout.FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                TvPill(
-                    onClick = { diagnosticLog = AppDiagnostics.readAll() },
-                    selected = true,
-                ) { Text("重新整理紀錄", fontSize = 13.sp) }
-                TvPill(
-                    onClick = { exportDiagnosticsToDownloads() },
-                ) { Text("儲存到下載資料夾", fontSize = 13.sp) }
-                TvPill(
-                    onClick = { runCatching { diagnosticsExport.launch(AppDiagnostics.fileName()) }
-                        .onFailure { status = "無法開啟系統另存視窗：${it.message}" } },
-                ) { Text("另存位置", fontSize = 13.sp) }
-            }
-            Text(
-                diagnosticLog.takeLast(12000),
-                color = AppColors.TextSecondary,
-                fontSize = 10.sp,
-                maxLines = 80,
-                overflow = TextOverflow.Clip,
-            )
+            TvPill(
+                onClick = { exportDiagnosticsToDownloads() },
+            ) { Text("下載診斷紀錄", fontSize = 13.sp) }
         }
     }
 

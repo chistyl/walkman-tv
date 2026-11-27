@@ -6,11 +6,14 @@ on:
       - feature/full-performance-optimization
       - perf/startup-cache-render-optimization
       - fix/platform-source-switch-crash
+      - feature/cross-source-auto-failover
+      - recovery/restore-run62
   push:
     branches:
       - fix/taiwan-traditional-context-conversion
       - fix/platform-source-switch-crash
       - fix/kugou-qq-playback
+      - feature/cross-source-auto-failover
 
 permissions:
   contents: read

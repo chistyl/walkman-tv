@@ -83,8 +83,8 @@ class PlaybackController(
      *  to decide which tier to step down from on format-reject errors. */
     private var lastAttemptedQuality: Quality? = null
 
-    /** Number of consecutive network-error retries on the current track. Reset to 0 on a
-     *  successful play, on a fresh playAt(), or once we've given up and skipped to next. */
+    /** Number of network-error retries consumed by the current track. Reset on a fresh
+     *  playAt() or once we've given up and skipped to the next track. */
     private var networkRetryCount: Int = 0
 
     /** Number of consecutive *tracks* that have failed back-to-back (resolve failed or an
@@ -92,6 +92,11 @@ class PlaybackController(
      *  [MAX_CONSECUTIVE_FAILURES]. Reset to 0 when any track actually reaches READY, and on a
      *  fresh user-initiated queue. Distinct from [networkRetryCount], which retries one track. */
     private var consecutiveFailures: Int = 0
+
+    /** Resolver attempts already proven unusable for the current track/generation. */
+    private val attemptedResolverKeys = mutableSetOf<String>()
+    @Volatile private var activeResolverAttemptKey: String? = null
+    @Volatile private var sourceFailoverInProgress: Boolean = false
 
     /**
      * Optional local-first URL resolver. When set, [playAt] checks it before going to
@@ -154,6 +159,8 @@ class PlaybackController(
             PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE,
         )
         const val MAX_NETWORK_RETRIES = 3
+        /** A silent stall must not leave a requested track buffering forever. */
+        const val BUFFERING_TIMEOUT_MS = 30_000L
 
         /** Stop auto-skipping once this many tracks fail back-to-back (a whole playlist of dead
          *  links shouldn't spin forever). */
@@ -238,6 +245,7 @@ class PlaybackController(
     private var retryJob: Job? = null
     private var autoSkipJob: Job? = null
     private var tickerJob: Job? = null
+    private var bufferingWatchdogJob: Job? = null
     @Volatile private var activeMediaId: String? = null
 
     /** Invalidates late resolver results after a newer track/source selection. */
@@ -262,20 +270,50 @@ class PlaybackController(
                     else -> playbackState.toString()
                 }
                 AppDiagnostics.record("PLAYER_STATE", "playbackState=$stateName; isPlaying=${player.isPlaying}; playWhenReady=${player.playWhenReady}; source=${_state.value.currentTrack?.source?.key}")
+                when (playbackState) {
+                    Player.STATE_BUFFERING -> startBufferingWatchdog()
+                    Player.STATE_READY, Player.STATE_IDLE, Player.STATE_ENDED -> {
+                        bufferingWatchdogJob?.cancel()
+                        bufferingWatchdogJob = null
+                    }
+                }
                 if (playbackState == Player.STATE_ENDED) {
                     if (_state.value.isMv) exitMv() else handleEnded()
                 }
                 if (playbackState == Player.STATE_READY) {
-                    // A track actually started — clear the consecutive-failure streak.
+                    // A track actually started — clear the consecutive-track failure streak.
+                    // Keep the per-track network retry budget so repeated read failures cannot loop forever.
                     consecutiveFailures = 0
                     _state.value = _state.value.copy(durationMs = player.duration.coerceAtLeast(0))
                 }
             }
 
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (!playWhenReady) {
+                    bufferingWatchdogJob?.cancel()
+                    bufferingWatchdogJob = null
+                } else if (player.playbackState == Player.STATE_BUFFERING) {
+                    startBufferingWatchdog()
+                }
+            }
+
             override fun onPlayerError(error: PlaybackException) {
+                bufferingWatchdogJob?.cancel()
+                bufferingWatchdogJob = null
                 val eventMediaId = player.currentMediaItem?.mediaId
-                if (eventMediaId.isNullOrBlank() || eventMediaId != activeMediaId) {
-                    AppDiagnostics.record("PLAYER_ERROR_STALE", "code=${error.errorCode} ${error.errorCodeName}; eventMediaId=${eventMediaId ?: "none"}; activeMediaId=${activeMediaId ?: "none"}", error)
+                val expectedMediaId = activeMediaId
+                // Some Media3/TV implementations clear currentMediaItem while dispatching
+                // onPlayerError. A missing event ID is not proof that this is stale: discard
+                // only an explicit, non-empty ID that belongs to another media item.
+                if (!expectedMediaId.isNullOrBlank() &&
+                    !eventMediaId.isNullOrBlank() &&
+                    eventMediaId != expectedMediaId
+                ) {
+                    AppDiagnostics.record("PLAYER_ERROR_STALE", "code=${error.errorCode} ${error.errorCodeName}; eventMediaId=${eventMediaId}; activeMediaId=${expectedMediaId}", error)
+                    return
+                }
+                if (expectedMediaId.isNullOrBlank()) {
+                    AppDiagnostics.record("PLAYER_ERROR_NO_ACTIVE_MEDIA", "code=${error.errorCode} ${error.errorCodeName}; eventMediaId=${eventMediaId ?: "none"}", error)
                     return
                 }
                 val errorGeneration = resolveGeneration
@@ -285,69 +323,15 @@ class PlaybackController(
                     return
                 }
                 AppDiagnostics.record("PLAYER_ERROR", "generation=$errorGeneration; mediaId=$eventMediaId; code=${error.errorCode} ${error.errorCodeName}; source=${_state.value.currentTrack?.source?.key}; quality=${lastAttemptedQuality?.key}", error)
-                // Format/codec rejections are the "encrypted .mgg" / "actually MP3 not FLAC" case
-                // from spec §3 — re-cascade from one tier below the current attempt. Network /
-                // unauthorized errors get surfaced as-is.
-                val isFormatReject = error.errorCode in FORMAT_REJECT_CODES
-                val current = lastAttemptedQuality
+                // A resolved URL is not playback success. Any actual player failure must
+                // move to the next untried JS resolver for this same track. Do not retry the
+                // same URL or restart playAt(), which would reset the attempted-script set.
                 val track = _state.value.currentTrack
-                if (isFormatReject && track != null && current != null && current != Quality.K128) {
-                    val full = Quality.orderedHighToLow
-                    val idx = full.indexOf(current)
-                    val below = if (idx >= 0 && idx + 1 < full.size) full[idx + 1] else Quality.K128
-                    android.util.Log.w(
-                        "PlaybackController",
-                        "format reject @ ${current.key} (${error.errorCodeName}); re-cascading from ${below.key}",
-                    )
-                    _state.value = _state.value.copy(
-                        warning = "${current.displayName} 格式不支援，已降低音質至 ${below.displayName}",
-                    )
-                    networkRetryCount = 0 // format error path — separate from the network counter
-                    if (errorGeneration == resolveGeneration) playAt(_state.value.index, qualityCap = below)
-                    return
+                if (track != null) {
+                    tryNextSource(track, errorGeneration, error.errorCodeName)
+                } else {
+                    failAndAdvance(error.errorCodeName, errorGeneration)
                 }
-                // Transient network — exponential backoff retry up to MAX_NETWORK_RETRIES.
-                // After that, advance to next so playback doesn't dead-stop the queue.
-                if (error.errorCode in NETWORK_RETRY_CODES && track != null) {
-                    if (networkRetryCount < MAX_NETWORK_RETRIES) {
-                        networkRetryCount++
-                        val delayMs = 500L shl (networkRetryCount - 1) // 500ms / 1s / 2s
-                        android.util.Log.w(
-                            "PlaybackController",
-                            "network error (${error.errorCodeName}); retry ${networkRetryCount}/$MAX_NETWORK_RETRIES in ${delayMs}ms",
-                        )
-                        _state.value = _state.value.copy(
-                            warning = "網路不穩定，正在重試 ($networkRetryCount/$MAX_NETWORK_RETRIES)…",
-                            resolving = true,
-                            error = null,
-                        )
-                        val trackIdAtRetry = track.id
-                        val mediaIdAtRetry = eventMediaId
-                        retryJob?.cancel()
-                        retryJob = scope.launch {
-                            kotlinx.coroutines.delay(delayMs)
-                            // Track ID alone is insufficient: the same song can be selected again.
-                            if (errorGeneration == resolveGeneration &&
-                                _state.value.currentTrack?.id == trackIdAtRetry &&
-                                player.currentMediaItem?.mediaId == mediaIdAtRetry &&
-                                activeMediaId == mediaIdAtRetry
-                            ) {
-                                playAt(_state.value.index, qualityCap = lastAttemptedQuality)
-                            }
-                        }
-                        return
-                    }
-                    // Retries exhausted — this track has failed; auto-skip (counts toward the
-                    // consecutive-failure limit).
-                    android.util.Log.w(
-                        "PlaybackController",
-                        "network retries exhausted on ${track.name}; skipping to next",
-                    )
-                    failAndAdvance("網路不穩定", errorGeneration)
-                    return
-                }
-                // Any other error — this track failed; auto-skip (or stop after too many in a row).
-                failAndAdvance(error.errorCodeName, errorGeneration)
             }
         })
         startPositionTicker()
@@ -413,6 +397,9 @@ class PlaybackController(
         if (qualityCap == null) {
             lastAttemptedQuality = null
             networkRetryCount = 0
+            attemptedResolverKeys.clear()
+            activeResolverAttemptKey = null
+            sourceFailoverInProgress = false
             // Silence the previous song right away. Resolving can take a long time with a slow or
             // dead source (every quality tier × 15s script timeout, then other-platform lookups),
             // and the old track playing on under the new title looked like "切換歌曲未成功".
@@ -471,7 +458,7 @@ class PlaybackController(
         }
     }
 
-    private fun playResolvedOrFail(track: Track, resolved: Result<ResolvedTrack>, generation: Long) {
+    private fun playResolvedOrFail(track: Track, resolved: Result<ResolvedTrack>, generation: Long, notifyTrackStarted: Boolean = true) {
         if (generation != resolveGeneration || _state.value.currentTrack?.id != track.id) return
         resolved.onSuccess { r ->
                 val mediaId = "$generation:${track.id}"
@@ -491,11 +478,14 @@ class PlaybackController(
                 // Remember the tier so onPlayerError can re-cascade from one tier below if
                 // ExoPlayer rejects the file format.
                 lastAttemptedQuality = r.quality
+                attemptedResolverKeys.addAll(r.attemptedKeys)
+                activeResolverAttemptKey = r.attemptKey
+                sourceFailoverInProgress = false
                 val host = runCatching { android.net.Uri.parse(r.url).host }.getOrNull() ?: "(local-or-unknown)"
                 AppDiagnostics.record("PLAY_RESOLVED", "source=${track.source.key}; quality=${r.quality.key}; host=$host; headerNames=${r.headers.keys.joinToString(",")}; customUA=${!r.userAgent.isNullOrBlank()}")
-                // Successful resolve + setMediaItem → reset the network retry counter so the
-                // next track gets a fresh budget.
-                networkRetryCount = 0
+                // Do not reset networkRetryCount merely because a URL resolved: a retry can
+                // resolve successfully and then fail again before reaching STATE_READY.
+                // The counter is reset when the player actually reaches READY.
                 if (r.headers.isEmpty() && r.userAgent.isNullOrBlank()) {
                     // Preserve the existing default pipeline for ordinary sources.
                     player.setMediaItem(item)
@@ -555,7 +545,7 @@ class PlaybackController(
                     originLabel = r.origin.label,
                     quality = r.quality,
                 )
-                onTrackStarted?.invoke(track)
+                if (notifyTrackStarted) onTrackStarted?.invoke(track)
                 // (lyrics already loaded in playAt when the track switched)
             }.onFailure { e ->
                 // Couldn't get a play URL for this track — auto-skip (or stop after too many).
@@ -563,6 +553,62 @@ class PlaybackController(
                     failAndAdvance(e.message ?: "無法播放", generation)
                 }
             }
+    }
+
+    /**
+     * Resolve the same track through the next not-yet-failed script/source. This deliberately
+     * keeps the current generation and queue index: late results from an older user selection
+     * remain guarded by the existing generation checks.
+     */
+    private fun tryNextSource(track: Track, expectedGeneration: Long, reason: String) {
+        if (expectedGeneration != resolveGeneration || sourceFailoverInProgress) return
+        bufferingWatchdogJob?.cancel()
+        bufferingWatchdogJob = null
+        val failedKey = activeResolverAttemptKey
+        if (failedKey.isNullOrBlank()) {
+            failAndAdvance(reason, expectedGeneration)
+            return
+        }
+        attemptedResolverKeys.add(failedKey)
+        sourceFailoverInProgress = true
+        retryJob?.cancel()
+        retryJob = null
+        runCatching { player.stop() }
+        _state.value = _state.value.copy(
+            resolving = true,
+            isPlaying = false,
+            warning = "目前音源無法播放，正在切換其他音源…",
+            error = null,
+        )
+        AppDiagnostics.record(
+            "SOURCE_FAILOVER_BEGIN",
+            "generation=$expectedGeneration; failedAttempt=$failedKey; tried=${attemptedResolverKeys.size}; reason=$reason",
+        )
+        resolveJob?.cancel()
+        resolveJob = scope.launch {
+            val result = try {
+                Result.success(sources.resolveMusicURL(track, preferredQuality, attemptedResolverKeys.toSet(), scriptsOnly = true))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Result.failure(error)
+            }
+            if (expectedGeneration != resolveGeneration || _state.value.currentTrack?.id != track.id) {
+                AppDiagnostics.record("SOURCE_FAILOVER_STALE", "generation=$expectedGeneration; currentGeneration=$resolveGeneration")
+                return@launch
+            }
+            result.onSuccess { resolved ->
+                AppDiagnostics.record(
+                    "SOURCE_FAILOVER_SUCCESS",
+                    "generation=$expectedGeneration; origin=${resolved.origin.label}; attempt=${resolved.attemptKey ?: "unknown"}",
+                )
+                playResolvedOrFail(track, Result.success(resolved), expectedGeneration, notifyTrackStarted = false)
+            }.onFailure { error ->
+                sourceFailoverInProgress = false
+                AppDiagnostics.record("SOURCE_FAILOVER_EXHAUSTED", "generation=$expectedGeneration; tried=${attemptedResolverKeys.size}", error)
+                failAndAdvance(error.message ?: reason, expectedGeneration)
+            }
+        }
     }
 
     /**
@@ -576,6 +622,8 @@ class PlaybackController(
             AppDiagnostics.record("AUTO_SKIP_STALE", "generation=$expectedGeneration; currentGeneration=$resolveGeneration; reason=$reason")
             return
         }
+        bufferingWatchdogJob?.cancel()
+        bufferingWatchdogJob = null
         // Stop whatever is still loaded (e.g. a cascade retry's half-played attempt) so a failed
         // track actually goes silent.
         runCatching { player.stop() }
@@ -777,6 +825,36 @@ class PlaybackController(
         return i
     }
 
+    /**
+     * ExoPlayer may remain in BUFFERING without ever dispatching onPlayerError (for example,
+     * a stalled CDN response). Treat only an actively requested, unchanged media item as a
+     * failed resolver; pausing cancels the timer and resuming while buffering starts it again.
+     */
+    private fun startBufferingWatchdog() {
+        if (!player.playWhenReady || _state.value.isMv || sourceFailoverInProgress) return
+        val generation = resolveGeneration
+        val mediaId = activeMediaId ?: return
+        bufferingWatchdogJob?.cancel()
+        bufferingWatchdogJob = scope.launch {
+            delay(BUFFERING_TIMEOUT_MS)
+            if (generation != resolveGeneration ||
+                mediaId != activeMediaId ||
+                player.playbackState != Player.STATE_BUFFERING ||
+                !player.playWhenReady ||
+                _state.value.isMv ||
+                sourceFailoverInProgress
+            ) return@launch
+
+            AppDiagnostics.record(
+                "PLAYER_BUFFERING_TIMEOUT",
+                "generation=$generation; mediaId=$mediaId; timeoutMs=$BUFFERING_TIMEOUT_MS; source=${_state.value.currentTrack?.source?.key}",
+            )
+            val track = _state.value.currentTrack
+            if (track != null) tryNextSource(track, generation, "BUFFERING_TIMEOUT")
+            else failAndAdvance("BUFFERING_TIMEOUT", generation)
+        }
+    }
+
     private fun startPositionTicker() {
         if (tickerJob?.isActive == true) return
         tickerJob = scope.launch {
@@ -795,6 +873,7 @@ class PlaybackController(
     fun release() {
         resolveGeneration++
         tickerJob?.cancel()
+        bufferingWatchdogJob?.cancel()
         probeJob?.cancel()
         probingUrl = null
         activeMediaId = null
