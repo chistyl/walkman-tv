@@ -13,6 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -40,6 +41,7 @@ class JsScriptRuntime(
     private val key = UUID.randomUUID().toString()
 
     @Volatile private var ctx: QuickJSContext? = null
+    private val destroyed = java.util.concurrent.atomic.AtomicBoolean(false)
     @Volatile var inited = false
         private set
     @Volatile var capabilities = ScriptCapabilities()
@@ -90,6 +92,7 @@ class JsScriptRuntime(
 
     /** Ask the script to perform an action (musicUrl / lyric / pic). */
     suspend fun requestAction(source: SourceID, action: String, info: JSONObject, timeoutMs: Long = 15_000): Any? {
+        if (destroyed.get()) throw ScriptException("音源指令碼已卸載")
         if (!inited) throw ScriptException("指令碼尚未初始化")
         val requestKey = UUID.randomUUID().toString()
         val deferred = CompletableDeferred<Any?>()
@@ -99,23 +102,47 @@ class JsScriptRuntime(
             .put("action", action)
             .put("info", info)
         val payload = JSONObject().put("requestKey", requestKey).put("data", data)
-        withContext(jsDispatcher) { sendToScript("request", payload.toString()) }
-        return try {
-            withTimeout(timeoutMs) { deferred.await() }
-        } catch (e: TimeoutCancellationException) {
-            throw ScriptTimeoutException("指令碼呼叫逾時")
+        try {
+            if (destroyed.get()) throw ScriptException("音源指令碼已卸載")
+            withContext(jsDispatcher) {
+                if (destroyed.get()) throw ScriptException("音源指令碼已卸載")
+                sendToScript("request", payload.toString())
+            }
+            return try {
+                withTimeout(timeoutMs) { deferred.await() }
+            } catch (e: TimeoutCancellationException) {
+                throw ScriptTimeoutException("指令碼呼叫逾時")
+            }
         } finally {
             pending.remove(requestKey)
         }
     }
 
+    /**
+     * Tear down QuickJS on its owning single thread. Never shut the executor down before the
+     * destroy task has been queued: doing so can race a platform switch with an in-flight JNI
+     * call and leave a live native context behind. Pending callers are failed immediately.
+     */
     fun destroy() {
-        scope.launch {
-            runCatching { ctx?.destroy() }
-            ctx = null
+        if (!destroyed.compareAndSet(false, true)) return
+        val error = ScriptException("音源指令碼已卸載")
+        pending.values.forEach { it.completeExceptionally(error) }
+        pending.clear()
+        runCatching {
+            executor.execute {
+                try {
+                    runCatching { ctx?.destroy() }
+                    ctx = null
+                } finally {
+                    scope.cancel()
+                    executor.shutdown()
+                }
+            }
+        }.onFailure {
+            Log.w(TAG, "QuickJS teardown could not be queued: ${it.message}")
+            scope.cancel()
+            executor.shutdownNow()
         }
-        // Allow the destroy task to run, then stop the thread.
-        executor.shutdown()
     }
 
     // MARK: - native env

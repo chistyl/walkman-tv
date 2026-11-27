@@ -138,6 +138,7 @@ class AppContainer(val appContext: Context) {
                 com.walkman.tv.playback.AudioSpecProbe(httpClient),
             )
             playbackController.updateEnabledSources(settingsStore.settings.value.homeSources)
+            sourceManager.updateEnabledSources(settingsStore.settings.value.homeSources)
             playbackController.onTrackStarted = { track ->
                 appScope.launch { libraryStore.recordHistory(track) }
             }
@@ -277,6 +278,7 @@ class AppContainer(val appContext: Context) {
         playbackController.setAudioOffloadEnabled(s.audioOffloadEnabled && !s.forceSoftwareDecoding)
         playbackController.forceSoftwareDecoding = s.forceSoftwareDecoding
         sourceManager.fallbackEnabled = s.fallbackEnabled
+        sourceManager.updateEnabledSources(s.homeSources)
         downloadStore.configuredRoot = s.customDownloadDir?.let { java.io.File(it) }
         downloadStore.downloadTreeUri = s.customDownloadTreeUri?.let { runCatching { android.net.Uri.parse(it) }.getOrNull() }
         downloadCoordinator.setMaxConcurrent(s.maxConcurrentDownloads)

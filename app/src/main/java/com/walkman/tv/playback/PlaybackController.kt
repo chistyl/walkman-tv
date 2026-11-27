@@ -331,14 +331,39 @@ class PlaybackController(
 
         // The current provider was disabled: stop it immediately, then continue at the next
         // enabled queue entry. Keep the original queue intact so re-enabling restores its entries.
+        // Invalidate every in-flight URL/lyrics/probe callback before touching the player.
+        // Cancelling a coroutine alone is not sufficient when a provider is inside native JS/JNI.
+        resolveGeneration++
         resolveJob?.cancel()
         lyricsJob?.cancel()
-        runCatching { player.stop() }
+        probeJob?.cancel()
+        probingUrl = null
+        _audioSpec.value = null
+        runCatching {
+            player.stop()
+            player.clearMediaItems()
+        }
         val nextIndex = findEnabledIndex(state.index, forward = true, includeCurrent = false)
         if (nextIndex == null) {
-            _state.value = state.copy(isPlaying = false, resolving = false, positionMs = 0, error = null)
+            _lyrics.value = emptyList()
+            _state.value = state.copy(
+                isPlaying = false,
+                resolving = false,
+                positionMs = 0,
+                durationMs = 0,
+                originLabel = null,
+                quality = null,
+                error = null,
+            )
         } else {
-            _state.value = state.copy(isPlaying = false, resolving = false, positionMs = 0)
+            _state.value = state.copy(
+                isPlaying = false,
+                resolving = false,
+                positionMs = 0,
+                durationMs = 0,
+                originLabel = null,
+                quality = null,
+            )
             playAt(nextIndex)
         }
     }

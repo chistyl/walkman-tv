@@ -43,8 +43,16 @@ class SourceManager(
         return try {
             val runtime = JsScriptRuntime(script, preload, http)
             val caps = runtime.load()
+            // Replace the previous runtime only after the new script has loaded successfully.
+            // Always tear down the old QuickJS context; otherwise repeated source edits/reloads
+            // leak native contexts and their dedicated executors for the lifetime of the process.
+            val previous = _loaded.value.filter { it.script.id == script.id }
             _loaded.value = _loaded.value.filter { it.script.id != script.id } +
                 LoadedScript(script, runtime, caps)
+            previous.forEach { old ->
+                runCatching { old.runtime.destroy() }
+                    .onFailure { Log.w(TAG, "replaced runtime '${old.script.name}' teardown failed: ${it.message}") }
+            }
             Result.success(caps)
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -55,8 +63,15 @@ class SourceManager(
     }
 
     fun unload(scriptId: String) {
-        _loaded.value.firstOrNull { it.script.id == scriptId }?.runtime?.destroy()
+        // Remove the runtime from discovery first so no new playback/lyric request can acquire it.
+        // Existing QuickJS work is then drained and its native context is destroyed on its own
+        // single-thread dispatcher by JsScriptRuntime.destroy().
+        val removed = _loaded.value.filter { it.script.id == scriptId }
         _loaded.value = _loaded.value.filter { it.script.id != scriptId }
+        removed.forEach { loaded ->
+            runCatching { loaded.runtime.destroy() }
+                .onFailure { Log.w(TAG, "unload '${loaded.script.name}' failed: ${it.message}") }
+        }
     }
 
     private suspend fun <T> attempt(block: suspend () -> T): Result<T> =
@@ -123,8 +138,15 @@ class SourceManager(
         throw SourceException("這首 ${track.source.displayName} 歌曲無法取得播放網址，請換一首歌曲或更換可用的指令碼")
     }
 
+    /** Enabled online providers are supplied by the global settings switch. */
+    @Volatile private var enabledSources: Set<SourceID> = SourceID.onlineSources.toSet()
+
+    fun updateEnabledSources(sources: Set<SourceID>) {
+        enabledSources = sources
+    }
+
     private suspend fun tryOtherSources(track: Track, preferred: Quality): ResolvedTrack? {
-        val alternatives = otherSourceFinder.findMatches(track)
+        val alternatives = otherSourceFinder.findMatches(track, allowedSources = enabledSources)
         if (alternatives.isEmpty()) return null
         for (alt in alternatives.take(5)) {
             val altLS = scriptFor(alt.source, "musicUrl") ?: continue
