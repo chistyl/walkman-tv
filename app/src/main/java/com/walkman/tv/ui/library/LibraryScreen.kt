@@ -79,6 +79,22 @@ fun LibraryScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     val love by appContainer.libraryStore.love.collectAsState()
     val history by appContainer.libraryStore.history.collectAsState()
     val userLists by appContainer.libraryStore.userLists.collectAsState()
+    val settings by appContainer.settingsStore.settings.collectAsState()
+    val enabledSources = settings.homeSources
+    // Keep stored playlists intact; only derive filtered views for display and playback.
+    val visibleLove = remember(love, enabledSources) {
+        love.copy(tracks = love.tracks.filter { it.source == com.walkman.tv.data.model.SourceID.LOCAL || it.source in enabledSources })
+    }
+    val visibleHistory = remember(history, enabledSources) {
+        history.copy(tracks = history.tracks.filter { it.source == com.walkman.tv.data.model.SourceID.LOCAL || it.source in enabledSources })
+    }
+    val visibleUserLists = remember(userLists, enabledSources) {
+        userLists.map { playlist ->
+            playlist.copy(tracks = playlist.tracks.filter {
+                it.source == com.walkman.tv.data.model.SourceID.LOCAL || it.source in enabledSources
+            })
+        }
+    }
 
     var tab by remember { mutableStateOf(TAB_FAVORITES) }
     var showLocalImport by remember { mutableStateOf(false) }
@@ -120,14 +136,14 @@ fun LibraryScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                 selected = tab == TAB_FAVORITES,
                 focusRequester = tabFocus[TAB_FAVORITES],
             ) {
-                Text("我的收藏 (${1 + userLists.size})", fontSize = 13.sp)
+                Text("我的收藏 (${1 + visibleUserLists.size})", fontSize = 13.sp)
             }
             TvPill(
                 onClick = { tab = TAB_HISTORY; detailId = null },
                 selected = tab == TAB_HISTORY,
                 focusRequester = tabFocus[TAB_HISTORY],
             ) {
-                Text("播放紀錄 (${history.tracks.size})", fontSize = 13.sp)
+                Text("播放紀錄 (${visibleHistory.tracks.size})", fontSize = 13.sp)
             }
             TvPill(
                 onClick = { tab = TAB_DOWNLOADED; detailId = null },
@@ -153,16 +169,16 @@ fun LibraryScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
 
         when (tab) {
             TAB_HISTORY -> HistoryTab(
-                history = history,
+                history = visibleHistory,
                 onClear = { scope.launch { appContainer.libraryStore.clearHistory() } },
                 onOpenPlayer = onOpenPlayer,
                 upFocus = activeTabFocus,
             )
             TAB_FAVORITES -> {
-                val detail = detailId?.let { id -> (listOf(love) + userLists).firstOrNull { it.id == id } }
+                val detail = detailId?.let { id -> (listOf(visibleLove) + visibleUserLists).firstOrNull { it.id == id } }
                 if (detail == null) {
                     PlaylistGrid(
-                        playlists = listOf(love) + userLists,
+                        playlists = listOf(visibleLove) + visibleUserLists,
                         onPick = { detailId = it.id },
                         onCreate = { showCreate = true },
                         upFocus = activeTabFocus,
