@@ -186,9 +186,8 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        Section("探索頁音源") {
-            // Toggle each source in/out. The discover (home) page subtitle and section
-            // contents track this list in real time — see HomeStore.loadIfNeeded.
+        Section("全域音源") {
+            // This shared source set controls platform visibility across the app, not only discovery.
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 com.walkman.tv.data.model.SourceID.homePageOrder.forEach { src ->
                     val active = src in settings.homeSources
@@ -197,8 +196,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                             scope.launch {
                                 appContainer.settingsStore.update { s ->
                                     val next = if (active) s.homeSources - src else s.homeSources + src
-                                    // Spec §8: never let the set collapse to empty — keep at least
-                                    // one source so the discover page stays usable.
+                                    // Keep at least one online source enabled so search and discovery remain usable.
                                     s.copy(homeSources = if (next.isEmpty()) s.homeSources else next)
                                 }
                             }
