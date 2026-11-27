@@ -47,17 +47,30 @@ private val leaderboardTrackCache = LinkedHashMap<String, List<Track>>()
 
 @Composable
 fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
-    var source by remember { mutableStateOf(SourceID.KW) }
+    val settings by appContainer.settingsStore.settings.collectAsState()
+    val enabledSources = settings.homeSources
+    val visibleBoardSources = boardSources.filter { it in enabledSources }
+    var source by remember { mutableStateOf(visibleBoardSources.firstOrNull() ?: SourceID.KW) }
+
     var boards by remember { mutableStateOf<List<BoardInfo>>(emptyList()) }
     var selected by remember { mutableStateOf<BoardInfo?>(null) }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var loadingTracks by remember { mutableStateOf(false) }
 
+    LaunchedEffect(visibleBoardSources) {
+        if (source !in visibleBoardSources) {
+            source = visibleBoardSources.firstOrNull() ?: SourceID.KW
+            selected = null
+            boards = emptyList()
+            tracks = emptyList()
+        }
+    }
+
     // Preload the first chart from other providers concurrently while the current chart is shown.
     // This avoids waiting for the first network round-trip when users switch leaderboard sources.
     LaunchedEffect(Unit) {
         coroutineScope {
-            boardSources.filter { it != source }.map { sourceId ->
+            visibleBoardSources.filter { it != source }.map { sourceId ->
                 async {
                     val svc = appContainer.boards.serviceFor(sourceId) ?: return@async
                     val firstBoard = svc.list.firstOrNull() ?: return@async
@@ -104,10 +117,15 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
         loadingTracks = false
     }
 
+    if (visibleBoardSources.isEmpty()) {
+        com.walkman.tv.ui.components.EmptyHint("目前沒有啟用的音源，請至設定開啟音源", Modifier.fillMaxSize())
+        return
+    }
+
     Row(modifier = modifier.fillMaxSize().padding(top = 8.dp)) {
         Column(modifier = Modifier.width(150.dp).fillMaxHeight()) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                boardSources.chunked(2).forEach { rowChips ->
+                visibleBoardSources.chunked(2).forEach { rowChips ->
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         rowChips.forEach { s ->
                             TvPill(
