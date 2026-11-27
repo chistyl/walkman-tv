@@ -193,10 +193,10 @@ class AppContainer(val appContext: Context) {
     private fun jsonEscape(s: String): String = buildString {
         for (c in s) when (c) {
             '"' -> append("\\\"")
-            '\\\\' -> append("\\\\\\\\")
-            '\\n' -> append("\\\\n")
-            '\\r' -> append("\\\\r")
-            '\\t' -> append("\\\\t")
+            '\\' -> append("\\\\")
+            '\n' -> append("\\n")
+            '\r' -> append("\\r")
+            '\t' -> append("\\t")
             else -> append(c)
         }
     }
