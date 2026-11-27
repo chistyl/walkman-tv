@@ -1,5 +1,7 @@
 package com.walkman.tv.source
 
+import android.os.SystemClock
+import android.util.Log
 import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.data.model.Track
 import kotlinx.coroutines.CancellationException
@@ -25,6 +27,7 @@ class OtherSourceFinder(private val searcher: MusicSearcher) {
                 .filter { it != track.source && it in allowedSources }
                 .map { src ->
                     async {
+                        val startedAt = SystemClock.elapsedRealtime()
                         val results = try {
                             searcher.search(src, query, 10)
                         } catch (cancelled: CancellationException) {
@@ -33,13 +36,17 @@ class OtherSourceFinder(private val searcher: MusicSearcher) {
                         } catch (_: Exception) {
                             emptyList()
                         }
+                        Log.d(TAG, "alternative_search source=${src.key} elapsed_ms=${SystemClock.elapsedRealtime() - startedAt} result_count=${results.size}")
                         src to results
                     }
                 }
                 .awaitAll()
                 .toMap()
         }
-        return rank(groups, track, maxIntervalDiff)
+        val rankStartedAt = SystemClock.elapsedRealtime()
+        val ranked = rank(groups, track, maxIntervalDiff)
+        Log.d(TAG, "alternative_search_rank elapsed_ms=${SystemClock.elapsedRealtime() - rankStartedAt} provider_count=${groups.size} candidate_count=${ranked.size}")
+        return ranked
     }
 
     private data class Annotated(
@@ -111,6 +118,7 @@ class OtherSourceFinder(private val searcher: MusicSearcher) {
     }
 
     private companion object {
+        const val TAG = "OtherSourceFinder"
         val singersRxp = Regex("[、&;；/,，|]")
         val dropCharsRxp = Regex("[\\s'.,，&\"、()（）`~\\-<>|/\\[\\]!！]")
 
