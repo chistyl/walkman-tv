@@ -6,6 +6,7 @@ import com.walkman.tv.data.model.SourceID
 import com.walkman.tv.data.model.Track
 import com.walkman.tv.source.MusicSearcher
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -37,6 +38,7 @@ class Catalogs(private val http: CatalogHttp) : MusicSearcher {
     private data class CachedSearch(val tracks: List<Track>, val cachedAt: Long)
     private val searchCache = LinkedHashMap<String, CachedSearch>(32, 0.75f, true)
     private val cacheLock = Any()
+    private val searchInFlight = mutableMapOf<String, CompletableDeferred<List<Track>>>()
 
     private fun cached(key: String): List<Track>? = synchronized(cacheLock) {
         val entry = searchCache[key] ?: return@synchronized null
@@ -59,16 +61,47 @@ class Catalogs(private val http: CatalogHttp) : MusicSearcher {
 
     override suspend fun search(source: SourceID, keyword: String, page: Int): List<Track> {
         val key = source.key + "|" + keyword.trim() + "|" + page
-        cached(key)?.let { return it }
-        val result = try {
-            services[source]?.search(keyword, page) ?: emptyList()
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            emptyList()
+        var cachedResult: List<Track>? = null
+        var request: CompletableDeferred<List<Track>>? = null
+        var isRequestOwner = false
+        synchronized(cacheLock) {
+            val entry = searchCache[key]
+            if (entry != null && SystemClock.elapsedRealtime() - entry.cachedAt < SEARCH_CACHE_TTL_MS) {
+                cachedResult = entry.tracks
+            } else {
+                if (entry != null) searchCache.remove(key)
+                request = searchInFlight[key]
+                if (request == null) {
+                    request = CompletableDeferred()
+                    searchInFlight[key] = request!!
+                    isRequestOwner = true
+                }
+            }
         }
-        remember(key, result)
-        return result
+        cachedResult?.let { return it }
+        val sharedRequest = checkNotNull(request)
+        if (!isRequestOwner) return sharedRequest.await()
+
+        try {
+            val result = try {
+                services[source]?.search(keyword, page) ?: emptyList()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                emptyList()
+            }
+            remember(key, result)
+            sharedRequest.complete(result)
+            return result
+        } catch (cancelled: CancellationException) {
+            // Do not cancel independent callers waiting on this request; let them retry later.
+            sharedRequest.complete(emptyList())
+            throw cancelled
+        } finally {
+            synchronized(cacheLock) {
+                if (searchInFlight[key] === sharedRequest) searchInFlight.remove(key)
+            }
+        }
     }
 
     /** Search every platform and interleave results (kw, wy, kg, tx, mg round-robin). */
