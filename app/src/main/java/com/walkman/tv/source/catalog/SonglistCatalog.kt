@@ -11,6 +11,7 @@ import com.walkman.tv.data.model.Track
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.CompletableDeferred
 import org.json.JSONObject
 
 interface SonglistService {
@@ -31,6 +32,7 @@ class Songlists(private val http: CatalogHttp) {
     private val maxCacheEntries = 48
     private data class CachedDetail(val detail: SonglistDetail, val cachedAt: Long)
     private val detailCache = object : LinkedHashMap<String, CachedDetail>(16, 0.75f, true) {}
+    private val detailInFlight = mutableMapOf<String, CompletableDeferred<SonglistDetail>>()
     private val detailCacheTtlMs = 3 * 60_000L
     private val maxDetailCacheEntries = 12
     private val services = listOf(
@@ -70,26 +72,52 @@ class Songlists(private val http: CatalogHttp) {
         return result
     }
 
-    /** Fetch a playlist detail once and reuse successful non-empty results on revisit. */
+    /** Fetch a playlist detail once; concurrent callers for the same list share the in-flight request. */
     suspend fun fetchDetail(list: SonglistInfo): SonglistDetail {
         val key = "${list.source.key}|${list.id}"
         val now = android.os.SystemClock.elapsedRealtime()
+        var cachedResult: SonglistDetail? = null
+        var request: CompletableDeferred<SonglistDetail>? = null
+        var isRequestOwner = false
         synchronized(cacheLock) {
             val cached = detailCache[key]
-            if (cached != null && now - cached.cachedAt < detailCacheTtlMs) return cached.detail
-            if (cached != null) detailCache.remove(key)
-        }
-        val service = serviceFor(list.source) ?: return SonglistDetail(list, emptyList())
-        val result = service.fetchDetail(list)
-        if (result.tracks.isNotEmpty()) {
-            synchronized(cacheLock) {
-                detailCache[key] = CachedDetail(result, android.os.SystemClock.elapsedRealtime())
-                while (detailCache.size > maxDetailCacheEntries) {
-                    detailCache.entries.iterator().run { next(); remove() }
+            if (cached != null && now - cached.cachedAt < detailCacheTtlMs) {
+                cachedResult = cached.detail
+            } else {
+                if (cached != null) detailCache.remove(key)
+                request = detailInFlight[key]
+                if (request == null) {
+                    request = CompletableDeferred()
+                    detailInFlight[key] = request!!
+                    isRequestOwner = true
                 }
             }
         }
-        return result
+        cachedResult?.let { return it }
+        val sharedRequest = checkNotNull(request)
+        if (!isRequestOwner) return sharedRequest.await()
+
+        try {
+            val service = serviceFor(list.source)
+            val result = if (service == null) SonglistDetail(list, emptyList()) else service.fetchDetail(list)
+            if (result.tracks.isNotEmpty()) {
+                synchronized(cacheLock) {
+                    detailCache[key] = CachedDetail(result, android.os.SystemClock.elapsedRealtime())
+                    while (detailCache.size > maxDetailCacheEntries) {
+                        detailCache.entries.iterator().run { next(); remove() }
+                    }
+                }
+            }
+            sharedRequest.complete(result)
+            return result
+        } catch (error: Throwable) {
+            sharedRequest.completeExceptionally(error)
+            throw error
+        } finally {
+            synchronized(cacheLock) {
+                if (detailInFlight[key] === sharedRequest) detailInFlight.remove(key)
+            }
+        }
     }
 
     /** Search every platform in parallel. Provider-level caching lets failed/empty providers retry. */
