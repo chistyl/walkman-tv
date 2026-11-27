@@ -80,7 +80,7 @@ class Catalogs(private val http: CatalogHttp) : MusicSearcher {
         val sourceKey = enabledSources.map { it.key }.sorted().joinToString(",")
         val cacheKey = "all|" + keyword.trim() + "|" + page + "|" + sourceKey
         cached(cacheKey)?.let { return it }
-        val groups: Map<SourceID, List<Track>> = coroutineScope {
+        val results = coroutineScope {
             services.values.filter { it.source in enabledSources }.map { svc ->
                 async {
                     val result = try {
@@ -88,13 +88,19 @@ class Catalogs(private val http: CatalogHttp) : MusicSearcher {
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (_: Exception) {
-                        emptyList()
+                        null // A failed provider must not be mistaken for a successful empty response.
                     }
                     svc.source to result
                 }
-            }.awaitAll().toMap()
+            }.awaitAll()
         }
-        return interleave(groups).also { remember(cacheKey, it) }
+        val groups = results.mapNotNull { (source, tracks) ->
+            tracks?.let { source to it }
+        }.toMap()
+        val merged = interleave(groups)
+        // Cache only complete multi-provider responses. Partial failures can recover on retry.
+        if (results.all { it.second != null }) remember(cacheKey, merged)
+        return merged
     }
 
     private companion object {
