@@ -77,6 +77,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
+    val settings by appContainer.settingsStore.settings.collectAsState()
+    val enabledSources = settings.homeSources
     val focusManager = LocalFocusManager.current
     var queryValue by remember { mutableStateOf(TextFieldValue("")) }
     var searchFocused by remember { mutableStateOf(false) }
@@ -117,8 +119,8 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
             coroutineScope {
                 launch {
                     val result = try {
-                        if (f == null) appContainer.catalogs.searchAll(q)
-                        else appContainer.catalogs.search(f, q)
+                        if (f == null) appContainer.catalogs.searchAll(q).filter { it.source in enabledSources }
+                        else if (f in enabledSources) appContainer.catalogs.search(f, q) else emptyList()
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {
@@ -128,8 +130,8 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                 }
                 launch {
                     val result = try {
-                        if (f == null) appContainer.songlists.searchAll(q)
-                        else appContainer.songlists.serviceFor(f)?.search(q, 1) ?: emptyList()
+                        if (f == null) appContainer.songlists.searchAll(q).filter { it.source in enabledSources }
+                        else if (f in enabledSources) appContainer.songlists.serviceFor(f)?.search(q, 1) ?: emptyList() else emptyList()
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {
@@ -143,8 +145,9 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     }
 
     // Re-run search when the platform filter changes (only after the first manual search).
-    LaunchedEffect(filter) {
-        if (searched) runSearch()
+    LaunchedEffect(filter, enabledSources) {
+        if (filter != null && filter !in enabledSources) filter = null
+        else if (searched) runSearch()
     }
 
     // Phone-to-TV: incoming search keywords from the QR-served form.
@@ -163,7 +166,7 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            PlatformChipRow(filter, onSelect = { filter = it })
+            PlatformChipRow(filter, enabledSources, onSelect = { filter = it })
             Spacer(Modifier.weight(1f))
             OutlinedTextField(
                 value = queryValue,
@@ -295,9 +298,9 @@ private val PLATFORMS_LABELS: List<Pair<SourceID?, String>> = listOf(
 )
 
 @Composable
-private fun PlatformChipRow(filter: SourceID?, onSelect: (SourceID?) -> Unit) {
+private fun PlatformChipRow(filter: SourceID?, enabledSources: Set<SourceID>, onSelect: (SourceID?) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        PLATFORMS_LABELS.forEach { (src, label) ->
+        PLATFORMS_LABELS.filter { (src, _) -> src == null || src in enabledSources }.forEach { (src, label) ->
             TvPill(
                 onClick = { onSelect(src) },
                 selected = filter == src,
