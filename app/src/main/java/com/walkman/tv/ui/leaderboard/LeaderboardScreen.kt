@@ -47,6 +47,9 @@ private val leaderboardTrackCache = LinkedHashMap<String, List<Track>>()
 
 @Composable
 fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
+    val settings by appContainer.settingsStore.settings.collectAsState()
+    val enabledSources = settings.homeSources
+    val visibleBoardSources = boardSources.filter { it in enabledSources }
     var source by remember { mutableStateOf(SourceID.KW) }
     var boards by remember { mutableStateOf<List<BoardInfo>>(emptyList()) }
     var selected by remember { mutableStateOf<BoardInfo?>(null) }
@@ -55,9 +58,17 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
 
     // Preload the first chart from other providers concurrently while the current chart is shown.
     // This avoids waiting for the first network round-trip when users switch leaderboard sources.
-    LaunchedEffect(Unit) {
+    LaunchedEffect(enabledSources) {
+        if (source !in visibleBoardSources) source = visibleBoardSources.firstOrNull() ?: SourceID.KW
+        if (visibleBoardSources.isEmpty()) {
+            boards = emptyList()
+            selected = null
+            tracks = emptyList()
+            loadingTracks = false
+            return@LaunchedEffect
+        }
         coroutineScope {
-            boardSources.filter { it != source }.map { sourceId ->
+            visibleBoardSources.filter { it != source }.map { sourceId ->
                 async {
                     val svc = appContainer.boards.serviceFor(sourceId) ?: return@async
                     val firstBoard = svc.list.firstOrNull() ?: return@async
@@ -73,13 +84,20 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
 
     // Show the built-in board catalogue immediately; refresh remote names/covers in parallel.
     // The old flow waited for fetchBoards() before it even started fetching the first board's songs.
-    LaunchedEffect(source) {
+    LaunchedEffect(source, visibleBoardSources) {
+        if (source !in visibleBoardSources) {
+            boards = emptyList()
+            selected = null
+            tracks = emptyList()
+            return@LaunchedEffect
+        }
         val service = appContainer.boards.serviceFor(source)
         val initial = service?.list.orEmpty()
         boards = initial
         selected = initial.firstOrNull()
     }
-    LaunchedEffect(source) {
+    LaunchedEffect(source, visibleBoardSources) {
+        if (source !in visibleBoardSources) return@LaunchedEffect
         val refreshed = fetchOr(emptyList()) {
             appContainer.boards.serviceFor(source)?.fetchBoards() ?: emptyList()
         }
@@ -107,7 +125,7 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     Row(modifier = modifier.fillMaxSize().padding(top = 8.dp)) {
         Column(modifier = Modifier.width(150.dp).fillMaxHeight()) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                boardSources.chunked(2).forEach { rowChips ->
+                visibleBoardSources.chunked(2).forEach { rowChips ->
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         rowChips.forEach { s ->
                             TvPill(
@@ -121,7 +139,9 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
             }
             Spacer(Modifier.padding(top = 6.dp))
             val uniqueBoards = remember(boards) { boards.distinctBy { it.id } }
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (visibleBoardSources.isEmpty()) {
+                EmptyHint("請先啟用排行榜支援的音源", Modifier.fillMaxSize())
+            } else LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(uniqueBoards, key = { it.id }) { b ->
                     TvFocusable(onClick = { selected = b }, modifier = Modifier.fillMaxWidth()) {
                         Text(
@@ -139,6 +159,7 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
         Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
             Text(ChineseText.toTaiwanTraditional(selected?.displayName ?: "排行榜"), color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             when {
+                visibleBoardSources.isEmpty() -> EmptyHint("目前沒有啟用的排行榜音源", Modifier.fillMaxSize())
                 loadingTracks -> LoadingState(Modifier.fillMaxSize())
                 tracks.isNotEmpty() -> {
                     val nowId = appContainer.playbackController.state.collectAsState().value.currentTrack?.id

@@ -78,6 +78,8 @@ import kotlinx.coroutines.launch
 fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
+    val settings by appContainer.settingsStore.settings.collectAsState()
+    val enabledSources = settings.homeSources
     var queryValue by remember { mutableStateOf(TextFieldValue("")) }
     var searchFocused by remember { mutableStateOf(false) }
     val simplifier = remember { Transliterator.getInstance("Traditional-Simplified") }
@@ -90,7 +92,7 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     var hotColumns by remember { mutableStateOf<List<com.walkman.tv.source.catalog.HotSearchColumn>>(emptyList()) }
     var searchJob by remember { mutableStateOf<Job?>(null) }
 
-    // Load hot-search words once when the screen first appears (before any search).
+    // Load hot-search words once; disabled sources are filtered from the visible columns.
     LaunchedEffect(Unit) {
         hotColumns = runCatching { appContainer.hotSearch.fetchAll() }.getOrDefault(emptyList())
     }
@@ -117,8 +119,8 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
             coroutineScope {
                 launch {
                     val result = try {
-                        if (f == null) appContainer.catalogs.searchAll(q)
-                        else appContainer.catalogs.search(f, q)
+                        if (f == null) appContainer.catalogs.searchAll(q, enabledSources = enabledSources)
+                        else if (f in enabledSources) appContainer.catalogs.search(f, q) else emptyList()
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {
@@ -128,8 +130,8 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                 }
                 launch {
                     val result = try {
-                        if (f == null) appContainer.songlists.searchAll(q)
-                        else appContainer.songlists.serviceFor(f)?.search(q, 1) ?: emptyList()
+                        if (f == null) appContainer.songlists.searchAll(q, enabledSources = enabledSources)
+                        else if (f in enabledSources) appContainer.songlists.serviceFor(f)?.search(q, 1) ?: emptyList() else emptyList()
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {
@@ -143,7 +145,8 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     }
 
     // Re-run search when the platform filter changes (only after the first manual search).
-    LaunchedEffect(filter) {
+    LaunchedEffect(filter, enabledSources) {
+        if (filter != null && filter !in enabledSources) filter = null
         if (searched) runSearch()
     }
 
@@ -163,7 +166,7 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            PlatformChipRow(filter, onSelect = { filter = it })
+            PlatformChipRow(filter, enabledSources, onSelect = { filter = it })
             Spacer(Modifier.weight(1f))
             OutlinedTextField(
                 value = queryValue,
@@ -226,7 +229,7 @@ fun SearchScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
             searched = searched,
             songlists = songlists,
             tracks = tracks,
-            hotColumns = hotColumns,
+            hotColumns = hotColumns.filter { it.source in enabledSources },
             onOpenPlayer = onOpenPlayer,
             onPickHistory = { kw ->
                 queryValue = TextFieldValue(kw)
@@ -295,9 +298,9 @@ private val PLATFORMS_LABELS: List<Pair<SourceID?, String>> = listOf(
 )
 
 @Composable
-private fun PlatformChipRow(filter: SourceID?, onSelect: (SourceID?) -> Unit) {
+private fun PlatformChipRow(filter: SourceID?, enabledSources: Set<SourceID>, onSelect: (SourceID?) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        PLATFORMS_LABELS.forEach { (src, label) ->
+        PLATFORMS_LABELS.filter { (src, _) -> src == null || src in enabledSources }.forEach { (src, label) ->
             TvPill(
                 onClick = { onSelect(src) },
                 selected = filter == src,
@@ -407,7 +410,7 @@ private fun HotSearchGrid(
     onPick: (String) -> Unit,
 ) {
     val orderedSources = listOf(SourceID.KW, SourceID.WY, SourceID.KG, SourceID.TX)
-    // Keep all four platform columns visible even when one provider temporarily has no data.
+    // Only enabled platforms are rendered; temporarily empty providers remain represented.
     val visibleColumns = orderedSources.mapNotNull { source -> columns.firstOrNull { it.source == source } }
     Column(modifier = Modifier.fillMaxWidth().fillMaxHeight()) {
         SectionHeader("熱門搜尋")

@@ -41,9 +41,13 @@ class Catalogs(private val http: CatalogHttp) : MusicSearcher {
         }
 
     /** Search every platform and interleave results (kw, wy, kg, tx, mg round-robin). */
-    suspend fun searchAll(keyword: String, page: Int = 1): List<Track> {
+    suspend fun searchAll(
+        keyword: String,
+        page: Int = 1,
+        enabledSources: Set<SourceID> = SourceID.onlineSources.toSet(),
+    ): List<Track> {
         val groups: Map<SourceID, List<Track>> = coroutineScope {
-            services.values.map { svc ->
+            services.values.filter { it.source in enabledSources }.map { svc ->
                 async {
                     val result = try {
                         svc.search(keyword, page)
