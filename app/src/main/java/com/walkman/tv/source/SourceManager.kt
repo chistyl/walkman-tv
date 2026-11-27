@@ -111,7 +111,10 @@ class SourceManager(
             val cascade = qualityCascade(first, track.qualities.toSet(), scriptQs)
             for ((idx, q) in cascade.withIndex()) {
                 var timedOut = false
-                attempt { resolveViaScript(track, q, ls) }
+                val scriptResolveStartedAt = SystemClock.elapsedRealtime()
+                val scriptResult = attempt { resolveViaScript(track, q, ls) }
+                Log.d(TAG, "script_resolve source=${track.source.key} quality=${q.key} elapsed_ms=${SystemClock.elapsedRealtime() - scriptResolveStartedAt} success=${scriptResult.isSuccess}")
+                scriptResult
                     .onSuccess { url ->
                         val warn = when {
                             scriptIdx > 0 -> "已切換至音源「${ls.script.name}」"
@@ -134,11 +137,14 @@ class SourceManager(
 
         if (fallbackEnabled) {
             val qForFallback = if (track.qualities.contains(preferred)) preferred else (track.qualities.firstOrNull() ?: Quality.K128)
-            attempt {
+            val fallbackStartedAt = SystemClock.elapsedRealtime()
+            val fallbackResult = attempt {
                 builtIn.resolve(track, qForFallback).let { result ->
                     result.copy(url = PlayUrlValidator.requireHttpUrl(result.url))
                 }
-            }.getOrNull()?.let { res ->
+            }
+            Log.d(TAG, "builtin_fallback source=${track.source.key} quality=${qForFallback.key} elapsed_ms=${SystemClock.elapsedRealtime() - fallbackStartedAt} success=${fallbackResult.isSuccess}")
+            fallbackResult.getOrNull()?.let { res ->
                 return ResolvedTrack(res.url, ResolveOrigin.DirectFallback, qForFallback, res.warning)
             }
         }
