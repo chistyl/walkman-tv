@@ -186,6 +186,7 @@ fun LibraryScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                 } else {
                     PlaylistDetailPane(
                         playlist = detail,
+                        originalPlaylist = (listOf(love) + userLists).firstOrNull { it.id == detail.id } ?: detail,
                         onBack = { detailId = null },
                         onOpenPlayer = onOpenPlayer,
                         onDelete = if (detail.id != Playlist.LOVE) {
@@ -427,6 +428,7 @@ private fun CoverMosaic(urls: List<String?>, modifier: Modifier = Modifier) {
 @Composable
 private fun PlaylistDetailPane(
     playlist: Playlist,
+    originalPlaylist: Playlist = playlist,
     onBack: () -> Unit,
     onOpenPlayer: () -> Unit,
     onDelete: (() -> Unit)?,
@@ -505,7 +507,7 @@ private fun PlaylistDetailPane(
                                 // App-scoped so leaving the page doesn't cancel it; toast uses the
                                 // app context since the page may be gone by the time it finishes.
                                 com.walkman.tv.playback.imports.SonglistImporter.startRefresh(
-                                    playlist = playlist,
+                                    playlist = originalPlaylist,
                                     songlists = appContainer.songlists,
                                     library = appContainer.libraryStore,
                                     scope = appContainer.appScope,
@@ -527,7 +529,7 @@ private fun PlaylistDetailPane(
                             onClick = {
                                 // App-scoped like 更新歌單: leaving the page doesn't abort the scan.
                                 com.walkman.tv.playback.local.LocalPlaylistRescan.start(
-                                    playlist = playlist,
+                                    playlist = originalPlaylist,
                                     local = appContainer.localMusicStore,
                                     library = appContainer.libraryStore,
                                     scope = appContainer.appScope,
