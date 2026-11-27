@@ -58,13 +58,6 @@ fun SonglistScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     val enabledSources = settings.homeSources
     val visibleSonglistSources = songlistSources.filter { it in enabledSources }
     var source by remember { mutableStateOf(visibleSonglistSources.firstOrNull() ?: SourceID.KW) }
-    LaunchedEffect(visibleSonglistSources) {
-        if (source !in visibleSonglistSources) {
-            source = visibleSonglistSources.firstOrNull() ?: SourceID.KW
-            detail = null
-            lists = emptyList()
-        }
-    }
     // Seed with the default source's first order (not null): the sibling effect below re-writes
     // it with an *equal* value on first run, so mutableStateOf's structural equality skips the
     // invalidation — the list effect runs exactly once on entry instead of fetch → cancel →
@@ -78,6 +71,14 @@ fun SonglistScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     var loading by remember { mutableStateOf(false) }
     var detail by remember { mutableStateOf<Pair<SonglistInfo, List<Track>>?>(null) }
     var loadingDetail by remember { mutableStateOf(false) }
+
+    LaunchedEffect(visibleSonglistSources) {
+        if (source !in visibleSonglistSources) {
+            source = visibleSonglistSources.firstOrNull() ?: SourceID.KW
+            detail = null
+            lists = emptyList()
+        }
+    }
 
     val service = appContainer.songlists.serviceFor(source)
 
