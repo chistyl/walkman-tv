@@ -123,7 +123,7 @@ class HomeStore(
                         async sourceFetch@{
                             val svc = boards.serviceFor(s)
                             if (svc == null) return@sourceFetch s to emptyList()
-                            s to fetchOrEmpty { svc.fetchBoards() }
+                            s to fetchOrEmpty { boards.fetchBoards(s) }
                         }
                     }.awaitAll().toMap()
                 }
