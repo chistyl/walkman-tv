@@ -228,9 +228,12 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        Section("探索頁音源") {
-            // Toggle each source in/out. The discover (home) page subtitle and section
-            // contents track this list in real time — see HomeStore.loadIfNeeded.
+        Section("全 App 啟用音源") {
+            Text(
+                "此設定會同步套用至探索、搜尋、排行榜、歌單及播放來源。關閉的平台將不再顯示或參與查詢。",
+                color = AppColors.TextMuted,
+                fontSize = 12.sp,
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 com.walkman.tv.data.model.SourceID.homePageOrder.forEach { src ->
                     val active = src in settings.homeSources
@@ -239,9 +242,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                             scope.launch {
                                 appContainer.settingsStore.update { s ->
                                     val next = if (active) s.homeSources - src else s.homeSources + src
-                                    // Spec §8: never let the set collapse to empty — keep at least
-                                    // one source so the discover page stays usable.
-                                    s.copy(homeSources = if (next.isEmpty()) s.homeSources else next)
+                                    s.copy(homeSources = next)
                                 }
                             }
                         },
