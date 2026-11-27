@@ -23,12 +23,15 @@ interface BoardService {
 /** Leaderboards via each platform's own API, ported from iOS `Boards`. */
 class Boards(private val http: CatalogHttp) {
     private data class CachedBoards(val items: List<BoardInfo>, val cachedAt: Long)
+    private data class CachedTracks(val items: List<Track>, val cachedAt: Long)
 
     private val services: List<BoardService> = listOf(
         KuwoBoard(http), NetEaseBoard(http), KugouBoard(http), QQBoard(http),
     )
     private val cacheLock = Any()
     private val boardCache = LinkedHashMap<SourceID, CachedBoards>()
+    private val trackCache = LinkedHashMap<String, CachedTracks>(32, 0.75f, true)
+    private val trackInFlight = mutableMapOf<String, CompletableDeferred<List<Track>>>()
 
     fun serviceFor(source: SourceID): BoardService? = services.firstOrNull { it.source == source }
     fun servicesAll(): List<BoardService> = services
@@ -51,8 +54,64 @@ class Boards(private val http: CatalogHttp) {
         return result
     }
 
+    /**
+     * Share chart-song requests between leaderboard preloading and the active chart screen.
+     * Only non-empty metadata results are cached; playback URLs are never part of Track.
+     */
+    suspend fun fetchTracks(source: SourceID, bangid: String, page: Int = 1): List<Track> {
+        val key = "${source.key}|${bangid.trim()}|$page"
+        var cachedResult: List<Track>? = null
+        var pending: CompletableDeferred<List<Track>>? = null
+        var owner = false
+        synchronized(cacheLock) {
+            val now = android.os.SystemClock.elapsedRealtime()
+            val cached = trackCache[key]
+            if (cached != null && now - cached.cachedAt < TRACK_CACHE_TTL_MS) {
+                cachedResult = cached.items
+            } else {
+                if (cached != null) trackCache.remove(key)
+                pending = trackInFlight[key]
+                if (pending == null) {
+                    pending = CompletableDeferred()
+                    trackInFlight[key] = pending!!
+                    owner = true
+                }
+            }
+        }
+        cachedResult?.let { return it }
+        val shared = checkNotNull(pending)
+        if (!owner) return shared.await()
+
+        try {
+            val result = serviceFor(source)?.fetchTracks(bangid, page).orEmpty()
+            if (result.isNotEmpty()) {
+                synchronized(cacheLock) {
+                    trackCache[key] = CachedTracks(result.toList(), android.os.SystemClock.elapsedRealtime())
+                    while (trackCache.size > TRACK_CACHE_MAX_ENTRIES) {
+                        trackCache.remove(trackCache.keys.first())
+                    }
+                }
+            }
+            shared.complete(result)
+            return result
+        } catch (cancelled: CancellationException) {
+            // Cancellation belongs to the requesting screen; other waiters can retry later.
+            shared.complete(emptyList())
+            throw cancelled
+        } catch (error: Exception) {
+            shared.completeExceptionally(error)
+            throw error
+        } finally {
+            synchronized(cacheLock) {
+                if (trackInFlight[key] === shared) trackInFlight.remove(key)
+            }
+        }
+    }
+
     private companion object {
         const val BOARD_CACHE_TTL_MS = 3 * 60 * 1000L
+        const val TRACK_CACHE_TTL_MS = 3 * 60 * 1000L
+        const val TRACK_CACHE_MAX_ENTRIES = 24
     }
 }
 
