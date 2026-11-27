@@ -78,7 +78,14 @@ fun SonglistScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     // Warm the first page from the other providers in parallel so switching source feels instant.
     // The active provider is handled by the normal screen effect and is intentionally excluded.
     LaunchedEffect(enabledSources) {
-        if (source !in enabledSources) source = visibleSonglistSources.firstOrNull() ?: SourceID.KW
+        if (source !in visibleSonglistSources) source = visibleSonglistSources.firstOrNull() ?: SourceID.KW
+        if (visibleSonglistSources.isEmpty()) {
+            lists = emptyList()
+            tags = listOf(SonglistTag.ALL)
+            detail = null
+            loading = false
+            return@LaunchedEffect
+        }
         coroutineScope {
             visibleSonglistSources.filter { it != source }.map { sourceId ->
                 async {
@@ -94,13 +101,22 @@ fun SonglistScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
         }
     }
 
-    LaunchedEffect(source) {
+    LaunchedEffect(source, visibleSonglistSources) {
+        if (source !in visibleSonglistSources) {
+            order = null
+            tags = listOf(SonglistTag.ALL)
+            lists = emptyList()
+            detail = null
+            loading = false
+            return@LaunchedEffect
+        }
         order = service?.orders?.firstOrNull()
         tag = SonglistTag.ALL
         val groups = fetchOr(emptyList()) { service?.fetchTags() ?: emptyList() }
         tags = listOf(SonglistTag.ALL) + groups.flatMap { it.tags }
     }
-    LaunchedEffect(source, order, tag) {
+    LaunchedEffect(source, order, tag, visibleSonglistSources) {
+        if (source !in visibleSonglistSources) return@LaunchedEffect
         val o = order ?: return@LaunchedEffect
         // When switching platforms, the previous platform's order can briefly remain in state.
         // Skip that transient request instead of starting a fetch that will immediately be cancelled.
@@ -136,7 +152,7 @@ fun SonglistScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
                 }
             }
             Spacer(Modifier.padding(top = 6.dp))
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (visibleSonglistSources.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(tags) { t ->
                     TvPill(onClick = { tag = t }, selected = tag.id == t.id && tag.name == t.name) { Text(ChineseText.toTaiwanTraditional(t.name), fontSize = 12.sp) }
                 }
@@ -145,6 +161,7 @@ fun SonglistScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
             val uniqueLists = remember(lists) { lists.distinctBy { it.id } }
             Spacer(Modifier.height(12.dp))
             when {
+                visibleSonglistSources.isEmpty() -> EmptyHint("請先啟用歌單支援的音源", Modifier.fillMaxSize())
                 loading -> LoadingState(Modifier.fillMaxSize())
                 lists.isNotEmpty() -> LazyVerticalGrid(
                     columns = GridCells.Fixed(4),
