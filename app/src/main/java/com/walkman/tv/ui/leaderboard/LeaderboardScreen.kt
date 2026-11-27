@@ -99,7 +99,7 @@ fun LeaderboardScreen(onOpenPlayer: () -> Unit, modifier: Modifier = Modifier) {
     LaunchedEffect(source, visibleBoardSources) {
         if (source !in visibleBoardSources) return@LaunchedEffect
         val refreshed = fetchOr(emptyList()) {
-            appContainer.boards.serviceFor(source)?.fetchBoards() ?: emptyList()
+            appContainer.boards.fetchBoards(source)
         }
         if (refreshed.isNotEmpty()) boards = refreshed
     }
