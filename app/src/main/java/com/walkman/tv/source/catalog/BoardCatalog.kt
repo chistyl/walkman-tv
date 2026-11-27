@@ -21,12 +21,38 @@ interface BoardService {
 
 /** Leaderboards via each platform's own API, ported from iOS `Boards`. */
 class Boards(private val http: CatalogHttp) {
+    private data class CachedBoards(val items: List<BoardInfo>, val cachedAt: Long)
+
     private val services: List<BoardService> = listOf(
         KuwoBoard(http), NetEaseBoard(http), KugouBoard(http), QQBoard(http),
     )
+    private val cacheLock = Any()
+    private val boardCache = LinkedHashMap<SourceID, CachedBoards>()
 
     fun serviceFor(source: SourceID): BoardService? = services.firstOrNull { it.source == source }
     fun servicesAll(): List<BoardService> = services
+
+    /** Reuse refreshed board names/covers when revisiting a provider; keep provider fallback data on failure. */
+    suspend fun fetchBoards(source: SourceID): List<BoardInfo> {
+        val now = android.os.SystemClock.elapsedRealtime()
+        synchronized(cacheLock) {
+            val cached = boardCache[source]
+            if (cached != null && now - cached.cachedAt < BOARD_CACHE_TTL_MS) return cached.items
+            if (cached != null) boardCache.remove(source)
+        }
+        val result = serviceFor(source)?.fetchBoards().orEmpty()
+        if (result.isNotEmpty()) {
+            synchronized(cacheLock) {
+                boardCache[source] = CachedBoards(result.toList(), android.os.SystemClock.elapsedRealtime())
+                while (boardCache.size > services.size) boardCache.remove(boardCache.keys.first())
+            }
+        }
+        return result
+    }
+
+    private companion object {
+        const val BOARD_CACHE_TTL_MS = 3 * 60 * 1000L
+    }
 }
 
 /** Fill per-song covers via Kuwo's artistpicserver (plain-text URL body).
