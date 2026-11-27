@@ -12,6 +12,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import org.json.JSONObject
 
 interface SonglistService {
@@ -33,6 +34,7 @@ class Songlists(private val http: CatalogHttp) {
     private data class CachedDetail(val detail: SonglistDetail, val cachedAt: Long)
     private val detailCache = object : LinkedHashMap<String, CachedDetail>(16, 0.75f, true) {}
     private val detailInFlight = mutableMapOf<String, CompletableDeferred<SonglistDetail>>()
+    private val searchInFlight = mutableMapOf<String, CompletableDeferred<List<SonglistInfo>>>()
     private val detailCacheTtlMs = 3 * 60_000L
     private val maxDetailCacheEntries = 12
     private val services = listOf(
@@ -66,10 +68,43 @@ class Songlists(private val http: CatalogHttp) {
     suspend fun search(source: SourceID, keyword: String, page: Int = 1): List<SonglistInfo> {
         val svc = serviceFor(source) ?: return emptyList()
         val key = cacheKey(source, keyword, page)
-        cached(key)?.let { return it }
-        val result = svc.search(keyword, page)
-        remember(key, result)
-        return result
+        var cachedResult: List<SonglistInfo>? = null
+        var request: CompletableDeferred<List<SonglistInfo>>? = null
+        var isRequestOwner = false
+        synchronized(cacheLock) {
+            val entry = searchCache[key]
+            if (entry != null && android.os.SystemClock.elapsedRealtime() - entry.cachedAt < cacheTtlMs) {
+                cachedResult = entry.items
+            } else {
+                if (entry != null) searchCache.remove(key)
+                request = searchInFlight[key]
+                if (request == null) {
+                    request = CompletableDeferred()
+                    searchInFlight[key] = request!!
+                    isRequestOwner = true
+                }
+            }
+        }
+        cachedResult?.let { return it }
+        val sharedRequest = checkNotNull(request)
+        if (!isRequestOwner) return sharedRequest.await()
+
+        try {
+            val result = svc.search(keyword, page)
+            remember(key, result)
+            sharedRequest.complete(result)
+            return result
+        } catch (cancelled: CancellationException) {
+            sharedRequest.complete(emptyList())
+            throw cancelled
+        } catch (error: Exception) {
+            sharedRequest.completeExceptionally(error)
+            throw error
+        } finally {
+            synchronized(cacheLock) {
+                if (searchInFlight[key] === sharedRequest) searchInFlight.remove(key)
+            }
+        }
     }
 
     /** Fetch a playlist detail once; concurrent callers for the same list share the in-flight request. */
@@ -127,7 +162,15 @@ class Songlists(private val http: CatalogHttp) {
         enabledSources: Set<SourceID> = SourceID.onlineSources.toSet(),
     ): List<SonglistInfo> = coroutineScope {
         services.filter { it.source in enabledSources }.map { svc ->
-            async { runCatching { search(svc.source, keyword, page) }.getOrDefault(emptyList()) }
+            async {
+                try {
+                    search(svc.source, keyword, page)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    emptyList()
+                }
+            }
         }.awaitAll().flatten()
     }
 }
@@ -212,8 +255,13 @@ private class KuwoSonglist(private val http: CatalogHttp) : SonglistService {
 
     override suspend fun fetchDetail(list: SonglistInfo): SonglistDetail {
         val url = "http://nplserver.kuwo.cn/pl.svc?op=getlistinfo&pid=${list.id}&pn=0&rn=300&encode=utf8&keyset=pl2012&identity=kuwo&pcmp4=1&vipver=MUSIC_9.0.5.0_W1&newver=1"
-        val json = runCatching { JSONObject(http.getText(url, mapOf("User-Agent" to UA))) }.getOrNull()
-            ?: return SonglistDetail(list, emptyList())
+        val json = try {
+            JSONObject(http.getText(url, mapOf("User-Agent" to UA)))
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            return SonglistDetail(list, emptyList())
+        }
         if (json.optString("result") != "ok") return SonglistDetail(list, emptyList())
         val ml = json.optJSONArray("musiclist") ?: return SonglistDetail(list, emptyList())
         val raw = (0 until ml.length()).mapNotNull { build(ml.optJSONObject(it)) }
