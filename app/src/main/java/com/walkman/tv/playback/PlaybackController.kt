@@ -604,6 +604,7 @@ class PlaybackController(
         val eligible = s.queue.indices.filter { it != s.index && isSourceEnabled(s.queue[it]) }
         val nextIdx = if (s.shuffle) {
             eligible.randomOrNull()
+                ?: if (s.repeatMode == RepeatMode.ONE && isSourceEnabled(s.queue[s.index])) s.index else null
         } else {
             s.queue.indices.firstOrNull { it > s.index && isSourceEnabled(s.queue[it]) }
                 ?: if (s.repeatMode != RepeatMode.OFF) {
