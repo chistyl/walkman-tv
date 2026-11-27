@@ -133,7 +133,7 @@ class HomeStore(
                 if (generation != loadGeneration) return@coroutineScope
                 val recommendationsComplete = recommendationResults.values.all { it != null }
                 val groups = recommendationResults.mapValues { it.value.orEmpty() }
-                val heroes = srcs.mapNotNull { s -> groups[s].firstOrNull()?.let { HeroItem(it, s) } }
+                val heroes = srcs.mapNotNull { s -> groups[s].orEmpty().firstOrNull()?.let { HeroItem(it, s) } }
 
                 val tails = srcs.associateWith { groups[it].drop(1).take(8) }
                 val recs = mutableListOf<SonglistInfo>()
