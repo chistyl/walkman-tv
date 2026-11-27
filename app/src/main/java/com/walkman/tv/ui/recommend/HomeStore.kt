@@ -87,13 +87,14 @@ class HomeStore(
         load(srcs, key)
     }
 
-    private suspend fun <T> fetchOrEmpty(block: suspend () -> List<T>): List<T> =
+    /** Return null on provider failure so incomplete home responses are never cached as complete. */
+    private suspend fun <T> fetchOrNull(block: suspend () -> List<T>): List<T>? =
         try {
             block()
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
-            emptyList()
+            null
         }
 
     private fun load(srcs: List<SourceID>, key: String) {
@@ -111,9 +112,9 @@ class HomeStore(
                     srcs.map { s ->
                         async sourceFetch@{
                             val svc = songlists.serviceFor(s)
-                            if (svc == null) return@sourceFetch s to emptyList()
-                            val order = svc.orders.firstOrNull() ?: return@sourceFetch s to emptyList()
-                            val list = fetchOrEmpty { svc.fetchRecommended(order, SonglistTag.ALL, 1) }
+                            if (svc == null) return@sourceFetch s to null
+                            val order = svc.orders.firstOrNull() ?: return@sourceFetch s to null
+                            val list = fetchOrNull { svc.fetchRecommended(order, SonglistTag.ALL, 1) }
                             s to list
                         }
                     }.awaitAll().toMap()
@@ -122,17 +123,19 @@ class HomeStore(
                     srcs.map { s ->
                         async sourceFetch@{
                             val svc = boards.serviceFor(s)
-                            if (svc == null) return@sourceFetch s to emptyList()
-                            s to fetchOrEmpty { boards.fetchBoards(s) }
+                            if (svc == null) return@sourceFetch s to null
+                            s to fetchOrNull { boards.fetchBoards(s) }
                         }
                     }.awaitAll().toMap()
                 }
 
-                val groups = recommendationsJob.await()
+                val recommendationResults = recommendationsJob.await()
                 if (generation != loadGeneration) return@coroutineScope
-                val heroes = srcs.mapNotNull { s -> groups[s]?.firstOrNull()?.let { HeroItem(it, s) } }
+                val recommendationsComplete = recommendationResults.values.all { it != null }
+                val groups = recommendationResults.mapValues { it.value.orEmpty() }
+                val heroes = srcs.mapNotNull { s -> groups[s].firstOrNull()?.let { HeroItem(it, s) } }
 
-                val tails = srcs.associateWith { groups[it].orEmpty().drop(1).take(8) }
+                val tails = srcs.associateWith { groups[it].drop(1).take(8) }
                 val recs = mutableListOf<SonglistInfo>()
                 val maxSize = tails.values.maxOfOrNull { it.size } ?: 0
                 for (i in 0 until maxSize) {
@@ -143,8 +146,10 @@ class HomeStore(
                     if (generation == loadGeneration) current.copy(heroes = heroes, recommendations = recs.take(12), sources = srcs) else current
                 }
 
-                val boardResults = boardsJob.await()
+                val boardResultsNullable = boardsJob.await()
                 if (generation != loadGeneration) return@coroutineScope
+                val boardsComplete = boardResultsNullable.values.all { it != null }
+                val boardResults = boardResultsNullable.mapValues { it.value.orEmpty() }
                 val boardList = balanceBoards(srcs, boardResults, totalTarget = 12)
                 val completed = HomeState(
                     isLoading = false,
@@ -154,7 +159,11 @@ class HomeStore(
                     sources = srcs,
                 )
                 if (generation == loadGeneration) {
-                    cache[key] = CachedHome(completed, SystemClock.elapsedRealtime())
+                    // Keep partial content visible, but only a fully successful provider batch
+                    // may replace the cache; transient failures must be retried on the next visit.
+                    if (recommendationsComplete && boardsComplete) {
+                        cache[key] = CachedHome(completed, SystemClock.elapsedRealtime())
+                    }
                     _state.value = completed
                 }
             }
